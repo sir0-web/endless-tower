@@ -14,12 +14,12 @@ export class TestScene extends Phaser.Scene {
 
   preload() {
     for (const f of FLOOR_FILES)
-      this.load.image(`floor_${f}`, `/asetts/dungeon/floor/${f}.png`)
+      this.load.image(`floor_${f}`, `/assets/dungeon/floor/${f}.png`)
     for (const f of WALL_FILES)
-      this.load.image(`wall_${f}`,  `/asetts/dungeon/wall/${f}.png`)
-    this.load.image(`stairs_${STAIRS_FILE}`, `/asetts/dungeon/stairs/${STAIRS_FILE}.png`)
+      this.load.image(`wall_${f}`,  `/assets/dungeon/wall/${f}.png`)
+    this.load.image(`stairs_${STAIRS_FILE}`, `/assets/dungeon/stairs/${STAIRS_FILE}.png`)
     for (const f of BOX_FILES)
-      this.load.image(`box_${f}`,   `/asetts/dungeon/box/${f}.png`)
+      this.load.image(`box_${f}`,   `/assets/dungeon/box/${f}.png`)
   }
 
   create() {

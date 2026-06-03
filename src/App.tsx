@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import Phaser from 'phaser'
-import { TestScene } from './scenes/TestScene'
 import { TitleScene } from './scenes/TitleScene'
 import { GameScene } from './scenes/GameScene'
 import { GameOverScene } from './scenes/GameOverScene'
@@ -27,8 +26,7 @@ function App() {
       height: gameHeight,
       parent: gameContainerRef.current!,
       backgroundColor: '#000000',
-      // TestScene を先頭に置いて素材確認モードで起動
-      scene: [TestScene, TitleScene, GameScene, GameOverScene, RankingScene],
+      scene: [TitleScene, GameScene, GameOverScene, RankingScene],
     }
 
     const game = new Phaser.Game(config)

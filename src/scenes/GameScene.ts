@@ -24,15 +24,29 @@ export class GameScene extends Phaser.Scene {
   private isEquipModalOpen = false
   private awaitingEquipModal = false
   private pendingItem: import('../types').Item | null = null
+  private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
+  private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
+  private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
 
   constructor() {
     super({ key: 'GameScene' })
   }
 
   preload() {
-    // 宝箱スプライト（装備品アイテム表示用）
-    this.load.image('box-0089', '/asetts/dungeon/box/tile_0089.png')
-    this.load.image('box-0092', '/asetts/dungeon/box/tile_0092.png')
+    // 床タイル（3種ランダム）— /assets/dungeon/floor/
+    this.load.image('tile-floor1', '/assets/dungeon/floor/floor1.png')
+    this.load.image('tile-floor2', '/assets/dungeon/floor/floor2.png')
+    this.load.image('tile-floor3', '/assets/dungeon/floor/floor3.png')
+    // 壁 — /assets/dungeon/wall/wall.png
+    this.load.image('tile-wall',   '/assets/dungeon/wall/wall.png')
+    // 階段 — /assets/dungeon/stairs/stairs.png
+    this.load.image('tile-stairs', '/assets/dungeon/stairs/stairs.png')
+    // box.png — アイテム表示用（床に落ちている全アイテム）
+    this.load.image('tile-box', '/assets/dungeon/box/box.png')
+    // 読み込みエラーを記録 → フォールバックで色描画
+    this.load.on('loaderror', (file: { key: string }) => {
+      this.failedTextures.add(file.key)
+    })
   }
 
   create() {
@@ -125,6 +139,8 @@ export class GameScene extends Phaser.Scene {
       areaBossFloors,
       floorType,
     }
+    this.buildFloorVariants(map)
+    this.createTileSprites(map)
   }
 
   private showTelopIfNeeded() {
@@ -629,6 +645,8 @@ export class GameScene extends Phaser.Scene {
       ? spawnItems(map, floor, { countMult: 3 })
       : spawnItems(map, floor)
     this.state.floorType = floorType
+    this.buildFloorVariants(map)
+    this.createTileSprites(map)
     this.addMessage(`${floorLabel(floor)}に降りた！`)
     playStairs()
     this.renderMap()
@@ -747,6 +765,39 @@ export class GameScene extends Phaser.Scene {
     return dx * dx + dy * dy <= VISION_RADIUS * VISION_RADIUS
   }
 
+  /** 床タイルのバリアント（floor1/2/3）をフロア生成時にランダム決定・固定 */
+  private buildFloorVariants(map: import('../types').TileType[][]) {
+    const keys = ['tile-floor1', 'tile-floor2', 'tile-floor3']
+    this.floorVariantMap = map.map(row =>
+      row.map(tile =>
+        tile === 'floor' ? keys[Math.floor(Math.random() * keys.length)] : ''
+      )
+    )
+  }
+
+  /** タイルスプライトを生成（フロア切り替え時に呼び出し） */
+  private createTileSprites(map: import('../types').TileType[][]) {
+    this.tileSprites.forEach(row => row.forEach(s => s?.destroy()))
+    this.tileSprites = map.map((row, y) =>
+      row.map((tile, x) => {
+        let key: string
+        if      (tile === 'wall')   key = 'tile-wall'
+        else if (tile === 'floor')  key = this.floorVariantMap[y]?.[x] ?? 'tile-floor1'
+        else if (tile === 'stairs') key = 'tile-stairs'
+        else if (tile === 'trap')   return null  // 常に Graphics 紫色(0x662288)で描画
+        else return null
+
+        // 読み込み失敗 or テクスチャ未存在 → null（フォールバック描画）
+        if (this.failedTextures.has(key) || !this.textures.exists(key)) return null
+
+        return this.add.image(0, 0, key)
+          .setDisplaySize(TILE_SIZE, TILE_SIZE)
+          .setDepth(-1)
+          .setVisible(false)
+      })
+    )
+  }
+
   private renderMap() {
     this.graphics.clear()
     const { map, player, enemies, items } = this.state
@@ -755,14 +806,29 @@ export class GameScene extends Phaser.Scene {
     const offsetX = Math.max(0, Math.min(player.position.x * TILE_SIZE - W / 2, MAP_WIDTH * TILE_SIZE - W))
     const offsetY = Math.max(0, Math.min(player.position.y * TILE_SIZE - H / 2, MAP_HEIGHT * TILE_SIZE - H))
 
+    // ── タイルスプライト更新 ──
+    // スプライトあり → Image で描画、なし（読み込み失敗など）→ Graphics でフォールバック
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
+        const sprite = this.tileSprites[y]?.[x]
+        if (!sprite) continue
+        const px = x * TILE_SIZE - offsetX
+        const py = y * TILE_SIZE - offsetY
+        const inView = px > -TILE_SIZE && px < W && py > -TILE_SIZE && py < H
+        const vis    = this.isVisible(x, y)
+        sprite.setVisible(inView && vis)
+        if (inView && vis) sprite.setPosition(px + TILE_SIZE / 2, py + TILE_SIZE / 2)
+      }
+    }
+    // ── フォールバック描画（スプライルなしのタイル）──
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      for (let x = 0; x < MAP_WIDTH; x++) {
+        if (this.tileSprites[y]?.[x]) continue
         const tile = map[y][x]
         const px = x * TILE_SIZE - offsetX
         const py = y * TILE_SIZE - offsetY
         if (px < -TILE_SIZE || px > W || py < -TILE_SIZE || py > H) continue
         if (!this.isVisible(x, y)) continue
-
         if      (tile === 'wall')   this.graphics.fillStyle(0x333333)
         else if (tile === 'floor')  this.graphics.fillStyle(0x888866)
         else if (tile === 'stairs') this.graphics.fillStyle(0x4444ff)
@@ -772,23 +838,22 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // ── アイテム描画：装備品=宝箱スプライト / 回復=💊 / 魔法=📖 ──
+    // ── アイテム描画：全種類を box.png で表示（読み込み失敗時は絵文字フォールバック）──
     this.itemGraphics.forEach(g => g.destroy())
     this.itemGraphics.clear()
+    const boxReady = !this.failedTextures.has('tile-box') && this.textures.exists('tile-box')
     for (const item of items) {
       if (!this.isVisible(item.position.x, item.position.y)) continue
       const px = item.position.x * TILE_SIZE - offsetX
       const py = item.position.y * TILE_SIZE - offsetY
       let g: Phaser.GameObjects.GameObject
-      if (item.type === 'equip') {
-        // 宝箱スプライト: id の先頭文字コードで box-0089 / box-0092 を固定選択
-        // 利用ファイル: box/tile_0089.png, box/tile_0092.png
-        const boxKey = item.id.charCodeAt(5) % 2 === 0 ? 'box-0089' : 'box-0092'
-        g = this.add.image(px + TILE_SIZE / 2, py + TILE_SIZE / 2, boxKey)
+      if (boxReady) {
+        g = this.add.image(px + TILE_SIZE / 2, py + TILE_SIZE / 2, 'tile-box')
           .setDisplaySize(TILE_SIZE - 4, TILE_SIZE - 4)
           .setDepth(1)
       } else {
-        const icon = item.type === 'heal' ? '💊' : '📖'
+        // フォールバック：絵文字
+        const icon = item.type === 'heal' ? '💊' : item.type === 'spell' ? '📖' : '⚔️'
         g = this.add.text(px + 8, py + 8, icon, { fontSize: '28px' }).setDepth(1)
       }
       this.itemGraphics.set(item.id, g)
