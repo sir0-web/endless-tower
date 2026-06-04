@@ -4,6 +4,40 @@
   padding: 0;
 }
 
+/* ── 縦画面ガード（JS で portrait 判定時にレンダリング） ── */
+.portrait-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #0a0a12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portrait-message {
+  text-align: center;
+  color: #e0e0e0;
+}
+
+.portrait-icon {
+  font-size: 64px;
+  margin-bottom: 24px;
+  animation: rotate-hint 1.5s ease-in-out infinite alternate;
+}
+
+.portrait-message p {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #aaaaff;
+}
+
+@keyframes rotate-hint {
+  from { transform: rotate(-15deg); }
+  to   { transform: rotate(15deg); }
+}
+
 html, body {
   height: 100%;
   overflow: hidden;
