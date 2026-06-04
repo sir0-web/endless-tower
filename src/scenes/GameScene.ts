@@ -1056,6 +1056,9 @@ export class GameScene extends Phaser.Scene {
         this.makeTransparent(`attack_${dir}_${i}`)
       }
     }
+    // ウィスパー・チンピラも同様に透過処理
+    this.makeTransparent('whisper')
+    this.makeTransparent('chinpira')
   }
 
   // ── プレイヤーアニメーション定義 ──
@@ -1262,8 +1265,9 @@ export class GameScene extends Phaser.Scene {
         const baseName   = enemy.name.replace(/^【[^】]+】/, '')
         const textureKey = ENEMY_TEXTURE_MAP[baseName]
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
+          const eSize = ['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3 : rts - 2
           g = this.add.image(0, 0, textureKey)
-            .setDisplaySize(rts - 2, rts - 2).setDepth(5)
+            .setDisplaySize(eSize, eSize).setDepth(5)
         } else {
           const color = enemy.isBoss
             ? (enemy.name.startsWith('【MVP】') ? 0xff8800
