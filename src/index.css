@@ -197,6 +197,57 @@ html, body {
   .mob-status-bar { width: 100%; }
 }
 
+/* ── スマホ横画面（高さ500px以下）：ゲーム上・UI下の縦積み ── */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+  .app-layout {
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* ゲームペイン：上60%、padding-topなし（ステータスバーはオーバーレイ） */
+  .game-pane {
+    flex: 0 0 60%;
+    width: 100%;
+    padding-top: 0;
+  }
+
+  /* UIペイン：下40%、縦スクロール可能 */
+  .ui-pane {
+    flex: 1 1 0;
+    width: 100%;
+    min-height: 0;
+    border-left: none;
+    border-top: 1px solid #1e1e38;
+    overflow-y: auto;
+  }
+
+  .ui-panel {
+    height: auto;
+    overflow-y: auto;
+  }
+
+  /* ステータスバーは全幅 */
+  .mob-status-bar {
+    width: 100%;
+  }
+
+  /* ステータス・装備欄は非表示（ステータスバーに表示済み） */
+  .stats-equip-row {
+    display: none;
+  }
+
+  /* 動画エリアをコンパクトに */
+  .bonus-video-area {
+    height: 90px;
+  }
+
+  /* スロットをコンパクトに */
+  .slot-machine {
+    padding: 4px 8px;
+  }
+}
+
 /* スマホ: 縦積み */
 @media (max-width: 767px) {
   html, body {
