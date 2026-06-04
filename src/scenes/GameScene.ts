@@ -857,6 +857,7 @@ export class GameScene extends Phaser.Scene {
         newItem: this.pendingItem,
         currentItem: this.state.player.equipment[this.pendingItem.equipSlot] ?? null,
       } : null,
+      floorType: this.state.floorType,
     }
     window.dispatchEvent(new Event('gamestate-update'))
   }

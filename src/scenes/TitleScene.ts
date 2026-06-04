@@ -1,7 +1,6 @@
 import Phaser from 'phaser'
 import { playBGM, isMuted, toggleMute } from '../game/sound'
 import { fetchRanking } from '../game/supabase'
-import { floorLabel } from '../game/utils'
 
 const PIXEL_FONT  = '"Press Start 2P", monospace'
 const BTN_WIDTH   = 300   // 全ボタン共通の固定幅
@@ -9,7 +8,6 @@ const KEY_STORAGE = 'keyMode'
 
 type KeyMode = 'arrows' | 'wasd' | 'both'
 
-interface RankingEntry { player_name: string; floor: number }
 
 export class TitleScene extends Phaser.Scene {
   private overlay: Phaser.GameObjects.Container | null = null
