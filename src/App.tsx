@@ -18,7 +18,7 @@ function isMobilePortrait() {
 
 /** スマホ横画面（縦幅が小さい）かどうか */
 function isSmallLandscape() {
-  return isMobileDevice && window.innerWidth > window.innerHeight && window.innerHeight <= 500
+  return isMobileDevice && window.innerWidth > window.innerHeight && window.innerHeight <= 600
 }
 
 function calcGameSize() {
@@ -36,7 +36,7 @@ function calcGameSize() {
     // スマホ横画面：縦積み、ゲーム60%高さ（ステータスバーはオーバーレイ）
     return {
       width:  window.innerWidth,
-      height: Math.floor(window.innerHeight * 0.60),
+      height: Math.floor(window.innerHeight * 0.55),
       layout: 'mobileLandscape' as const,
     }
   }

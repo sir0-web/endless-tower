@@ -197,34 +197,37 @@ html, body {
   .mob-status-bar { width: 100%; }
 }
 
-/* ── スマホ横画面（高さ500px以下）：ゲーム上・UI下の縦積み ── */
-@media screen and (orientation: landscape) and (max-height: 500px) {
+/* ── スマホ横画面（高さ600px以下）：ゲーム上55%・UI下45%、スクロールなし ── */
+@media screen and (orientation: landscape) and (max-height: 600px) {
   .app-layout {
     flex-direction: column;
     height: 100dvh;
     overflow: hidden;
   }
 
-  /* ゲームペイン：上60%、padding-topなし（ステータスバーはオーバーレイ） */
+  /* ゲームペイン：上55%固定、潰れない */
   .game-pane {
-    flex: 0 0 60%;
+    flex: 0 0 55%;
+    flex-shrink: 0;
     width: 100%;
     padding-top: 0;
+    overflow: hidden;
   }
 
-  /* UIペイン：下40%、縦スクロール可能 */
+  /* UIペイン：下45%固定、潰れない、スクロールなし */
   .ui-pane {
-    flex: 1 1 0;
+    flex: 0 0 45%;
+    flex-shrink: 0;
     width: 100%;
     min-height: 0;
     border-left: none;
     border-top: 1px solid #1e1e38;
-    overflow-y: auto;
+    overflow: hidden;
   }
 
   .ui-panel {
-    height: auto;
-    overflow-y: auto;
+    height: 100%;
+    overflow: hidden;
   }
 
   /* ステータスバーは全幅 */
