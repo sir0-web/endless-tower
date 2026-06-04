@@ -33,7 +33,6 @@ html, body {
   min-width: 0;
   overflow: hidden;
   background: #000;
-  padding-top: 72px;  /* ステータスバー分キャンバスを下げる */
 }
 
 .game-pane canvas {

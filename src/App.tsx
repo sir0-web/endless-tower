@@ -15,13 +15,12 @@ function App() {
 
   useEffect(() => {
     const isPC = window.innerWidth >= 768
-    const STATUS_BAR_H = 72   // ステータスバー分だけキャンバスを下げる
     const gameWidth = isPC
       ? Math.floor(window.innerWidth * 0.65)
       : window.innerWidth
     const gameHeight = isPC
-      ? window.innerHeight - STATUS_BAR_H
-      : Math.floor(window.innerHeight * 0.55) - STATUS_BAR_H
+      ? window.innerHeight
+      : Math.floor(window.innerHeight * 0.55)
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
