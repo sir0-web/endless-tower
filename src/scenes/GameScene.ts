@@ -412,6 +412,8 @@ export class GameScene extends Phaser.Scene {
       player.str -= old.strBonus ?? 0; player.agi -= old.agiBonus ?? 0
       player.dex -= old.dexBonus ?? 0; player.int -= old.intBonus ?? 0
       player.vit -= old.vitBonus ?? 0; player.luk -= old.lukBonus ?? 0
+      this.state.bag.push(old)
+      this.addMessage(`${old.name}をバッグに戻した`)
     }
     player.equipment[slot] = item
     player.maxHp += item.hpBonus ?? 0
@@ -533,15 +535,16 @@ export class GameScene extends Phaser.Scene {
     const W = this.scale.width
     const H = this.scale.height
 
+    const isMobile = window.innerWidth < 768
     const main = this.add.text(W / 2, H / 2 - 20, '⚔レベルアップ⚔', {
-      fontSize: '30px', color: '#ffdd44',
+      fontSize: isMobile ? '60px' : '30px', color: '#ffdd44',
       stroke: '#000000', strokeThickness: 5,
       backgroundColor: '#00000099',
       padding: { x: 16, y: 8 },
     }).setOrigin(0.5).setDepth(65)
 
     const sub = this.add.text(W / 2, H / 2 + 24, `Lv${prevLevel}→Lv${newLevel} になりました`, {
-      fontSize: '18px', color: '#ffffff',
+      fontSize: isMobile ? '36px' : '18px', color: '#ffffff',
       stroke: '#000000', strokeThickness: 4,
       backgroundColor: '#00000099',
       padding: { x: 12, y: 6 },
@@ -1025,22 +1028,51 @@ export class GameScene extends Phaser.Scene {
     const id = ctx.getImageData(0, 0, w, h)
     const d  = id.data
 
-    // 四隅から最初の不透明ピクセルを背景色として採用
-    const corners: [number, number][] = [[0,0],[w-1,0],[0,h-1],[w-1,h-1]]
-    let bgR = -1, bgG = -1, bgB = -1
-    for (const [cx, cy] of corners) {
-      const i = (cy * w + cx) * 4
-      if (d[i + 3] >= 200) { bgR = d[i]; bgG = d[i + 1]; bgB = d[i + 2]; break }
-    }
-    if (bgR < 0) return  // 全コーナーが既に透過 → 処理不要
+    // 全エッジをスキャンして最頻出の不透明ピクセルを背景色として採用
+    const edgePixels: [number, number][] = []
+    for (let x = 0; x < w; x++) { edgePixels.push([x, 0]); edgePixels.push([x, h - 1]) }
+    for (let y = 1; y < h - 1; y++) { edgePixels.push([0, y]); edgePixels.push([w - 1, y]) }
 
-    const tol = 40  // チャンネルごとの許容誤差
-    for (let i = 0; i < d.length; i += 4) {
-      if (d[i + 3] < 128) continue
-      if (Math.abs(d[i]     - bgR) <= tol &&
-          Math.abs(d[i + 1] - bgG) <= tol &&
-          Math.abs(d[i + 2] - bgB) <= tol) {
-        d[i + 3] = 0
+    const colorCount = new Map<string, { r: number; g: number; b: number; count: number }>()
+    for (const [ex, ey] of edgePixels) {
+      const i = (ey * w + ex) * 4
+      if (d[i + 3] < 200) continue
+      const key = `${d[i]},${d[i+1]},${d[i+2]}`
+      const entry = colorCount.get(key)
+      if (entry) entry.count++
+      else colorCount.set(key, { r: d[i], g: d[i+1], b: d[i+2], count: 1 })
+    }
+    if (colorCount.size === 0) return  // 全エッジが既に透過 → 処理不要
+
+    let bgR = -1, bgG = -1, bgB = -1, maxCount = 0
+    for (const { r, g, b, count } of colorCount.values()) {
+      if (count > maxCount) { maxCount = count; bgR = r; bgG = g; bgB = b }
+    }
+
+    // BFS flood fill: エッジから連続する背景色ピクセルを透過
+    const tol = 40
+    const visited = new Uint8Array(w * h)
+    const queue: number[] = []
+
+    const isBg = (idx: number) =>
+      d[idx + 3] >= 128 &&
+      Math.abs(d[idx]     - bgR) <= tol &&
+      Math.abs(d[idx + 1] - bgG) <= tol &&
+      Math.abs(d[idx + 2] - bgB) <= tol
+
+    for (const [ex, ey] of edgePixels) {
+      const pi = ey * w + ex
+      if (!visited[pi] && isBg(pi * 4)) { visited[pi] = 1; queue.push(pi) }
+    }
+
+    while (queue.length > 0) {
+      const pi = queue.pop()!
+      d[pi * 4 + 3] = 0
+      const px = pi % w, py = (pi / w) | 0
+      for (const [nx, ny] of [[px-1,py],[px+1,py],[px,py-1],[px,py+1]]) {
+        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue
+        const ni = ny * w + nx
+        if (!visited[ni] && isBg(ni * 4)) { visited[ni] = 1; queue.push(ni) }
       }
     }
 
@@ -1056,9 +1088,7 @@ export class GameScene extends Phaser.Scene {
         this.makeTransparent(`attack_${dir}_${i}`)
       }
     }
-    // ウィスパー・チンピラも同様に透過処理
-    this.makeTransparent('whisper')
-    this.makeTransparent('chinpira')
+
   }
 
   // ── プレイヤーアニメーション定義 ──
@@ -1153,7 +1183,7 @@ export class GameScene extends Phaser.Scene {
 
   /** タイルスプライトを生成（フロア切り替え時に呼び出し） */
   private createTileSprites(map: import('../types').TileType[][]) {
-    const rts = window.innerWidth < 768 ? Math.round(TILE_SIZE * 0.65) : TILE_SIZE
+    const rts = window.innerWidth < 768 ? Math.round(TILE_SIZE * 1.5) : TILE_SIZE
     this.tileSprites.forEach(row => row.forEach(s => s?.destroy()))
     this.tileSprites = map.map((row, y) =>
       row.map((tile, x) => {
@@ -1180,7 +1210,7 @@ export class GameScene extends Phaser.Scene {
     const W = this.scale.width
     const H = this.scale.height
     // モバイルでは描画タイルサイズを縮小して引きのカメラ表示
-    const rts = window.innerWidth < 768 ? Math.round(TILE_SIZE * 0.65) : TILE_SIZE
+    const rts = window.innerWidth < 768 ? Math.round(TILE_SIZE * 1.5) : TILE_SIZE
 
     const offsetX = Math.max(0, Math.min(player.position.x * rts - W / 2, MAP_WIDTH * rts - W))
     const offsetY = Math.max(0, Math.min(player.position.y * rts - H / 2, MAP_HEIGHT * rts - H))

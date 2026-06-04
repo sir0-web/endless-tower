@@ -86,6 +86,19 @@ export function UIPanel() {
   // アイテム行クリック
   const selectItem = (id: string) => setSelId(s => s === id ? null : id)
 
+  // 選択中の装備アイテムとステータス差分
+  const selEquip = selId ? gs.bag.find(x => x.id === selId && x.type === 'equip') : null
+  const statDiff = (key: AllocStat): number => {
+    if (!selEquip?.equipSlot) return 0
+    const old = gs.equipment[selEquip.equipSlot]
+    const newVal = (selEquip  as unknown as Record<string, number | undefined>)[`${key}Bonus`] ?? 0
+    const oldVal = old ? ((old as unknown as Record<string, number | undefined>)[`${key}Bonus`] ?? 0) : 0
+    return newVal - oldVal
+  }
+  const hpDiff = selEquip
+    ? (selEquip.hpBonus ?? 0) - (selEquip.equipSlot ? (gs.equipment[selEquip.equipSlot]?.hpBonus ?? 0) : 0)
+    : 0
+
   return (
     <div className="ui-panel">
 
@@ -101,15 +114,31 @@ export function UIPanel() {
         {/* 左：STR/AGI/DEX/VIT/INT/LUK + EXP */}
         <div className="stat-panel">
           <p className="stat-panel-label">ステータス</p>
-          {ALLOC_STATS.map(({ key, label }) => (
-            <div key={key} className={`sp-row ${gs.statPoints > 0 ? 'sp-has-pts' : ''}`}>
-              <span className="sp-label">{label}</span>
-              <span className="sp-val">{gs[key]}</span>
-              {gs.statPoints > 0 && (
-                <button className="stat-plus-btn" onClick={() => window.allocateStat?.(key)}>＋</button>
-              )}
+          {ALLOC_STATS.map(({ key, label }) => {
+            const d = statDiff(key)
+            return (
+              <div key={key} className={`sp-row ${gs.statPoints > 0 ? 'sp-has-pts' : ''}`}>
+                <span className="sp-label">{label}</span>
+                <span className="sp-val">{gs[key]}</span>
+                {d !== 0 && (
+                  <span className="sp-diff" style={{ color: d > 0 ? '#44ff88' : '#ff5555' }}>
+                    {d > 0 ? `+${d}` : d}
+                  </span>
+                )}
+                {gs.statPoints > 0 && (
+                  <button className="stat-plus-btn" onClick={() => window.allocateStat?.(key)}>＋</button>
+                )}
+              </div>
+            )
+          })}
+          {hpDiff !== 0 && (
+            <div className="sp-row">
+              <span className="sp-label" style={{ color: '#8888a8' }}>HP上限</span>
+              <span className="sp-diff" style={{ color: hpDiff > 0 ? '#44ff88' : '#ff5555' }}>
+                {hpDiff > 0 ? `+${hpDiff}` : hpDiff}
+              </span>
             </div>
-          ))}
+          )}
           <div className="sp-row sp-exp">
             <span className="sp-label">EXP</span>
             <span className="sp-val sp-exp-val">{gs.exp}/{expNeeded}</span>

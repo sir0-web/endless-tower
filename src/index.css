@@ -179,15 +179,16 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
+    height: 75vw;
     overflow: hidden;
   }
 
   .ui-pane {
-    flex: none;
+    flex: 1;
     width: 100%;
     border-left: none;
     border-top: 1px solid #1e1e38;
-    overflow: visible;
+    overflow-y: auto;
   }
 
   .ui-panel {
@@ -394,6 +395,10 @@ html, body {
   font-size: 13px; color: #88aacc; flex: 1;
 }
 
+.sp-diff {
+  font-size: 13px; font-weight: 700; flex-shrink: 0;
+}
+
 .sp-exp { margin-top: 1px; }
 .sp-exp-val { font-size: 14px; color: #8888aa; }
 
@@ -530,7 +535,7 @@ html, body {
 /* ── ボーナス動画エリア（スロット直下） ── */
 .bonus-video-area {
   flex-shrink: 0;
-  height: 310px;
+  height: 220px;
   background: #000000;
   overflow: hidden;
   position: relative;  /* 2つの video を重ねるための基準 */
@@ -602,8 +607,8 @@ html, body {
 }
 
 .slot-reel {
-  width: 152px;
-  height: 152px;
+  width: 116px;
+  height: 116px;
   border: 2px solid #886600;
   border-radius: 6px;
   background: #0c0c22;
@@ -615,8 +620,8 @@ html, body {
 }
 
 .reel-img {
-  width: 128px;
-  height: 128px;
+  width: 96px;
+  height: 96px;
   object-fit: contain;
   image-rendering: pixelated;
   transition: filter 0.1s;
@@ -897,6 +902,18 @@ html, body {
 .status-section .stat-points-notice {
   font-size: 10px;
   margin-top: 3px;
+}
+
+/* スマホ：スロット当選演出をUIパネル（リール上）に限定表示 */
+@media (max-width: 767px) {
+  .sa-root {
+    top: 120vw;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    inset: unset;
+    position: fixed;
+  }
 }
 
 /* スマホ：ミニマップ縮小 */

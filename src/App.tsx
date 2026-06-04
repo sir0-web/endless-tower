@@ -18,14 +18,20 @@ function calcScale() {
   return Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H, 1)
 }
 
+function isMobileViewport() {
+  return window.innerWidth < 768
+}
+
 function App() {
   const canvasAreaRef = useRef<HTMLDivElement>(null)
   const gameRef       = useRef<Phaser.Game | null>(null)
   const [appScale, setAppScale] = useState(calcScale)
+  const [isMobile, setIsMobile] = useState(isMobileViewport)
 
   // ウィンドウリサイズでスケール再計算 + Phaser canvas 更新
   useEffect(() => {
     const onResize = () => {
+      setIsMobile(isMobileViewport())
       setAppScale(calcScale())
       gameRef.current?.scale.resize(GAME_W, BASE_H)
     }
@@ -51,18 +57,22 @@ function App() {
     return () => { gameRef.current?.destroy(true); gameRef.current = null }
   }, [])
 
+  // スマホ: 通常レスポンシブ / PC: 固定サイズ＋スケール縮小
+  const wrapperStyle = isMobile
+    ? { width: '100%', height: '100%' } as const
+    : {
+        width:  BASE_W,
+        height: BASE_H,
+        transform: `scale(${appScale})`,
+        transformOrigin: 'top left',
+        overflow: 'hidden',
+        position: 'absolute' as const,
+        top: 0,
+        left: 0,
+      }
+
   return (
-    // 全体を BASE_W × BASE_H で固定し、ウィンドウに合わせて縮小
-    <div style={{
-      width:  BASE_W,
-      height: BASE_H,
-      transform: `scale(${appScale})`,
-      transformOrigin: 'top left',
-      overflow: 'hidden',
-      position: 'absolute',
-      top: 0,
-      left: 0,
-    }}>
+    <div style={wrapperStyle}>
       <div className="app-layout">
         <div className="game-pane">
           <MobileStatusBar />
