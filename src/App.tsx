@@ -24,11 +24,15 @@ function App() {
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: gameWidth,
-      height: gameHeight,
       parent: gameContainerRef.current!,
       backgroundColor: '#000000',
       scene: [TitleScene, GameScene, GameOverScene, RankingScene],
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: gameWidth,
+        height: gameHeight,
+      },
     }
 
     const game = new Phaser.Game(config)

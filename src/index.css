@@ -33,6 +33,7 @@ html, body {
   min-width: 0;
   overflow: hidden;
   background: #000;
+  height: 100%;
 }
 
 .game-pane canvas {
