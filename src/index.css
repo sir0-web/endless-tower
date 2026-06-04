@@ -197,57 +197,29 @@ html, body {
   .mob-status-bar { width: 100%; }
 }
 
-/* ── スマホ横画面（高さ600px以下）：ゲーム上55%・UI下45%、スクロールなし ── */
-@media screen and (orientation: landscape) and (max-height: 600px) {
+/* ── スマホ横画面：PCと同じ左右並びレイアウトを強制 ── */
+@media (max-width: 767px) and (orientation: landscape) {
   .app-layout {
-    flex-direction: column;
-    height: 100dvh;
-    overflow: hidden;
+    flex-direction: row !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
   }
-
-  /* ゲームペイン：上55%固定、潰れない */
   .game-pane {
-    flex: 0 0 55%;
-    flex-shrink: 0;
-    width: 100%;
-    padding-top: 0;
-    overflow: hidden;
+    flex: 0 0 65% !important;
+    width: auto !important;
+    padding-top: 72px !important;
+    overflow: hidden !important;
   }
-
-  /* UIペイン：下45%固定、潰れない、スクロールなし */
   .ui-pane {
-    flex: 0 0 45%;
-    flex-shrink: 0;
-    width: 100%;
-    min-height: 0;
-    border-left: none;
-    border-top: 1px solid #1e1e38;
-    overflow: hidden;
+    flex: 1 1 0 !important;
+    width: auto !important;
+    border-left: 1px solid #1e1e38 !important;
+    border-top: none !important;
+    overflow: hidden !important;
+    height: 100% !important;
   }
-
-  .ui-panel {
-    height: 100%;
-    overflow: hidden;
-  }
-
-  /* ステータスバーは全幅 */
   .mob-status-bar {
-    width: 100%;
-  }
-
-  /* ステータス・装備欄は非表示（ステータスバーに表示済み） */
-  .stats-equip-row {
-    display: none;
-  }
-
-  /* 動画エリアをコンパクトに */
-  .bonus-video-area {
-    height: 90px;
-  }
-
-  /* スロットをコンパクトに */
-  .slot-machine {
-    padding: 4px 8px;
+    width: 65% !important;
   }
 }
 

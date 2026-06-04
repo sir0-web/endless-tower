@@ -16,35 +16,12 @@ function isMobilePortrait() {
   return isMobileDevice && window.innerHeight > window.innerWidth
 }
 
-/** スマホ横画面（縦幅が小さい）かどうか */
-function isSmallLandscape() {
-  return isMobileDevice && window.innerWidth > window.innerHeight && window.innerHeight <= 600
-}
-
+/** PC・スマホ横画面共通：左65%ゲーム・右35%UIレイアウト用キャンバスサイズ */
 function calcGameSize() {
   const STATUS_BAR_H = 72
-
-  if (!isMobileDevice || window.innerWidth >= 1024) {
-    // PC・大型タブレット：左右並び
-    return {
-      width:  Math.floor(window.innerWidth * 0.65),
-      height: window.innerHeight - STATUS_BAR_H,
-      layout: 'pc' as const,
-    }
-  }
-  if (isSmallLandscape()) {
-    // スマホ横画面：縦積み、ゲーム60%高さ（ステータスバーはオーバーレイ）
-    return {
-      width:  window.innerWidth,
-      height: Math.floor(window.innerHeight * 0.55),
-      layout: 'mobileLandscape' as const,
-    }
-  }
-  // スマホ縦画面（portrait guard で通常到達しない）
   return {
-    width:  window.innerWidth,
-    height: Math.floor(window.innerHeight * 0.55) - STATUS_BAR_H,
-    layout: 'mobilePortrait' as const,
+    width:  Math.floor(window.innerWidth * 0.65),
+    height: window.innerHeight - STATUS_BAR_H,
   }
 }
 
