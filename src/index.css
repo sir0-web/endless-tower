@@ -4,40 +4,6 @@
   padding: 0;
 }
 
-/* React側のportrait-overlay（JS検知のフォールバック） */
-.portrait-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: #0a0a12;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.portrait-message {
-  text-align: center;
-  color: #e0e0e0;
-}
-
-.portrait-icon {
-  font-size: 64px;
-  margin-bottom: 24px;
-  animation: rotate-hint 1.5s ease-in-out infinite alternate;
-}
-
-.portrait-message p {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: #aaaaff;
-}
-
-@keyframes rotate-hint {
-  from { transform: rotate(-15deg); }
-  to   { transform: rotate(15deg); }
-}
-
 html, body {
   height: 100%;
   overflow: hidden;
@@ -195,32 +161,6 @@ html, body {
 /* スマホ: ステータスバー全幅 */
 @media (max-width: 767px) {
   .mob-status-bar { width: 100%; }
-}
-
-/* ── スマホ横画面：PCと同じ左右並びレイアウトを強制 ── */
-@media (max-width: 767px) and (orientation: landscape) {
-  .app-layout {
-    flex-direction: row !important;
-    height: 100dvh !important;
-    overflow: hidden !important;
-  }
-  .game-pane {
-    flex: 0 0 65% !important;
-    width: auto !important;
-    padding-top: 72px !important;
-    overflow: hidden !important;
-  }
-  .ui-pane {
-    flex: 1 1 0 !important;
-    width: auto !important;
-    border-left: 1px solid #1e1e38 !important;
-    border-top: none !important;
-    overflow: hidden !important;
-    height: 100% !important;
-  }
-  .mob-status-bar {
-    width: 65% !important;
-  }
 }
 
 /* スマホ: 縦積み */

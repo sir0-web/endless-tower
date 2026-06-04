@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import Phaser from 'phaser'
 import { TitleScene } from './scenes/TitleScene'
 import { GameScene } from './scenes/GameScene'
@@ -10,43 +10,23 @@ import { VirtualJoystick } from './components/VirtualJoystick'
 import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 
-const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-
-function isMobilePortrait() {
-  return isMobileDevice && window.innerHeight > window.innerWidth
-}
-
-/** PC・スマホ横画面共通：左65%ゲーム・右35%UIレイアウト用キャンバスサイズ */
-function calcGameSize() {
-  const STATUS_BAR_H = 72
-  return {
-    width:  Math.floor(window.innerWidth * 0.65),
-    height: window.innerHeight - STATUS_BAR_H,
-  }
-}
-
 function App() {
   const gameContainerRef = useRef<HTMLDivElement>(null)
-  const [portrait, setPortrait] = useState(isMobilePortrait)
 
   useEffect(() => {
-    const check = () => setPortrait(isMobilePortrait())
-    window.addEventListener('resize', check)
-    window.addEventListener('orientationchange', check)
-    return () => {
-      window.removeEventListener('resize', check)
-      window.removeEventListener('orientationchange', check)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (portrait) return
-    const { width, height } = calcGameSize()
+    const isPC = window.innerWidth >= 768
+    const STATUS_BAR_H = 72   // ステータスバー分だけキャンバスを下げる
+    const gameWidth = isPC
+      ? Math.floor(window.innerWidth * 0.65)
+      : window.innerWidth
+    const gameHeight = isPC
+      ? window.innerHeight - STATUS_BAR_H
+      : Math.floor(window.innerHeight * 0.55) - STATUS_BAR_H
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width,
-      height,
+      width: gameWidth,
+      height: gameHeight,
       parent: gameContainerRef.current!,
       backgroundColor: '#000000',
       scene: [TitleScene, GameScene, GameOverScene, RankingScene],
@@ -54,18 +34,7 @@ function App() {
 
     const game = new Phaser.Game(config)
     return () => game.destroy(true)
-  }, [portrait])
-
-  if (portrait) {
-    return (
-      <div className="portrait-overlay">
-        <div className="portrait-message">
-          <div className="portrait-icon">📱</div>
-          <p>横画面にしてください</p>
-        </div>
-      </div>
-    )
-  }
+  }, [])
 
   return (
     <div className="app-layout">
