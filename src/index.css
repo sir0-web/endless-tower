@@ -33,7 +33,14 @@ html, body {
   min-width: 0;
   overflow: hidden;
   background: #000;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-canvas-area {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .game-pane canvas {
@@ -48,14 +55,11 @@ html, body {
   border-left: 1px solid #1e1e38;
 }
 
-/* ── PC・スマホ共通：ゲーム画面最上部ステータスバー ── */
+/* ── ステータスバー（game-pane内・通常フロー） ── */
 .mob-status-bar {
   display: block;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 65%;              /* PCはゲームペイン幅（65%）に合わせる */
-  z-index: 400;
+  flex-shrink: 0;
+  width: 100%;
   padding: 4px 10px;
   background: rgba(5, 5, 20, 0.92);
   border-bottom: 1px solid #1e1e38;
@@ -116,11 +120,6 @@ html, body {
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
-/* スマホ：ゲームペインが全幅なのでバーも全幅 */
-@media (max-width: 767px) {
-  .mob-status-bar { width: 100%; }
-}
-
 /* ミュートボタン（ステータスバー内） */
 .mob-mute-btn {
   pointer-events: auto;
@@ -156,11 +155,6 @@ html, body {
   background: rgba(255, 255, 255, 0.62);
   border: 2px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-
-/* スマホ: ステータスバー全幅 */
-@media (max-width: 767px) {
-  .mob-status-bar { width: 100%; }
 }
 
 /* スマホ: 縦積み */

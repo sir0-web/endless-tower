@@ -11,27 +11,24 @@ import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 
 function App() {
-  const gameContainerRef = useRef<HTMLDivElement>(null)
+  const canvasAreaRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const isPC = window.innerWidth >= 768
-    const gameWidth = isPC
-      ? Math.floor(window.innerWidth * 0.65)
-      : window.innerWidth
-    const gameHeight = isPC
-      ? window.innerHeight
-      : Math.floor(window.innerHeight * 0.55)
+    const el = canvasAreaRef.current!
+    // キャンバスエリアの実サイズに合わせる（ステータスバーを除いた高さ）
+    const w = el.offsetWidth
+    const h = el.offsetHeight
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      parent: gameContainerRef.current!,
+      parent: el,
       backgroundColor: '#000000',
       scene: [TitleScene, GameScene, GameOverScene, RankingScene],
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: gameWidth,
-        height: gameHeight,
+        width: w || Math.floor(window.innerWidth * 0.65),
+        height: h || window.innerHeight,
       },
     }
 
@@ -41,13 +38,16 @@ function App() {
 
   return (
     <div className="app-layout">
-      <div className="game-pane" ref={gameContainerRef} />
+      {/* ゲームペイン：ステータスバー（上）＋キャンバスエリア（残り）を縦積み */}
+      <div className="game-pane">
+        <MobileStatusBar />
+        <div className="game-canvas-area" ref={canvasAreaRef} />
+      </div>
       <div className="ui-pane">
         <UIPanel />
       </div>
       <EquipModal />
       <VirtualJoystick />
-      <MobileStatusBar />
       <SlotAnnouncement />
     </div>
   )
