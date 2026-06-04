@@ -5,20 +5,23 @@ import { GameScene } from './scenes/GameScene'
 import { GameOverScene } from './scenes/GameOverScene'
 import { RankingScene } from './scenes/RankingScene'
 import { UIPanel } from './components/UIPanel'
-import { StatModal } from './components/StatModal'
 import { EquipModal } from './components/EquipModal'
+import { VirtualJoystick } from './components/VirtualJoystick'
+import { MobileStatusBar } from './components/MobileStatusBar'
+import { SlotAnnouncement } from './components/SlotAnnouncement'
 
 function App() {
   const gameContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const isPC = window.innerWidth >= 768
+    const STATUS_BAR_H = 72   // ステータスバー分だけキャンバスを下げる
     const gameWidth = isPC
       ? Math.floor(window.innerWidth * 0.65)
       : window.innerWidth
     const gameHeight = isPC
-      ? window.innerHeight
-      : Math.floor(window.innerHeight * 0.55)
+      ? window.innerHeight - STATUS_BAR_H
+      : Math.floor(window.innerHeight * 0.55) - STATUS_BAR_H
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
@@ -39,8 +42,10 @@ function App() {
       <div className="ui-pane">
         <UIPanel />
       </div>
-      <StatModal />
       <EquipModal />
+      <VirtualJoystick />
+      <MobileStatusBar />
+      <SlotAnnouncement />
     </div>
   )
 }

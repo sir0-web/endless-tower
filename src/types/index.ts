@@ -33,8 +33,6 @@ export interface Item {
   staminaPercent?: number
   // 装備アイテム
   equipSlot?: EquipSlot
-  atkBonus?: number
-  defBonus?: number
   hpBonus?: number
   strBonus?: number
   agiBonus?: number
@@ -60,8 +58,6 @@ export interface Player {
   position: Position
   hp: number
   maxHp: number
-  attack: number
-  defense: number
   level: number
   exp: number
   floor: number
@@ -115,8 +111,6 @@ export interface GameState {
 export interface WindowGameState {
   hp: number
   maxHp: number
-  attack: number
-  defense: number
   level: number
   exp: number
   floor: number
@@ -125,18 +119,15 @@ export interface WindowGameState {
   poisoned: boolean
   messages: string[]
   equipment: Equipment
-  str: number
-  agi: number
-  dex: number
-  int: number
-  vit: number
-  luk: number
+  str: number; agi: number; dex: number
+  int: number; vit: number; luk: number
   statPoints: number
   spells: Item[]
   heals: Item[]
   bag: Item[]
   pendingEquip: PendingEquip | null
   minimapData: MinimapData | null
+  floorType: 'normal' | 'lucky' | 'chaos'
 }
 
 declare global {
@@ -147,5 +138,12 @@ declare global {
     useHeal?: (itemId: string) => void
     resolveEquip?: (equip: boolean) => void
     equipFromBag?: (itemId: string) => void
+    isGameSceneActive?: boolean
+    onEnemyKilled?: () => void
+    applySlotEffect?: (result: string) => void
+    playBonusVideo?: (result: string) => void
+    showSlotAnnouncement?: (result: string, sub?: string) => void
+    onSlotEffectApplied?: () => void
+    gameMove?: (key: string) => void
   }
 }

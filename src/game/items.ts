@@ -15,11 +15,10 @@ const HEAL_ITEMS = [
   { name: 'スタミナポーション', healAmount: 0, staminaPercent: 30 },
 ]
 
+// atkBonus/defBonus を廃止し strBonus/vitBonus に統一
 const EQUIP_ITEMS: {
   name: string
   equipSlot: EquipSlot
-  atkBonus?: number
-  defBonus?: number
   hpBonus?: number
   strBonus?: number
   agiBonus?: number
@@ -29,26 +28,26 @@ const EQUIP_ITEMS: {
   lukBonus?: number
 }[] = [
   // 武器系 → STR重視
-  { name: 'さびた剣',     equipSlot: 'weapon',     atkBonus: 3,  strBonus: 2 },
-  { name: '鉄の剣',       equipSlot: 'weapon',     atkBonus: 6,  strBonus: 4 },
-  { name: '勇者の剣',     equipSlot: 'weapon',     atkBonus: 12, strBonus: 8, dexBonus: 3 },
+  { name: 'さびた剣',     equipSlot: 'weapon',     strBonus: 3 },
+  { name: '鉄の剣',       equipSlot: 'weapon',     strBonus: 6 },
+  { name: '勇者の剣',     equipSlot: 'weapon',     strBonus: 10, dexBonus: 3 },
   // 鎧系 → VIT重視
-  { name: '革の鎧',       equipSlot: 'armor',      defBonus: 3,  vitBonus: 2 },
-  { name: '鉄の鎧',       equipSlot: 'armor',      defBonus: 6,  vitBonus: 4 },
+  { name: '革の鎧',       equipSlot: 'armor',      vitBonus: 3 },
+  { name: '鉄の鎧',       equipSlot: 'armor',      vitBonus: 6 },
   // 肩装備 → VIT・AGI
-  { name: '肩当て',       equipSlot: 'shoulder',   defBonus: 2,  vitBonus: 1 },
-  { name: '疾風のマント', equipSlot: 'shoulder',   defBonus: 3,  atkBonus: 1, agiBonus: 5 },
+  { name: '肩当て',       equipSlot: 'shoulder',   vitBonus: 2 },
+  { name: '疾風のマント', equipSlot: 'shoulder',   strBonus: 1, vitBonus: 2, agiBonus: 5 },
   // ブーツ → AGI重視
-  { name: '革のブーツ',   equipSlot: 'boots',      defBonus: 1,  agiBonus: 3 },
-  { name: '俊足のブーツ', equipSlot: 'boots',      defBonus: 2,  atkBonus: 1, agiBonus: 8 },
+  { name: '革のブーツ',   equipSlot: 'boots',      agiBonus: 3, vitBonus: 1 },
+  { name: '俊足のブーツ', equipSlot: 'boots',      strBonus: 1, vitBonus: 2, agiBonus: 8 },
   // アクセサリ → LUK・DEX
-  { name: '力の指輪',     equipSlot: 'accessory1', atkBonus: 3,  strBonus: 3 },
-  { name: '守りの指輪',   equipSlot: 'accessory1', defBonus: 3,  vitBonus: 3 },
-  { name: '命の指輪',     equipSlot: 'accessory2', hpBonus: 10,  lukBonus: 5 },
+  { name: '力の指輪',     equipSlot: 'accessory1', strBonus: 5 },
+  { name: '守りの指輪',   equipSlot: 'accessory1', vitBonus: 5 },
+  { name: '命の指輪',     equipSlot: 'accessory2', hpBonus: 10, lukBonus: 5 },
   { name: '幸運の指輪',   equipSlot: 'accessory2', lukBonus: 10, dexBonus: 5 },
   // お守り → 複合
-  { name: '戦士のお守り', equipSlot: 'charm',      atkBonus: 2,  defBonus: 2, strBonus: 2, vitBonus: 2 },
-  { name: '冒険者の護符', equipSlot: 'charm',      dexBonus: 5,  lukBonus: 5, agiBonus: 5 },
+  { name: '戦士のお守り', equipSlot: 'charm',      strBonus: 4, vitBonus: 4 },
+  { name: '冒険者の護符', equipSlot: 'charm',      dexBonus: 5, lukBonus: 5, agiBonus: 5 },
 ]
 
 export function spawnItems(
@@ -74,13 +73,11 @@ export function spawnItems(
     if (r < equipRate) {
       const base = EQUIP_ITEMS[Math.floor(Math.random() * EQUIP_ITEMS.length)]
       items.push({
-        id: `item_${i}_${Date.now()}`,
+        id: `item_${i}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         name: base.name,
         type: 'equip',
         position: { ...pos },
         equipSlot: base.equipSlot,
-        atkBonus: base.atkBonus,
-        defBonus: base.defBonus,
         hpBonus: base.hpBonus,
         strBonus: base.strBonus,
         agiBonus: base.agiBonus,
@@ -93,7 +90,7 @@ export function spawnItems(
       // 魔法の書：装備率より低い確率
       const base = SPELL_ITEMS[Math.floor(Math.random() * SPELL_ITEMS.length)]
       items.push({
-        id: `item_${i}_${Date.now()}`,
+        id: `item_${i}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         name: base.name,
         type: 'spell',
         position: { ...pos },
@@ -102,7 +99,7 @@ export function spawnItems(
     } else {
       const base = HEAL_ITEMS[Math.floor(Math.random() * HEAL_ITEMS.length)]
       items.push({
-        id: `item_${i}_${Date.now()}`,
+        id: `item_${i}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         name: base.name,
         type: 'heal',
         position: { ...pos },

@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Equipment, Item, MinimapData } from '../types'
-import { floorLabel } from '../game/utils'
-import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
-import { MinimapCanvas } from './MinimapCanvas'
+import type { Equipment, Item, MinimapData, AllocStat } from '../types'
+import { SlotMachine } from './SlotMachine'
+import { BonusVideo } from './BonusVideo'
 
 interface GameStateSnapshot {
   hp: number; maxHp: number
-  attack: number; defense: number
   level: number; exp: number; floor: number
   stamina: number; maxStamina: number
   poisoned: boolean
@@ -15,15 +13,12 @@ interface GameStateSnapshot {
   str: number; agi: number; dex: number
   int: number; vit: number; luk: number
   statPoints: number
-  spells: Item[]
-  heals: Item[]
-  bag: Item[]
+  spells: Item[]; heals: Item[]; bag: Item[]
   minimapData: MinimapData | null
 }
 
 const DEFAULT: GameStateSnapshot = {
-  hp: 0, maxHp: 0, attack: 0, defense: 0,
-  level: 1, exp: 0, floor: 1,
+  hp: 0, maxHp: 0, level: 1, exp: 0, floor: 1,
   stamina: 0, maxStamina: 0, poisoned: false,
   messages: [], equipment: {},
   str: 1, agi: 1, dex: 1, int: 1, vit: 1, luk: 1, statPoints: 0,
@@ -31,13 +26,19 @@ const DEFAULT: GameStateSnapshot = {
 }
 
 const SLOTS = [
-  { key: 'weapon'      as const, label: '武器',   icon: '⚔️' },
-  { key: 'armor'       as const, label: '鎧',     icon: '🛡️' },
-  { key: 'shoulder'    as const, label: '肩装備', icon: '🧣' },
-  { key: 'boots'       as const, label: '靴',     icon: '👟' },
-  { key: 'accessory1'  as const, label: '指輪①', icon: '💍' },
-  { key: 'accessory2'  as const, label: '指輪②', icon: '💍' },
-  { key: 'charm'       as const, label: 'お守り', icon: '🍀' },
+  { key: 'weapon'      as const, icon: '⚔️', label: '武器'   },
+  { key: 'armor'       as const, icon: '🛡️', label: '鎧'     },
+  { key: 'shoulder'    as const, icon: '🧣', label: '肩装備' },
+  { key: 'boots'       as const, icon: '👟', label: '靴'     },
+  { key: 'accessory1'  as const, icon: '💍', label: '指輪①' },
+  { key: 'accessory2'  as const, icon: '💍', label: '指輪②' },
+  { key: 'charm'       as const, icon: '🍀', label: 'お守り' },
+]
+
+const ALLOC_STATS: { key: AllocStat; label: string }[] = [
+  { key: 'str', label: 'STR' }, { key: 'agi', label: 'AGI' },
+  { key: 'dex', label: 'DEX' }, { key: 'vit', label: 'VIT' },
+  { key: 'int', label: 'INT' }, { key: 'luk', label: 'LUK' },
 ]
 
 function getLogColor(msg: string): string {
@@ -57,150 +58,157 @@ function group<T extends { name: string; id: string }>(items: T[]): Record<strin
 
 export function UIPanel() {
   const [gs, setGs] = useState<GameStateSnapshot>(DEFAULT)
-  const [mute, setMute] = useState(isMuted())
+  const [selId, setSelId] = useState<string | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const update = () => {
-      if (window.gameState) setGs({ ...window.gameState })
-    }
+    const update = () => { if (window.gameState) setGs({ ...window.gameState }) }
     window.addEventListener('gamestate-update', update)
     return () => window.removeEventListener('gamestate-update', update)
   }, [])
 
   useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight
-    }
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [gs.messages])
 
-  const toggleMute = () => { soundToggleMute(); setMute(p => !p) }
+  // 選択アイテムが消えたらリセット
+  useEffect(() => {
+    if (!selId) return
+    const all = [...gs.heals, ...gs.spells, ...gs.bag].map(x => x.id)
+    if (!all.includes(selId)) setSelId(null)
+  }, [gs.heals, gs.spells, gs.bag, selId])
 
-  const hpPct    = gs.maxHp > 0 ? Math.max(0, Math.round((gs.hp / gs.maxHp) * 100)) : 0
-  const staPct   = gs.maxStamina > 0 ? Math.round((gs.stamina / gs.maxStamina) * 100) : 0
-  const staColor = staPct > 40 ? '#22c55e' : staPct > 15 ? '#f59e0b' : '#ef4444'
   const expNeeded = gs.level * 30 + 10
 
   const healGroups  = group(gs.heals)
   const spellGroups = group(gs.spells)
-  const hasItems    = gs.heals.length + gs.spells.length + gs.bag.length > 0
+
+  // アイテム行クリック
+  const selectItem = (id: string) => setSelId(s => s === id ? null : id)
 
   return (
     <div className="ui-panel">
 
-      {/* ── 上段：ミニマップ ── */}
-      <div className="minimap-section">
-        <MinimapCanvas data={gs.minimapData} />
-      </div>
+      {/* ── スロットマシーン（敵撃破でオートスピン） ── */}
+      <SlotMachine />
 
-      {/* ── 中段：装備（左）＋アイテム（右） ── */}
-      <div className="mid-row">
+      {/* ボーナス動画エリア（2枚揃い以上で /assets/slot/bonus.mp4 を再生） */}
+      <BonusVideo />
 
-        {/* 装備欄（左50%）：アイコン＋名前のみ */}
-        <div className="compact-equip">
-          <p className="section-title-sm">装備</p>
+      {/* ── 中段：ステータス（左50%）＋装備（右50%） ── */}
+      <div className="stats-equip-row">
+
+        {/* 左：STR/AGI/DEX/VIT/INT/LUK + EXP */}
+        <div className="stat-panel">
+          <p className="stat-panel-label">ステータス</p>
+          {ALLOC_STATS.map(({ key, label }) => (
+            <div key={key} className={`sp-row ${gs.statPoints > 0 ? 'sp-has-pts' : ''}`}>
+              <span className="sp-label">{label}</span>
+              <span className="sp-val">{gs[key]}</span>
+              {gs.statPoints > 0 && (
+                <button className="stat-plus-btn" onClick={() => window.allocateStat?.(key)}>＋</button>
+              )}
+            </div>
+          ))}
+          <div className="sp-row sp-exp">
+            <span className="sp-label">EXP</span>
+            <span className="sp-val sp-exp-val">{gs.exp}/{expNeeded}</span>
+          </div>
+          {gs.statPoints > 0 && (
+            <p className="stat-points-remaining">残り {gs.statPoints}pt</p>
+          )}
+        </div>
+
+        {/* 右：装備欄（アイコン＋装備名） */}
+        <div className="equip-panel-compact">
+          <p className="equip-panel-label">装備</p>
           {SLOTS.map(slot => {
             const item = gs.equipment[slot.key]
             return (
-              <div key={slot.key} className={`cq-row ${item ? 'cq-has' : 'cq-empty'}`}>
-                <span className="cq-icon">{slot.icon}</span>
-                <span className="cq-name">{item ? item.name : '─'}</span>
+              <div key={slot.key} className={`epc-row ${item ? 'epc-has' : 'epc-empty'}`}>
+                <span className="epc-icon">{slot.icon}</span>
+                <span className="epc-name">{item ? item.name : '─'}</span>
               </div>
             )
           })}
         </div>
 
-        {/* アイテム欄（右50%）：名前（個数）のみ */}
-        <div className="compact-items">
-          <p className="section-title-sm">アイテム</p>
-          <div className="compact-item-scroll">
-            {Object.entries(healGroups).map(([name, items]) => (
-              <div key={name} className="ci-row ci-heal">
-                <span className="ci-icon">💊</span>
-                <span className="ci-name">{name}{items.length > 1 ? `（${items.length}）` : ''}</span>
-                <button className="ci-btn ci-use-btn" onClick={() => window.useHeal?.(items[0].id)}>使う</button>
-              </div>
-            ))}
-            {Object.entries(spellGroups).map(([name, items]) => (
-              <div key={name} className="ci-row ci-spell">
-                <span className="ci-icon">📖</span>
-                <span className="ci-name">{name}{items.length > 1 ? `（${items.length}）` : ''}</span>
-                <button className="ci-btn ci-use-btn" onClick={() => window.useSpell?.(items[0].id)}>使う</button>
-              </div>
-            ))}
-            {gs.bag.map(item => (
-              <div key={item.id} className="ci-row ci-bag">
-                <span className="ci-icon">📦</span>
-                <span className="ci-name">{item.name}</span>
-                <button className="ci-btn ci-equip-btn" onClick={() => window.equipFromBag?.(item.id)}>装備</button>
-              </div>
-            ))}
-            {!hasItems && <p className="ci-empty">なし</p>}
+      </div>
+
+      {/* ── 下段：バトルログ（左2/3）＋アイテム（右1/3） ── */}
+      <div className="log-items-row">
+
+        {/* バトルログ */}
+        <div className="log-panel">
+          <p className="section-title-sm">ログ</p>
+          <div className="log-list" ref={logRef}>
+            {gs.messages.length === 0
+              ? <div className="log-entry" style={{ color: '#666688' }}>─ ログなし ─</div>
+              : [...gs.messages].reverse().map((msg, i) => (
+                  <div key={i} className="log-entry" style={{ color: getLogColor(msg) }}>{msg}</div>
+                ))
+            }
           </div>
         </div>
 
-      </div>
+        {/* アイテム欄：上=通常アイテム / 下=魔法の書 */}
+        <div className="items-panel">
 
-      {/* ── 下段：ステータス ── */}
-      <section className="panel-section status-section">
-        <div className="section-header">
-          <p className="section-title">ステータス</p>
-          <button className="mute-btn" onClick={toggleMute} title={mute ? 'ミュート解除' : 'ミュート'}>
-            {mute ? '🔇' : '🔊'}
-          </button>
-        </div>
-
-        <div className="floor-level">
-          <span className="badge floor-badge">{floorLabel(gs.floor)}</span>
-          <span className="badge level-badge">Lv {gs.level}</span>
-          {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
-        </div>
-
-        <div className="stat-label">
-          HP <span className="val">{Math.max(0, gs.hp)}</span> / <span className="val">{gs.maxHp}</span>
-        </div>
-        <div className="bar-track">
-          <div className="bar-fill" style={{ width: `${hpPct}%`, backgroundColor: '#22c55e' }} />
-        </div>
-
-        <div className="stat-label">
-          スタミナ <span className="val">{gs.stamina}</span> / <span className="val">{gs.maxStamina}</span>
-        </div>
-        <div className="bar-track">
-          <div className="bar-fill" style={{ width: `${staPct}%`, backgroundColor: staColor }} />
-        </div>
-
-        <div className="stat-grid">
-          {[
-            ['ATK', gs.attack], ['DEF', gs.defense], ['EXP', `${gs.exp}/${expNeeded}`],
-            ['STR', gs.str],   ['AGI', gs.agi],     ['DEX', gs.dex],
-            ['VIT', gs.vit],   ['INT', gs.int],     ['LUK', gs.luk],
-          ].map(([k, v]) => (
-            <div key={k} className="stat-item">
-              <span className="stat-key">{k}</span>
-              <span className="stat-val">{v}</span>
-            </div>
-          ))}
-        </div>
-        {gs.statPoints > 0 && (
-          <p className="stat-points-notice">未割り振り {gs.statPoints}pt ▶ Lvアップ画面で振り分け</p>
-        )}
-      </section>
-
-      {/* ── 最下段：バトルログ ── */}
-      <section className="panel-section log-section">
-        <p className="section-title">バトルログ</p>
-        <div className="log-list" ref={logRef}>
-          {gs.messages.length === 0
-            ? <div className="log-entry" style={{ color: '#666688' }}>─ ログなし ─</div>
-            : [...gs.messages].reverse().map((msg, i) => (
-                <div key={i} className="log-entry" style={{ color: getLogColor(msg) }}>
-                  {msg}
+          {/* 上半分：回復薬・装備品 */}
+          <div className="ip-section">
+            <p className="section-title-sm">アイテム</p>
+            <div className="ip-scroll">
+              {Object.entries(healGroups).map(([name, items]) => (
+                <div key={name}>
+                  <div className={`icr icr-heal ${selId === items[0].id ? 'icr-sel' : ''}`}
+                    onClick={() => selectItem(items[0].id)}>
+                    <span>💊</span>
+                    <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                  </div>
+                  {selId === items[0].id && (
+                    <button className="icr-act" onClick={() => { window.useHeal?.(items[0].id); setSelId(null) }}>使う</button>
+                  )}
                 </div>
-              ))
-          }
+              ))}
+              {gs.bag.map(item => (
+                <div key={item.id}>
+                  <div className={`icr icr-bag ${selId === item.id ? 'icr-sel' : ''}`}
+                    onClick={() => selectItem(item.id)}>
+                    <span>📦</span>
+                    <span className="icr-name">{item.name}</span>
+                  </div>
+                  {selId === item.id && (
+                    <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
+                  )}
+                </div>
+              ))}
+              {gs.heals.length + gs.bag.length === 0 && <p className="icr-empty">なし</p>}
+            </div>
+          </div>
+
+          {/* 下半分：魔法の書 */}
+          <div className="ip-section ip-spell-section">
+            <p className="section-title-sm ip-spell-title">魔法の書</p>
+            <div className="ip-scroll">
+              {Object.entries(spellGroups).map(([name, items]) => (
+                <div key={name}>
+                  <div className={`icr icr-spell-book ${selId === items[0].id ? 'icr-sel' : ''}`}
+                    onClick={() => selectItem(items[0].id)}>
+                    <span>📖</span>
+                    <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                  </div>
+                  {selId === items[0].id && (
+                    <button className="icr-act icr-act-spell" onClick={() => { window.useSpell?.(items[0].id); setSelId(null) }}>使う</button>
+                  )}
+                </div>
+              ))}
+              {gs.spells.length === 0 && <p className="icr-empty">なし</p>}
+            </div>
+          </div>
+
         </div>
-      </section>
+
+      </div>
 
     </div>
   )

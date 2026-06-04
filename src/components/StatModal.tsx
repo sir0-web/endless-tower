@@ -7,13 +7,13 @@ interface LocalStats {
   statPoints: number
 }
 
-const STAT_DEFS: { key: AllocStat; label: string; desc: string }[] = [
-  { key: 'str', label: 'STR', desc: '物理攻撃力  +0.5 ATK/pt' },
-  { key: 'agi', label: 'AGI', desc: '攻撃速度  50毎に攻撃回数+1' },
-  { key: 'dex', label: 'DEX', desc: '命中率  基本90%→最大99%' },
-  { key: 'int', label: 'INT', desc: '魔法攻撃力  (将来実装)' },
-  { key: 'vit', label: 'VIT', desc: '物理防御力  +0.3 DEF/pt' },
-  { key: 'luk', label: 'LUK', desc: 'クリティカル  0.1%/pt・1.5倍ダメージ' },
+const STAT_DEFS: { key: AllocStat; label: string }[] = [
+  { key: 'str', label: 'STR' },
+  { key: 'agi', label: 'AGI' },
+  { key: 'dex', label: 'DEX' },
+  { key: 'int', label: 'INT' },
+  { key: 'vit', label: 'VIT' },
+  { key: 'luk', label: 'LUK' },
 ]
 
 const INIT: LocalStats = { str: 1, agi: 1, dex: 1, int: 1, vit: 1, luk: 1, statPoints: 0 }
@@ -54,11 +54,10 @@ export function StatModal() {
           残りポイント：<span className="pts-num">{ls.statPoints}</span>
         </p>
         <div className="stat-alloc-list">
-          {STAT_DEFS.map(({ key, label, desc }) => (
+          {STAT_DEFS.map(({ key, label }) => (
             <div key={key} className="stat-alloc-row">
               <span className="sa-label">{label}</span>
               <span className="sa-val">{ls[key]}</span>
-              <span className="sa-desc">{desc}</span>
               <button
                 className="sa-btn"
                 onClick={() => window.allocateStat?.(key)}

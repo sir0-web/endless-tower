@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import type { Item, PendingEquip } from '../types'
 
 const BONUS_DEFS = [
-  { key: 'atkBonus', label: 'ATK' },
-  { key: 'defBonus', label: 'DEF' },
   { key: 'hpBonus',  label: 'HP'  },
   { key: 'strBonus', label: 'STR' },
   { key: 'agiBonus', label: 'AGI' },
