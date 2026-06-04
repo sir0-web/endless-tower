@@ -4,7 +4,27 @@
   padding: 0;
 }
 
-/* ── 縦画面ガード（JS で portrait 判定時にレンダリング） ── */
+/* ── 縦画面ガード ── */
+#portrait-overlay {
+  display: none;  /* デフォルト非表示 */
+}
+
+@media screen and (orientation: portrait) and (max-width: 1024px) {
+  #portrait-overlay {
+    display: flex !important;
+  }
+  #root {
+    display: none !important;
+  }
+}
+
+@media screen and (orientation: landscape) {
+  #portrait-overlay {
+    display: none !important;
+  }
+}
+
+/* React側のportrait-overlay（JS検知のフォールバック） */
 .portrait-overlay {
   position: fixed;
   inset: 0;
