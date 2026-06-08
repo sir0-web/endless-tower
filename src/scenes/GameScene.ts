@@ -74,6 +74,12 @@ export class GameScene extends Phaser.Scene {
   private isEquipModalOpen = false
   private awaitingEquipModal = false
   private pendingItem: import('../types').Item | null = null
+  private isGameOver = false   // gameOver()の多重発火防止（同一ターン内で複数回HP<=0判定が走るため）
+  // テクスチャ/アニメーションはゲーム全体で共有（シーン再起動毎にリセットされない）ため、
+  // 透過処理（テクスチャの remove→addCanvas）は初回のみ実行する。
+  // 2回目以降に再実行すると、既存のwalk/attackアニメーションが参照している古いFrameの
+  // textureSourceがnullになり、再生時に "Cannot read properties of null (reading 'sourceSize')" でクラッシュする
+  private playerTexturesTransparent = false
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
@@ -98,6 +104,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingItem        = null
     this.playerDir          = 'down'
     this.isPlayerAttacking  = false
+    this.isGameOver         = false
   }
 
   preload() {
@@ -897,6 +904,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private gameOver() {
+    if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
+    this.isGameOver = true
     clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
     this.input.keyboard!.off('keydown', this.handleInput, this)
     window.isGameSceneActive = false
@@ -1188,6 +1197,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private removePlayerBackgrounds() {
+    if (this.playerTexturesTransparent) return   // テクスチャ/アニメは全シーン共有のため初回のみ実行
+    this.playerTexturesTransparent = true
+
     const dirs = ['down', 'up', 'right'] as const
     for (const dir of dirs) {
       for (let i = 1; i <= 4; i++) {
