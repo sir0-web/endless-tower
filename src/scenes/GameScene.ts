@@ -82,7 +82,7 @@ export class GameScene extends Phaser.Scene {
   // 2回目以降に再実行すると、既存のwalk/attackアニメーションが参照している古いFrameの
   // textureSourceがnullになり、再生時に "Cannot read properties of null (reading 'sourceSize')" でクラッシュする
   private playerTexturesTransparent = false
-  private isEventFloor = false   // イベントフロア（宿屋ミッドガルド）滞在中フラグ
+  private isEventFloor = false   // イベントフロア（ベースキャンプ「あるかなひろば」）滞在中フラグ
   private eventFacilities: { id: string; kind: import('../types').FacilityKind; name: string; icon: string; position: import('../types').Position }[] = []
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
@@ -875,7 +875,7 @@ export class GameScene extends Phaser.Scene {
       this.enterNormalFloor()
       return
     }
-    // 5フロアクリアごとに、次のフロアへ進む前にイベントフロア（宿屋ミッドガルド）に立ち寄る
+    // 5フロアクリアごとに、次のフロアへ進む前にイベントフロア（ベースキャンプ「あるかなひろば」）に立ち寄る
     if (this.state.player.floor > 0 && this.state.player.floor % 5 === 0) {
       this.enterEventFloor()
       return
@@ -930,7 +930,7 @@ export class GameScene extends Phaser.Scene {
     if (floorType === 'chaos') this.showMonsterHouseEffect()
   }
 
-  // ── イベントフロア（宿屋ミッドガルド）──
+  // ── イベントフロア（ベースキャンプ「あるかなひろば」）──
   private enterEventFloor() {
     this.isEventFloor = true
     const map = this.generateEventFloorMap()
@@ -947,7 +947,7 @@ export class GameScene extends Phaser.Scene {
     this.state.floorType = 'normal'
     this.buildFloorVariants(map)
     this.createTileSprites(map)
-    this.addMessage('宿屋「ミッドガルド」に到着した...')
+    this.addMessage('ベースキャンプ「あるかなひろば」に到着した...')
     this.renderMap()
     this.updateWindowGameState()
     this.updateBGM()
@@ -970,7 +970,7 @@ export class GameScene extends Phaser.Scene {
   private showMidgardTitle() {
     const W = this.scale.width
     const H = this.scale.height
-    const title = this.add.text(W / 2, H / 2, '宿屋「ミッドガルド」', {
+    const title = this.add.text(W / 2, H / 2, 'ベースキャンプ「あるかなひろば」', {
       fontSize: '36px', color: '#ffd766',
       stroke: '#000000', strokeThickness: 6,
       backgroundColor: '#00000099',
