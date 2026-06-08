@@ -55,6 +55,10 @@ function App() {
       },
     }
     gameRef.current = new Phaser.Game(config)
+
+    // 初期レイアウト確定後にスケールを再計算し、コンテナとのズレ（隙間）を解消する
+    requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
+
     return () => { gameRef.current?.destroy(true); gameRef.current = null }
   }, [])
 
