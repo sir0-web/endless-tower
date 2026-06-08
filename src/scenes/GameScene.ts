@@ -359,7 +359,7 @@ export class GameScene extends Phaser.Scene {
     if (item.type === 'heal') {
       const sameCount = this.state.heals.filter(h => h.name === item.name).length
       if (sameCount >= 10) {
-        this.addMessage(`${item.name}は所持上限に達したため拾えません`)
+        this.addMessage(`${item.name}を手に入れたが、いっぱいのため宝箱へ戻した・・・`)
         return
       }
       this.state.heals.push({ ...item, position: { x: 0, y: 0 } })
@@ -368,7 +368,7 @@ export class GameScene extends Phaser.Scene {
     } else if (item.type === 'spell' && item.spellType) {
       const sameCount = this.state.spells.filter(s => s.name === item.name).length
       if (sameCount >= 10) {
-        this.addMessage(`${item.name}は所持上限に達したため拾えません`)
+        this.addMessage(`${item.name}を手に入れたが、いっぱいのため宝箱へ戻した・・・`)
         return
       }
       this.state.spells.push({ ...item, position: { x: 0, y: 0 } })

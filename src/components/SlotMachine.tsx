@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const SYMBOLS = 7
+const CREDIT_MAX = 10
 function rand() { return Math.floor(Math.random() * SYMBOLS) + 1 }
 type Triplet = [number, number, number]
 
@@ -20,9 +21,11 @@ export function SlotMachine() {
   const [bouncing,  setBouncing]  = useState<[boolean,boolean,boolean]>([false,false,false])
   const [glowing,   setGlowing]   = useState(false)
   const [slotStock, setSlotStock] = useState(0)
+  const [credits,   setCredits]   = useState(0)   // モンスターコイン → クレジットメーター（10で1回転）
 
   const busyRef         = useRef(false)
   const stockRef        = useRef(0)
+  const creditsRef      = useRef(0)
   const spinRef         = useRef<() => void>(() => {})
   const ivRef           = useRef<(ReturnType<typeof setInterval> | null)[]>([null, null, null])
   const timerRefs       = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -135,8 +138,8 @@ export function SlotMachine() {
   // spinRef を常に最新の executeSpin に同期（自己参照のため）
   useEffect(() => { spinRef.current = executeSpin }, [executeSpin])
 
-  // 外部トリガー：敵撃破時に呼ばれる
-  const doSpin = useCallback(() => {
+  // スロットを1回回す（回転中ならストックに積む）
+  const triggerSpin = useCallback(() => {
     if (busyRef.current) {
       stockRef.current++
       setSlotStock(stockRef.current)
@@ -145,10 +148,21 @@ export function SlotMachine() {
     }
   }, [executeSpin])
 
+  // 外部トリガー：敵撃破時に呼ばれる（モンスターコイン1個獲得→クレジットメーター+1）
+  // メーターが10たまったらリセットしてスロットを1回回す
+  const gainCoin = useCallback(() => {
+    creditsRef.current++
+    if (creditsRef.current >= CREDIT_MAX) {
+      creditsRef.current = 0
+      triggerSpin()
+    }
+    setCredits(creditsRef.current)
+  }, [triggerSpin])
+
   useEffect(() => {
-    window.onEnemyKilled = doSpin
+    window.onEnemyKilled = gainCoin
     return () => { window.onEnemyKilled = undefined }
-  }, [doSpin])
+  }, [gainCoin])
 
   // ゲームシーン切り替え時に回転状態・ストックをリセット
   useEffect(() => {
@@ -156,7 +170,9 @@ export function SlotMachine() {
       clearAllTimers()
       busyRef.current  = false
       stockRef.current = 0
+      creditsRef.current = 0
       setSlotStock(0)
+      setCredits(0)
       setSpinning([false, false, false])
       setBouncing([false, false, false])
       setGlowing(false)
@@ -177,24 +193,35 @@ export function SlotMachine() {
   return (
     <div className={`slot-machine ${glowing ? 'slot-glowing' : ''}`}>
       <p className="slot-label">女神の加護</p>
-      <div className="slot-reels">
-        {([0, 1, 2] as const).map(i => (
-          <div
-            key={i}
-            className={[
-              'slot-reel',
-              spinning[i] ? 'reel-spinning' : '',
-              bouncing[i] ? 'reel-bouncing' : '',
-              glowing      ? 'reel-glow'     : '',
-            ].filter(Boolean).join(' ')}
-          >
-            <img
-              src={`/assets/slot/slot${display[i]}.png`}
-              alt={`slot${display[i]}`}
-              className="reel-img"
-            />
+      <div className="slot-row">
+        <div className="slot-reels">
+          {([0, 1, 2] as const).map(i => (
+            <div
+              key={i}
+              className={[
+                'slot-reel',
+                spinning[i] ? 'reel-spinning' : '',
+                bouncing[i] ? 'reel-bouncing' : '',
+                glowing      ? 'reel-glow'     : '',
+              ].filter(Boolean).join(' ')}
+            >
+              <img
+                src={`/assets/slot/slot${display[i]}.png`}
+                alt={`slot${display[i]}`}
+                className="reel-img"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="slot-credit-meter">
+          <p className="scm-label">CREDIT</p>
+          <div className="scm-bar">
+            {Array.from({ length: CREDIT_MAX }).map((_, i) => (
+              <div key={i} className={`scm-seg ${i < credits ? 'scm-filled' : ''}`} />
+            ))}
           </div>
-        ))}
+          <p className="scm-count">{credits}/{CREDIT_MAX}</p>
+        </div>
       </div>
       {slotStock > 0 && (
         <div className="slot-stock-badge">×{slotStock}</div>

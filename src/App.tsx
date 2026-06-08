@@ -11,7 +11,8 @@ import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 
 const BASE_W = 1280
-const BASE_H = 800
+const BASE_H = 880   // 全体の縦サイズ：少し伸ばし
+const GAME_H = BASE_H   // ゲーム画面も全体に合わせて伸ばす
 const GAME_W = Math.floor(BASE_W * 0.65)  // 832
 
 function calcScale() {
@@ -33,7 +34,7 @@ function App() {
     const onResize = () => {
       setIsMobile(isMobileViewport())
       setAppScale(calcScale())
-      gameRef.current?.scale.resize(GAME_W, BASE_H)
+      gameRef.current?.scale.resize(GAME_W, GAME_H)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -50,7 +51,7 @@ function App() {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
         width: GAME_W,
-        height: BASE_H,
+        height: GAME_H,
       },
     }
     gameRef.current = new Phaser.Game(config)
