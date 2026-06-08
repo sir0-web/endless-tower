@@ -653,7 +653,29 @@ export class GameScene extends Phaser.Scene {
 
   private enemyTurn() {
     const { player, enemies } = this.state
-    for (const enemy of enemies) {
+
+    // プレイヤーを囲む上下左右4マス（包囲ポジション）
+    const adjPos = [
+      { x: player.position.x - 1, y: player.position.y },
+      { x: player.position.x + 1, y: player.position.y },
+      { x: player.position.x,     y: player.position.y - 1 },
+      { x: player.position.x,     y: player.position.y + 1 },
+    ]
+
+    // 近い敵から処理して包囲ポジションを確保させる
+    const sorted = [...enemies].sort((a, b) =>
+      (Math.abs(player.position.x - a.position.x) + Math.abs(player.position.y - a.position.y)) -
+      (Math.abs(player.position.x - b.position.x) + Math.abs(player.position.y - b.position.y))
+    )
+
+    // 既にプレイヤー隣接マスにいる敵のポジションを確保済みとしてマーク
+    const takenAdj = new Set<string>(
+      sorted
+        .filter(e => Math.abs(player.position.x - e.position.x) + Math.abs(player.position.y - e.position.y) === 1)
+        .map(e => `${e.position.x},${e.position.y}`)
+    )
+
+    for (const enemy of sorted) {
       const dx = player.position.x - enemy.position.x
       const dy = player.position.y - enemy.position.y
       const dist = Math.abs(dx) + Math.abs(dy)
@@ -668,28 +690,38 @@ export class GameScene extends Phaser.Scene {
         const dmg = isCrit ? Math.floor(raw * 1.5) : raw
         player.hp = Math.max(0, player.hp - dmg)
         playDamage()
-        if (isCrit) {
-          this.addMessage(`${enemy.name}からクリティカル！${dmg}ダメージ！`)
-        } else {
-          this.addMessage(`${enemy.name}から${dmg}ダメージ！`)
-        }
-        if (player.hp <= 0) {
-          this.gameOver()
-          return
-        }
+        this.addMessage(isCrit
+          ? `${enemy.name}からクリティカル！${dmg}ダメージ！`
+          : `${enemy.name}から${dmg}ダメージ！`)
+        if (player.hp <= 0) { this.gameOver(); return }
+
       } else if (dist < 8) {
-        // 斜め移動禁止：X/Y どちらか大きい方向のみ1マス移動
-        const mx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0
-        const my = Math.abs(dx) >= Math.abs(dy) ? 0 : Math.sign(dy)
+        // 空いている包囲ポジションを最も近いものから探す
+        const candidates = adjPos
+          .filter(p => {
+            const tile = this.state.map[p.y]?.[p.x]
+            return (tile === 'floor' || tile === 'trap') && !takenAdj.has(`${p.x},${p.y}`)
+          })
+          .sort((a, b) =>
+            (Math.abs(a.x - enemy.position.x) + Math.abs(a.y - enemy.position.y)) -
+            (Math.abs(b.x - enemy.position.x) + Math.abs(b.y - enemy.position.y))
+          )
+
+        // 目標: 最寄りの空き包囲ポジション、なければプレイヤーへ直進
+        const target = candidates.length > 0 ? candidates[0] : { x: player.position.x, y: player.position.y }
+        if (candidates.length > 0) takenAdj.add(`${target.x},${target.y}`)
+
+        const tdx = target.x - enemy.position.x
+        const tdy = target.y - enemy.position.y
+        const mx = Math.abs(tdx) >= Math.abs(tdy) ? Math.sign(tdx) : 0
+        const my = Math.abs(tdx) >= Math.abs(tdy) ? 0 : Math.sign(tdy)
         const nx = enemy.position.x + mx
         const ny = enemy.position.y + my
 
-        // 移動先がプレイヤーと同じマスには入らない
-        const isPlayerPos = nx === player.position.x && ny === player.position.y
-        // 壁・階段以外（floor/trap）かつ他の敵と重複しない場合のみ移動
         const tile = this.state.map[ny]?.[nx]
         const isWalkable = tile === 'floor' || tile === 'trap'
-        const occupied = enemies.some(e => e.position.x === nx && e.position.y === ny)
+        const isPlayerPos = nx === player.position.x && ny === player.position.y
+        const occupied = enemies.some(e => e !== enemy && e.position.x === nx && e.position.y === ny)
 
         if (isWalkable && !isPlayerPos && !occupied) {
           enemy.position.x = nx

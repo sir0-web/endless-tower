@@ -10,6 +10,7 @@ import { VirtualJoystick } from './components/VirtualJoystick'
 import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal } from './components/EventFacilityModals'
+import { ScrollLockButton } from './components/ScrollLockButton'
 
 const BASE_W = 1280
 const BASE_H = 880   // 全体の縦サイズ：少し伸ばし
@@ -82,7 +83,9 @@ function App() {
       <div className="app-layout">
         <div className="game-pane">
           <MobileStatusBar />
-          <div className="game-canvas-area" ref={canvasAreaRef} />
+          <div className="game-canvas-area" ref={canvasAreaRef}>
+            <ScrollLockButton />
+          </div>
         </div>
         <div className="ui-pane">
           <UIPanel />

@@ -42,6 +42,7 @@ html, body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .game-pane canvas {
@@ -155,6 +156,33 @@ html, body {
 .mob-save-btn:hover {
   background: rgba(0, 90, 45, 0.7);
   color: #ffffff;
+}
+
+/* ── スクロールロックボタン（スマホ・マップ枠右上） ── */
+.scroll-lock-btn {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .scroll-lock-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 40px;
+    height: 40px;
+    font-size: 22px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    z-index: 310;
+    pointer-events: auto;
+    line-height: 1;
+  }
 }
 
 /* ── 仮想ジョイスティック（タッチ位置に出現） ── */

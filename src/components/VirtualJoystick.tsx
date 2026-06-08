@@ -9,6 +9,7 @@ export function VirtualJoystick() {
   const [vis,  setVis]  = useState(false)
   const [base, setBase] = useState({ x: 0, y: 0 })
   const [knob, setKnob] = useState({ x: 0, y: 0 })
+  const [scrollLock, setScrollLock] = useState(false)
 
   const ivRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const dirRef    = useRef<string | null>(null)
@@ -20,14 +21,25 @@ export function VirtualJoystick() {
     dirRef.current = null
   }, [])
 
+  // スクロールロック状態の変化を受け取る
   useEffect(() => {
-    const pane = document.querySelector('.game-pane') as HTMLElement | null
-    if (!pane) return
+    const onChange = (e: Event) => {
+      setScrollLock((e as CustomEvent<{ enabled: boolean }>).detail.enabled)
+    }
+    window.addEventListener('scroll-lock-change', onChange)
+    return () => window.removeEventListener('scroll-lock-change', onChange)
+  }, [])
+
+  useEffect(() => {
+    if (window.innerWidth >= 768) return
+    // scrollLock ON: 画面全体をリスナー対象にする
+    const target: HTMLElement = scrollLock
+      ? document.body
+      : (document.querySelector('.game-pane') as HTMLElement | null) ?? document.body
 
     const onStart = (e: TouchEvent) => {
-      // スマホのみ（PC はキーボードで操作）
       if (window.innerWidth >= 768) return
-      // ボタン類タップ時はジョイスティックを起動しない
+      // セーブ・サウンドを含むボタン類はジョイスティックより優先
       if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
       const t = e.touches[0]
       baseRef.current = { x: t.clientX, y: t.clientY }
@@ -48,13 +60,11 @@ export function VirtualJoystick() {
       const r    = Math.min(dist, maxR)
       const ang  = Math.atan2(dy, dx)
 
-      // ノブを外円内にクランプして描画
       setKnob({
         x: baseRef.current.x + Math.cos(ang) * r,
         y: baseRef.current.y + Math.sin(ang) * r,
       })
 
-      // 4方向判定
       let dir: string | null = null
       if (dist >= DEAD_ZONE) {
         dir = Math.abs(dx) >= Math.abs(dy)
@@ -82,19 +92,19 @@ export function VirtualJoystick() {
       e.preventDefault()
     }
 
-    pane.addEventListener('touchstart',  onStart, { passive: false })
-    pane.addEventListener('touchmove',   onMove,  { passive: false })
-    pane.addEventListener('touchend',    onEnd,   { passive: false })
-    pane.addEventListener('touchcancel', onEnd,   { passive: false })
+    target.addEventListener('touchstart',  onStart, { passive: false })
+    target.addEventListener('touchmove',   onMove,  { passive: false })
+    target.addEventListener('touchend',    onEnd,   { passive: false })
+    target.addEventListener('touchcancel', onEnd,   { passive: false })
 
     return () => {
-      pane.removeEventListener('touchstart',  onStart)
-      pane.removeEventListener('touchmove',   onMove)
-      pane.removeEventListener('touchend',    onEnd)
-      pane.removeEventListener('touchcancel', onEnd)
+      target.removeEventListener('touchstart',  onStart)
+      target.removeEventListener('touchmove',   onMove)
+      target.removeEventListener('touchend',    onEnd)
+      target.removeEventListener('touchcancel', onEnd)
       stopMove()
     }
-  }, [stopMove])
+  }, [scrollLock, stopMove])
 
   if (!vis) return null
 
