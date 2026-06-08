@@ -1806,3 +1806,175 @@ html, body {
     opacity: 0;
   }
 }
+
+/* ── イベントフロア施設モーダル（精錬・影装・魔法の書） ── */
+.facility-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 4, 14, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.facility-modal {
+  width: min(520px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: #11112a;
+  border: 1px solid #3a3a66;
+  border-radius: 10px;
+  padding: 22px 24px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.facility-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffd766;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.facility-desc {
+  font-size: 13px;
+  color: #c8c8e8;
+  line-height: 1.6;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.facility-sub {
+  font-size: 13px;
+  font-weight: 700;
+  color: #9fa8ff;
+  margin: 12px 0 6px;
+}
+
+.facility-empty {
+  font-size: 12px;
+  color: #888899;
+  padding: 6px 2px;
+}
+
+.facility-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.facility-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: #1c1c3c;
+  border: 1px solid #34345c;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #e0e0f0;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.facility-item:hover { border-color: #5858a8; }
+.facility-item.selected {
+  border-color: #ffd766;
+  background: #2a2a52;
+}
+
+.fi-slot {
+  font-size: 11px;
+  color: #9fa8ff;
+  flex-shrink: 0;
+  width: 52px;
+}
+
+.fi-name { flex: 1; font-size: 14px; }
+
+.fi-refine {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff66ff;
+}
+
+.facility-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.facility-go-btn,
+.facility-close-btn {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 9px 22px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.facility-go-btn {
+  background: #ff66ff;
+  color: #1a0a1a;
+}
+.facility-go-btn:disabled {
+  background: #555566;
+  color: #999;
+  cursor: not-allowed;
+}
+.facility-go-btn:not(:disabled):hover { filter: brightness(1.1); }
+
+.facility-close-btn {
+  background: #33334d;
+  color: #e0e0f0;
+}
+.facility-close-btn:hover { filter: brightness(1.2); }
+
+.facility-video-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.facility-video {
+  width: 100%;
+  max-height: 60vh;
+  border-radius: 6px;
+  background: #000;
+}
+
+.facility-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+}
+
+.facility-result-text {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  animation: facility-result-pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.fr-success { color: #ffe14d; text-shadow: 0 0 18px rgba(255, 225, 77, 0.8); }
+.fr-failure { color: #8888a0; text-shadow: 0 0 12px rgba(120, 120, 160, 0.6); }
+
+.facility-result-sub {
+  font-size: 14px;
+  color: #e0e0f0;
+  text-align: center;
+}
+
+@keyframes facility-result-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}

@@ -1,6 +1,6 @@
 import type { Item, TileType, EquipSlot, SpellType } from '../types'
 
-const SPELL_ITEMS: { name: string; spellType: SpellType }[] = [
+export const SPELL_ITEMS: { name: string; spellType: SpellType }[] = [
   { name: '炎の書',   spellType: 'firebolt'      },
   { name: '祝福の書', spellType: 'blessing'      },
   { name: '光の書',   spellType: 'lightblessing' },

@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, generateAreaBossFloors, getFloorTelopMessage, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
-import { spawnItems } from '../game/items'
+import { spawnItems, SPELL_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
@@ -80,6 +80,8 @@ export class GameScene extends Phaser.Scene {
   // 2回目以降に再実行すると、既存のwalk/attackアニメーションが参照している古いFrameの
   // textureSourceがnullになり、再生時に "Cannot read properties of null (reading 'sourceSize')" でクラッシュする
   private playerTexturesTransparent = false
+  private isEventFloor = false   // イベントフロア（宿屋ミッドガルド）滞在中フラグ
+  private eventFacilities: { id: string; kind: import('../types').FacilityKind; position: import('../types').Position }[] = []
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
@@ -105,6 +107,8 @@ export class GameScene extends Phaser.Scene {
     this.playerDir          = 'down'
     this.isPlayerAttacking  = false
     this.isGameOver         = false
+    this.isEventFloor       = false
+    this.eventFacilities    = []
   }
 
   preload() {
@@ -179,6 +183,9 @@ export class GameScene extends Phaser.Scene {
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
     window.saveGame        = () => this.doSaveGame()
+    window.runRefineChallenge   = (slot, sacrificeId) => this.runRefineChallenge(slot, sacrificeId)
+    window.runShadowChallenge   = ()                  => this.runShadowChallenge()
+    window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
 
     // 開発サーバー限定：コンソールから warpFloor(階数) で好きな階に飛べる
     if (import.meta.env.DEV) {
@@ -392,6 +399,8 @@ export class GameScene extends Phaser.Scene {
         this.nextFloor()
         return
       }
+
+      if (this.checkEventFacility()) return
 
       this.pickupItem()
       if (!this.awaitingEquipModal) this.checkTrap()
@@ -857,6 +866,22 @@ export class GameScene extends Phaser.Scene {
   }
 
   private nextFloor() {
+    // イベントフロアからの脱出 → 通常フロアへ
+    if (this.isEventFloor) {
+      this.isEventFloor = false
+      this.eventFacilities = []
+      this.enterNormalFloor()
+      return
+    }
+    // 5フロアクリアごとに、次のフロアへ進む前にイベントフロア（宿屋ミッドガルド）に立ち寄る
+    if (this.state.player.floor > 0 && this.state.player.floor % 5 === 0) {
+      this.enterEventFloor()
+      return
+    }
+    this.enterNormalFloor()
+  }
+
+  private enterNormalFloor() {
     this.state.player.floor++
     const floor = this.state.player.floor
     const map = generateDungeon()
@@ -901,6 +926,187 @@ export class GameScene extends Phaser.Scene {
     this.showTelopIfNeeded()
     this.updateBGM()
     if (floorType === 'chaos') this.showMonsterHouseEffect()
+  }
+
+  // ── イベントフロア（宿屋ミッドガルド）──
+  private enterEventFloor() {
+    this.isEventFloor = true
+    const map = this.generateEventFloorMap()
+    const playerPos = { x: 9, y: 16 }
+    this.state.map = map
+    this.state.player.position = { ...playerPos }
+    this.state.enemies = []
+    this.state.items = []
+    this.eventFacilities = [
+      { id: 'facility_refine',    kind: 'refine',    position: { x: 6,  y: 9 } },
+      { id: 'facility_shadow',    kind: 'shadow',    position: { x: 9,  y: 9 } },
+      { id: 'facility_spellbook', kind: 'spellbook', position: { x: 12, y: 9 } },
+    ]
+    this.state.floorType = 'normal'
+    this.buildFloorVariants(map)
+    this.createTileSprites(map)
+    this.addMessage('宿屋「ミッドガルド」に到着した...')
+    this.renderMap()
+    this.updateWindowGameState()
+    this.updateBGM()
+    this.showMidgardTitle()
+  }
+
+  /** イベントフロア専用の固定マップ（宿屋の一室）を生成する */
+  private generateEventFloorMap(): import('../types').TileType[][] {
+    const map: import('../types').TileType[][] = Array.from({ length: MAP_HEIGHT }, () =>
+      Array(MAP_WIDTH).fill('wall')
+    )
+    const rx = 5, ry = 7, rw = 10, rh = 11
+    for (let y = ry; y < ry + rh; y++) {
+      for (let x = rx; x < rx + rw; x++) map[y][x] = 'floor'
+    }
+    map[ry + 1][rx + Math.floor(rw / 2)] = 'stairs'
+    return map
+  }
+
+  private showMidgardTitle() {
+    const W = this.scale.width
+    const H = this.scale.height
+    const title = this.add.text(W / 2, H / 2, '宿屋「ミッドガルド」', {
+      fontSize: '36px', color: '#ffd766',
+      stroke: '#000000', strokeThickness: 6,
+      backgroundColor: '#00000099',
+      padding: { x: 20, y: 12 },
+    }).setOrigin(0.5).setDepth(70).setAlpha(0)
+
+    this.tweens.add({
+      targets: title, alpha: 1, duration: 1200,
+      onComplete: () => {
+        this.tweens.add({
+          targets: title, alpha: 0, duration: 1200, delay: 1800,
+          onComplete: () => title.destroy(),
+        })
+      },
+    })
+  }
+
+  /** イベントフロアの施設に話しかけたときの処理（移動と同じ操作で起動） */
+  private checkEventFacility(): boolean {
+    if (!this.isEventFloor) return false
+    const { player } = this.state
+    const facility = this.eventFacilities.find(
+      f => f.position.x === player.position.x && f.position.y === player.position.y
+    )
+    if (!facility) return false
+    window.openFacility?.(facility.kind)
+    return true
+  }
+
+  // ── 精錬チャレンジ ──
+  private readonly REFINE_BONUS_KEYS = ['hpBonus', 'strBonus', 'agiBonus', 'dexBonus', 'intBonus', 'vitBonus', 'lukBonus'] as const
+
+  private applyEquipStatDelta(key: typeof this.REFINE_BONUS_KEYS[number], delta: number) {
+    if (delta === 0) return
+    const { player } = this.state
+    switch (key) {
+      case 'hpBonus':  player.maxHp += delta; player.hp = Math.min(Math.max(0, player.hp + Math.max(0, delta)), player.maxHp); break
+      case 'strBonus': player.str += delta; break
+      case 'agiBonus': player.agi += delta; break
+      case 'dexBonus': player.dex += delta; break
+      case 'intBonus': player.int += delta; break
+      case 'vitBonus': player.vit += delta; break
+      case 'lukBonus': player.luk += delta; break
+    }
+  }
+
+  /** 装備品のボーナス値を factor 倍（精錬成功で1.1、失敗ペナルティで1/1.1）に変動させ、装備中の場合はプレイヤーの現在値にも差分を反映する */
+  private adjustItemBonuses(item: import('../types').Item, factor: number) {
+    for (const key of this.REFINE_BONUS_KEYS) {
+      const old = item[key] ?? 0
+      if (old <= 0) continue
+      let next = Math.round(old * factor)
+      if (factor > 1 && next <= old) next = old + 1
+      if (factor < 1 && next >= old) next = Math.max(0, old - 1)
+      const delta = next - old
+      item[key] = next
+      this.applyEquipStatDelta(key, delta)
+    }
+  }
+
+  private runRefineChallenge(slot: import('../types').EquipSlot, sacrificeId: string): import('../types').RefineResult | null {
+    const { player, bag } = this.state
+    const target = player.equipment[slot]
+    if (!target) return null
+    const sacrifice = bag.find(b => b.id === sacrificeId && b.type === 'equip')
+    if (!sacrifice) return null
+
+    // 精錬の生贄として消費
+    this.state.bag = bag.filter(b => b.id !== sacrificeId)
+    this.addMessage(`${sacrifice.name}を精錬の生贄に捧げた...`)
+
+    const success = Math.random() < 0.3
+    let level = target.refineLevel ?? 0
+    if (success) {
+      this.adjustItemBonuses(target, 1.1)
+      level = (target.refineLevel ?? 0) + 1
+      target.refineLevel = level
+      this.addMessage(`${target.name}の精錬に成功した！ +${level}`)
+    } else {
+      if (level > 0 && Math.random() < 0.5) {
+        this.adjustItemBonuses(target, 1 / 1.1)
+        level = level - 1
+        target.refineLevel = level
+        this.addMessage(`${target.name}の精錬に失敗し、精錬値が下がってしまった... +${level}`)
+      } else {
+        this.addMessage(`${target.name}の精錬に失敗した...`)
+      }
+    }
+    this.updateWindowGameState()
+    return { success, itemName: target.name, refineLevel: level }
+  }
+
+  // ── 影装チャレンジ ──
+  private runShadowChallenge(): import('../types').ShadowResult | null {
+    const { player } = this.state
+    const COST = 5
+    if (player.statPoints < COST) return null
+    player.statPoints -= COST
+
+    const success = Math.random() < 0.3
+    if (success) {
+      player.str += 3; player.agi += 3; player.dex += 3
+      player.int += 3; player.vit += 3; player.luk += 3
+      this.addMessage('影装チャレンジに成功した！全ステータス+3！')
+    } else {
+      this.addMessage('影装チャレンジに失敗し、ボーナスポイントを失った...')
+    }
+    this.updateWindowGameState()
+    return { success }
+  }
+
+  // ── 魔法の書チャレンジ ──
+  private runSpellbookChallenge(spellId: string): import('../types').SpellbookResult | null {
+    const { spells } = this.state
+    const target = spells.find(s => s.id === spellId)
+    if (!target) return null
+    this.state.spells = spells.filter(s => s.id !== spellId)
+
+    const burned = Math.random() < 0.3
+    if (burned) {
+      this.addMessage(`${target.name}は炎に包まれて燃え尽きてしまった...`)
+      this.updateWindowGameState()
+      return { success: false, lostName: target.name }
+    }
+
+    const candidates = SPELL_ITEMS.filter(s => s.spellType !== target.spellType)
+    const picked = candidates[Math.floor(Math.random() * candidates.length)]
+    const gained: import('../types').Item = {
+      id: `spell_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      name: picked.name,
+      type: 'spell',
+      position: { x: 0, y: 0 },
+      spellType: picked.spellType,
+    }
+    this.state.spells.push(gained)
+    this.addMessage(`${target.name}を渡し、${gained.name}を手に入れた！`)
+    this.updateWindowGameState()
+    return { success: true, lostName: target.name, gainedName: gained.name }
   }
 
   private gameOver() {

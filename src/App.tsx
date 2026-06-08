@@ -9,6 +9,7 @@ import { EquipModal } from './components/EquipModal'
 import { VirtualJoystick } from './components/VirtualJoystick'
 import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
+import { RefineModal, ShadowEquipModal, SpellbookModal } from './components/EventFacilityModals'
 
 const BASE_W = 1280
 const BASE_H = 880   // 全体の縦サイズ：少し伸ばし
@@ -89,6 +90,9 @@ function App() {
         <EquipModal />
         <VirtualJoystick />
         <SlotAnnouncement />
+        <RefineModal />
+        <ShadowEquipModal />
+        <SpellbookModal />
       </div>
     </div>
   )

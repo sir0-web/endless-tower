@@ -42,7 +42,15 @@ export interface Item {
   lukBonus?: number
   // 魔法の書
   spellType?: SpellType
+  // 精錬値（装備品のみ。精錬チャレンジで増減する）
+  refineLevel?: number
 }
+
+export type FacilityKind = 'refine' | 'shadow' | 'spellbook'
+
+export interface RefineResult { success: boolean; itemName: string; refineLevel: number }
+export interface ShadowResult { success: boolean }
+export interface SpellbookResult { success: boolean; lostName: string; gainedName?: string }
 
 export interface Equipment {
   weapon?: Item
@@ -151,5 +159,10 @@ declare global {
     gameMove?: (key: string) => void
     saveGame?: () => void
     warpFloor?: (floor: number) => void
+    // ── イベントフロア施設 ──
+    openFacility?: (kind: FacilityKind) => void
+    runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
+    runShadowChallenge?: () => ShadowResult | null
+    runSpellbookChallenge?: (spellId: string) => SpellbookResult | null
   }
 }
