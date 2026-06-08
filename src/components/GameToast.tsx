@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 interface ToastState {
   message: string
@@ -23,12 +24,13 @@ export function GameToast() {
       setConfirm({ message: '前回の中断データがあります。\n中断データから再開しますか？', onYes, onNo })
     }
     return () => {
-      window.showGameToast    = undefined
+      window.showGameToast     = undefined
       window.showResumeConfirm = undefined
     }
   }, [])
 
-  return (
+  // transform: scale() の影響を受けないよう document.body 直下にポータル描画
+  return createPortal(
     <>
       {toast && (
         <div className="g-toast">
@@ -59,6 +61,7 @@ export function GameToast() {
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body
   )
 }
