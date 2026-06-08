@@ -1032,7 +1032,7 @@ export class GameScene extends Phaser.Scene {
       f => f.position.x === player.position.x && f.position.y === player.position.y
     )
     if (!facility) return false
-    window.openFacility?.(facility.kind)
+    window.dispatchEvent(new CustomEvent('facility-open', { detail: facility.kind }))
     return true
   }
 
