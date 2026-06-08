@@ -292,6 +292,16 @@ html, body {
   .log-list {
     max-height: 220px;
   }
+
+  /* スマホではキャンバスポップアップが代替するためログパネルを非表示 */
+  .log-panel {
+    display: none;
+  }
+
+  /* ログを非表示にした分、アイテム欄を全幅に広げる */
+  .items-panel {
+    flex: 1 1 100%;
+  }
 }
 
 /* ── UIパネル ── */
