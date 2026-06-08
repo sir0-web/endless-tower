@@ -229,6 +229,8 @@ export class GameScene extends Phaser.Scene {
         str: 3, agi: 1, dex: 1, int: 1, vit: 3, luk: 1,
         statPoints: 0,
         healingTurns: 0,
+        blessingTurns: 0,
+        blessingBonus: { str: 0, int: 0, dex: 0, agi: 0 },
       },
       enemies: [...normalEnemies, ...bosses],
       items: floorType === 'lucky'
@@ -623,6 +625,18 @@ export class GameScene extends Phaser.Scene {
       player.healingTurns--
       this.addMessage(`ライトブレッシング！HP+${heal}（残り${player.healingTurns}ターン）`)
     }
+    if (player.blessingTurns > 0) {
+      player.blessingTurns--
+      if (player.blessingTurns <= 0) {
+        // 使用時に増えた分のみを戻す（レベルアップ等で増えた分は巻き込まない）
+        player.str -= player.blessingBonus.str
+        player.int -= player.blessingBonus.int
+        player.dex -= player.blessingBonus.dex
+        player.agi -= player.blessingBonus.agi
+        player.blessingBonus = { str: 0, int: 0, dex: 0, agi: 0 }
+        this.addMessage('ブレッシングの効果が切れた…ステータスが元に戻った')
+      }
+    }
     for (const enemy of enemies) {
       if (enemy.slowedTurns > 0) enemy.slowedTurns--
     }
@@ -693,11 +707,18 @@ export class GameScene extends Phaser.Scene {
       }
 
       case 'blessing': {
-        player.str += 5
-        player.int += 5
-        player.dex += 5
-        player.agi += 5
-        this.addMessage('ブレッシング！ステータスが上昇した！')
+        const amount = 5
+        player.str += amount
+        player.int += amount
+        player.dex += amount
+        player.agi += amount
+        // 付与した分だけを記録（レベルアップ等による変動とは区別して10ターン後に戻す）
+        player.blessingBonus.str += amount
+        player.blessingBonus.int += amount
+        player.blessingBonus.dex += amount
+        player.blessingBonus.agi += amount
+        player.blessingTurns = 10
+        this.addMessage('ブレッシング！ステータスが上昇した！（10ターン）')
         break
       }
 

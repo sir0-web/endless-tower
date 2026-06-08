@@ -56,9 +56,18 @@ function group<T extends { name: string; id: string }>(items: T[]): Record<strin
   }, {})
 }
 
+type AccordionTab = 'item' | 'equip' | 'spell'
+
+const ACCORDION_TABS: { key: AccordionTab; label: string }[] = [
+  { key: 'item',  label: 'アイテム'   },
+  { key: 'equip', label: '装備'       },
+  { key: 'spell', label: '魔法の書'   },
+]
+
 export function UIPanel() {
   const [gs, setGs] = useState<GameStateSnapshot>(DEFAULT)
   const [selId, setSelId] = useState<string | null>(null)
+  const [openTab, setOpenTab] = useState<AccordionTab | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -180,59 +189,87 @@ export function UIPanel() {
           </div>
         </div>
 
-        {/* アイテム欄：上=通常アイテム / 下=魔法の書 */}
+        {/* アイテム欄：アコーディオン（アイテム／装備／魔法の書） */}
         <div className="items-panel">
 
-          {/* 上半分：回復薬・装備品 */}
-          <div className="ip-section">
-            <p className="section-title-sm">アイテム</p>
-            <div className="ip-scroll">
-              {Object.entries(healGroups).map(([name, items]) => (
-                <div key={name}>
-                  <div className={`icr icr-heal ${selId === items[0].id ? 'icr-sel' : ''}`}
-                    onClick={() => selectItem(items[0].id)}>
-                    <span>💊</span>
-                    <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
-                  </div>
-                  {selId === items[0].id && (
-                    <button className="icr-act" onClick={() => { window.useHeal?.(items[0].id); setSelId(null) }}>使う</button>
-                  )}
-                </div>
-              ))}
-              {gs.bag.map(item => (
-                <div key={item.id}>
-                  <div className={`icr icr-bag ${selId === item.id ? 'icr-sel' : ''}`}
-                    onClick={() => selectItem(item.id)}>
-                    <span>📦</span>
-                    <span className="icr-name">{item.name}</span>
-                  </div>
-                  {selId === item.id && (
-                    <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
-                  )}
-                </div>
-              ))}
-              {gs.heals.length + gs.bag.length === 0 && <p className="icr-empty">なし</p>}
-            </div>
+          <div className="ip-tabs">
+            {ACCORDION_TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                className={`ip-tab ${openTab === key ? 'ip-tab-open' : ''}`}
+                onClick={() => setOpenTab(t => t === key ? null : key)}
+              >
+                <span className="ip-tab-label">{label}</span>
+                <span className="ip-tab-toggle">{openTab === key ? '－' : '＋'}</span>
+              </button>
+            ))}
           </div>
 
-          {/* 下半分：魔法の書 */}
-          <div className="ip-section ip-spell-section">
-            <p className="section-title-sm ip-spell-title">魔法の書</p>
-            <div className="ip-scroll">
-              {Object.entries(spellGroups).map(([name, items]) => (
-                <div key={name}>
-                  <div className={`icr icr-spell-book ${selId === items[0].id ? 'icr-sel' : ''}`}
-                    onClick={() => selectItem(items[0].id)}>
-                    <span>📖</span>
-                    <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+          <div className="ip-accordion-body">
+            {openTab === 'item' && (
+              <div className="ip-scroll">
+                {Object.entries(healGroups).map(([name, items]) => (
+                  <div key={name}>
+                    <div className={`icr icr-heal ${selId === items[0].id ? 'icr-sel' : ''}`}
+                      onClick={() => selectItem(items[0].id)}>
+                      <span>💊</span>
+                      <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                    </div>
+                    {selId === items[0].id && (
+                      <button className="icr-act" onClick={() => { window.useHeal?.(items[0].id); setSelId(null) }}>使う</button>
+                    )}
                   </div>
-                  {selId === items[0].id && (
-                    <button className="icr-act icr-act-spell" onClick={() => { window.useSpell?.(items[0].id); setSelId(null) }}>使う</button>
-                  )}
-                </div>
-              ))}
-              {gs.spells.length === 0 && <p className="icr-empty">なし</p>}
-            </div>
+                ))}
+                {gs.bag.map(item => (
+                  <div key={item.id}>
+                    <div className={`icr icr-bag ${selId === item.id ? 'icr-sel' : ''}`}
+                      onClick={() => selectItem(item.id)}>
+                      <span>📦</span>
+                      <span className="icr-name">{item.name}</span>
+                    </div>
+                    {selId === item.id && (
+                      <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
+                    )}
+                  </div>
+                ))}
+                {gs.heals.length + gs.bag.length === 0 && <p className="icr-empty">なし</p>}
+              </div>
+            )}
+
+            {openTab === 'equip' && (
+              <div className="ip-scroll">
+                {SLOTS.map(slot => {
+                  const item = gs.equipment[slot.key]
+                  return (
+                    <div key={slot.key} className={`icr ${item ? 'icr-bag' : ''}`}>
+                      <span>{slot.icon}</span>
+                      <span className="icr-name">[{slot.label}] {item ? item.name : '（装備なし）'}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {openTab === 'spell' && (
+              <div className="ip-scroll">
+                {Object.entries(spellGroups).map(([name, items]) => (
+                  <div key={name}>
+                    <div className={`icr icr-spell-book ${selId === items[0].id ? 'icr-sel' : ''}`}
+                      onClick={() => selectItem(items[0].id)}>
+                      <span>📖</span>
+                      <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                    </div>
+                    {selId === items[0].id && (
+                      <button className="icr-act icr-act-spell" onClick={() => { window.useSpell?.(items[0].id); setSelId(null) }}>使う</button>
+                    )}
+                  </div>
+                ))}
+                {gs.spells.length === 0 && <p className="icr-empty">なし</p>}
+              </div>
+            )}
+
+            {!openTab && <p className="icr-empty">タップして表示</p>}
           </div>
 
         </div>
