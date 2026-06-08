@@ -50,8 +50,8 @@ export function MobileStatusBar() {
       <div className="mob-floor-row">
         <span className="badge floor-badge mob-badge">{floorLabel(s.floor)}</span>
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
-        <button className="mob-mute-btn" onClick={toggleMute}>{mute ? '🔇' : '🔊'}</button>
-        <button className="mob-save-btn" onClick={handleSave}>セーブ</button>
+        <button className="mob-mute-btn" data-priority-tap onClick={toggleMute}>{mute ? '🔇' : '🔊'}</button>
+        <button className="mob-save-btn" data-priority-tap onClick={handleSave}>セーブ</button>
       </div>
       <div className="mob-bar-row">
         <span className="mob-bar-lbl">HP</span>

@@ -41,8 +41,11 @@ export function VirtualJoystick() {
       if (window.innerWidth >= 768) return
       // ゲームシーン以外（タイトル・ゲームオーバー・ランキング）は起動しない
       if (!window.isGameSceneActive) return
-      // セーブ・サウンドを含むボタン類はジョイスティックより優先
-      if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
+      // scrollrockOFF: 全ボタン優先 / scrollrockON: data-priority-tap のみ優先（ステータス割り振り等は無効化）
+      const prioritySelector = scrollLock
+        ? '[data-priority-tap], a'
+        : 'button, a, [role="button"]'
+      if ((e.target as HTMLElement).closest(prioritySelector)) return
       const t = e.touches[0]
       baseRef.current = { x: t.clientX, y: t.clientY }
       activeRef.current = true

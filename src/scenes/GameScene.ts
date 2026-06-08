@@ -67,6 +67,9 @@ export class GameScene extends Phaser.Scene {
   // イベントフロアNPC（施設の話しかけ役）描画
   private facilityGraphics: Map<string, Phaser.GameObjects.Text> = new Map()
   private telopText!: Phaser.GameObjects.Text
+  // スマホ用メッセージポップアップ（再利用）
+  private mobileMsg:      Phaser.GameObjects.Text | null = null
+  private mobileMsgTween: Phaser.Tweens.Tween      | null = null
 
   private inventoryPanel!: Phaser.GameObjects.Container
   private pauseOverlay!: Phaser.GameObjects.Container
@@ -1158,6 +1161,45 @@ export class GameScene extends Phaser.Scene {
   private addMessage(msg: string) {
     this.state.messages.unshift(msg)
     if (this.state.messages.length > 50) this.state.messages.pop()
+    this.showMobileMsg(msg)
+  }
+
+  /** スマホ時、メッセージをゲームキャンバス上に大きくポップ表示 */
+  private showMobileMsg(msg: string) {
+    if (window.innerWidth >= 768) return
+    const W = this.scale.width
+    const H = this.scale.height
+
+    if (this.mobileMsgTween) { this.mobileMsgTween.stop(); this.mobileMsgTween = null }
+
+    if (!this.mobileMsg || !this.mobileMsg.active) {
+      this.mobileMsg = this.add.text(W / 2, H * 0.78, msg, {
+        fontSize: '30px', color: '#ffffff',
+        stroke: '#000000', strokeThickness: 4,
+        backgroundColor: '#000000bb',
+        padding: { x: 14, y: 8 },
+        wordWrap: { width: W * 0.88 },
+        align: 'center',
+      }).setOrigin(0.5).setDepth(60).setAlpha(0)
+    } else {
+      this.mobileMsg.setText(msg)
+      this.mobileMsg.setAlpha(0)
+    }
+
+    this.mobileMsgTween = this.tweens.add({
+      targets: this.mobileMsg,
+      alpha: 1,
+      duration: 180,
+      onComplete: () => {
+        this.mobileMsgTween = this.tweens.add({
+          targets: this.mobileMsg,
+          alpha: 0,
+          duration: 400,
+          delay: 1400,
+          onComplete: () => { this.mobileMsgTween = null },
+        })
+      },
+    })
   }
 
   private updateWindowGameState() {
