@@ -11,6 +11,7 @@ import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal } from './components/EventFacilityModals'
 import { ScrollLockButton } from './components/ScrollLockButton'
+import { GameToast } from './components/GameToast'
 
 const BASE_W = 1280
 const BASE_H = 880   // 全体の縦サイズ：少し伸ばし
@@ -96,6 +97,7 @@ function App() {
         <RefineModal />
         <ShadowEquipModal />
         <SpellbookModal />
+        <GameToast />
       </div>
     </div>
   )

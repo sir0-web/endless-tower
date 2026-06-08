@@ -225,6 +225,81 @@ html, body {
   }
 }
 
+/* ── ゲームグローバルトースト／確認ダイアログ ── */
+.g-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 40, 0.93);
+  color: #e0e0f8;
+  font-size: 15px;
+  line-height: 1.7;
+  padding: 12px 22px;
+  border-radius: 8px;
+  border: 1px solid rgba(160, 160, 255, 0.4);
+  text-align: center;
+  z-index: 500;
+  pointer-events: none;
+  white-space: pre-wrap;
+  animation: g-toast-in 0.25s ease both;
+  max-width: min(480px, 90vw);
+}
+
+@keyframes g-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.g-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+.g-confirm {
+  background: rgba(14, 14, 34, 0.97);
+  border: 1px solid rgba(160, 160, 255, 0.45);
+  border-radius: 10px;
+  padding: 28px 30px 22px;
+  max-width: min(460px, 90vw);
+  text-align: center;
+  animation: g-toast-in 0.22s ease both;
+}
+
+.g-confirm-msg {
+  font-size: 16px;
+  color: #d8d8ff;
+  line-height: 1.8;
+  margin-bottom: 22px;
+}
+
+.g-confirm-btns {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.g-confirm-yes,
+.g-confirm-no {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 10px 30px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.g-confirm-yes { background: #1a5c38; color: #88ff88; }
+.g-confirm-yes:hover { filter: brightness(1.2); }
+.g-confirm-no  { background: #5c1a1a; color: #ff8888; }
+.g-confirm-no:hover  { filter: brightness(1.2); }
+
 /* ── 仮想ジョイスティック（タッチ位置に出現） ── */
 .vj-outer {
   position: fixed;

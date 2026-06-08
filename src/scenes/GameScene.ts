@@ -320,8 +320,7 @@ export class GameScene extends Phaser.Scene {
   private doSaveGame() {
     const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType } = this.state
     saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType })
-    this.addMessage('セーブしました。ゲームを閉じても次回「GAMESTART」を押した際にここから再開します。')
-    this.showPickupNotif('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
+    window.showGameToast?.('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
   }
 
   private showTelopIfNeeded() {

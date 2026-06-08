@@ -159,6 +159,9 @@ declare global {
     gameMove?: (key: string) => void
     saveGame?: () => void
     warpFloor?: (floor: number) => void
+    // ── グローバルUI ──
+    showGameToast?: (message: string) => void
+    showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
     // ── イベントフロア施設 ──
     openFacility?: (kind: FacilityKind) => void
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
