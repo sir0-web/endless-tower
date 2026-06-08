@@ -39,6 +39,8 @@ export function VirtualJoystick() {
 
     const onStart = (e: TouchEvent) => {
       if (window.innerWidth >= 768) return
+      // ゲームシーン以外（タイトル・ゲームオーバー・ランキング）は起動しない
+      if (!window.isGameSceneActive) return
       // セーブ・サウンドを含むボタン類はジョイスティックより優先
       if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
       const t = e.touches[0]
@@ -86,10 +88,12 @@ export function VirtualJoystick() {
     }
 
     const onEnd = (e: TouchEvent) => {
+      const wasActive = activeRef.current
       activeRef.current = false
       stopMove()
       setVis(false)
-      e.preventDefault()
+      // ジョイスティックが実際に起動していた場合のみ preventDefault（ボタンの click を殺さない）
+      if (wasActive) e.preventDefault()
     }
 
     target.addEventListener('touchstart',  onStart, { passive: false })

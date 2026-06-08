@@ -10,7 +10,12 @@ export function ScrollLockButton() {
   }
 
   return (
-    <button className="scroll-lock-btn" onClick={toggle} title={locked ? 'スクロールロック ON' : 'スクロールロック OFF'}>
+    <button
+      className="scroll-lock-btn"
+      onClick={toggle}
+      onTouchStart={(e) => e.stopPropagation()}
+      title={locked ? 'スクロールロック ON' : 'スクロールロック OFF'}
+    >
       {locked ? '🔒' : '🔓'}
     </button>
   )
