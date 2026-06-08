@@ -6,9 +6,10 @@ interface StatusSnap {
   hp: number; maxHp: number
   stamina: number; maxStamina: number
   floor: number; level: number
+  exp: number
 }
 
-const DEFAULT: StatusSnap = { hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, floor: 1, level: 1 }
+const DEFAULT: StatusSnap = { hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, floor: 1, level: 1, exp: 0 }
 
 export function MobileStatusBar() {
   const [s, setS]       = useState<StatusSnap>(DEFAULT)
@@ -18,8 +19,8 @@ export function MobileStatusBar() {
   useEffect(() => {
     const update = () => {
       if (window.gameState && window.isGameSceneActive) {
-        const { hp, maxHp, stamina, maxStamina, floor, level } = window.gameState
-        setS({ hp, maxHp, stamina, maxStamina, floor, level })
+        const { hp, maxHp, stamina, maxStamina, floor, level, exp } = window.gameState
+        setS({ hp, maxHp, stamina, maxStamina, floor, level, exp })
         setActive(true)
       }
     }
@@ -34,10 +35,13 @@ export function MobileStatusBar() {
   }, [])
 
   const toggleMute = () => { soundToggleMute(); setMute(p => !p) }
+  const handleSave = () => { window.saveGame?.() }
 
   const hpPct  = s.maxHp      > 0 ? Math.max(0, Math.round((s.hp      / s.maxHp)      * 100)) : 0
   const staPct = s.maxStamina > 0 ? Math.round((s.stamina / s.maxStamina) * 100) : 0
-  const staColor = staPct > 40 ? '#22c55e' : staPct > 15 ? '#f59e0b' : '#ef4444'
+
+  const expNeeded = s.level * 30 + 10
+  const expPct = expNeeded > 0 ? Math.min(100, Math.round((s.exp / expNeeded) * 100)) : 0
 
   if (!active) return null
 
@@ -47,6 +51,7 @@ export function MobileStatusBar() {
         <span className="badge floor-badge mob-badge">{floorLabel(s.floor)}</span>
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
         <button className="mob-mute-btn" onClick={toggleMute}>{mute ? '🔇' : '🔊'}</button>
+        <button className="mob-save-btn" onClick={handleSave}>セーブ</button>
       </div>
       <div className="mob-bar-row">
         <span className="mob-bar-lbl">HP</span>
@@ -58,9 +63,16 @@ export function MobileStatusBar() {
       <div className="mob-bar-row">
         <span className="mob-bar-lbl">STA</span>
         <div className="mob-bar-track">
-          <div className="mob-bar-fill" style={{ width: `${staPct}%`, background: staColor }} />
+          <div className="mob-bar-fill" style={{ width: `${staPct}%`, background: '#3b82f6' }} />
         </div>
         <span className="mob-bar-num">{s.stamina}/{s.maxStamina}</span>
+      </div>
+      <div className="mob-bar-row">
+        <span className="mob-bar-lbl">EXP</span>
+        <div className="mob-bar-track">
+          <div className="mob-bar-fill" style={{ width: `${expPct}%`, background: '#ffffff' }} />
+        </div>
+        <span className="mob-bar-num">{s.exp}/{expNeeded}</span>
       </div>
     </div>
   )

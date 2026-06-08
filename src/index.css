@@ -76,8 +76,8 @@ html, body {
 
 /* モバイル上部バッジは右メニューと同じスタイルを継承しつつサイズ調整 */
 .mob-badge {
-  font-size: 13px !important;
-  padding: 3px 8px !important;
+  font-size: 17px !important;
+  padding: 4px 11px !important;
   white-space: nowrap;
 }
 
@@ -89,7 +89,7 @@ html, body {
 }
 
 .mob-bar-lbl {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.75);
   width: 26px;
@@ -113,7 +113,7 @@ html, body {
 }
 
 .mob-bar-num {
-  font-size: 10px;
+  font-size: 13px;
   color: rgba(255, 255, 255, 0.75);
   width: 54px;
   text-align: right;
@@ -129,11 +129,32 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 4px;
   color: #ffffff;
-  font-size: 15px;
-  padding: 2px 6px;
+  font-size: 20px;
+  padding: 3px 8px;
   cursor: pointer;
   line-height: 1;
   flex-shrink: 0;
+}
+
+/* セーブボタン（サウンドボタンの隣） */
+.mob-save-btn {
+  pointer-events: auto;
+  background: rgba(0, 60, 30, 0.55);
+  border: 1px solid rgba(120, 255, 180, 0.4);
+  border-radius: 4px;
+  color: #aaffcc;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 11px;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mob-save-btn:hover {
+  background: rgba(0, 90, 45, 0.7);
+  color: #ffffff;
 }
 
 /* ── 仮想ジョイスティック（タッチ位置に出現） ── */
@@ -306,7 +327,6 @@ html, body {
 
 .sp-lbl2 { font-size: 11px; font-weight: 700; color: #6060a0; width: 26px; flex-shrink: 0; }
 .sp-v2   { font-size: 13px; font-weight: 700; color: #c8c8f8; flex: 1; }
-.sp-exp-tiny { font-size: 11px; color: #8888aa; }
 
 .sp-plus2 {
   font-size: 11px; font-weight: 700;
@@ -399,8 +419,6 @@ html, body {
   font-size: 13px; font-weight: 700; flex-shrink: 0;
 }
 
-.sp-exp { margin-top: 1px; }
-.sp-exp-val { font-size: 14px; color: #8888aa; }
 
 /* 右 50%：装備欄コンパクト */
 .equip-panel-compact {
@@ -468,6 +486,11 @@ html, body {
   flex-shrink: 0;
   display: flex;
   border-bottom: 1px solid #1e1e38;
+}
+
+/* インベントリ見出しの下、タブ群を一段さげて表示 */
+.ip-tabs-indent {
+  padding-left: 16px;
 }
 
 .ip-tab {
@@ -571,6 +594,30 @@ html, body {
 }
 
 .icr-act:hover { background: #1a3050; color: #ffffff; }
+
+.icr-act-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.icr-act-row .icr-act {
+  display: block;
+  width: auto;
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.icr-act-discard {
+  background: #301010; color: #ff8888; border-color: #aa3333;
+}
+.icr-act-discard:hover { background: #4a1818; color: #ffffff; }
+
+.icr-act-cancel {
+  background: #1a1a1a; color: #aaaaaa; border-color: #444444;
+}
+.icr-act-cancel:hover { background: #2a2a2a; color: #ffffff; }
 
 .icr-empty { font-size: 10px; color: #444466; text-align: center; margin-top: 6px; }
 
@@ -1190,14 +1237,6 @@ html, body {
 }
 
 /* 残りポイント表示 */
-.stat-points-remaining {
-  margin-top: 5px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #ffdd00;
-  text-align: center;
-  animation: blink 1s step-start infinite;
-}
 
 @keyframes blink {
   50% { opacity: 0; }

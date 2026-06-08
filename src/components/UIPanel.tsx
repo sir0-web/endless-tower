@@ -87,8 +87,6 @@ export function UIPanel() {
     if (!all.includes(selId)) setSelId(null)
   }, [gs.heals, gs.spells, gs.bag, selId])
 
-  const expNeeded = gs.level * 30 + 10
-
   const healGroups  = group(gs.heals)
   const spellGroups = group(gs.spells)
 
@@ -140,6 +138,10 @@ export function UIPanel() {
               </div>
             )
           })}
+          <div className="sp-row">
+            <span className="sp-label">残pt</span>
+            <span className="sp-val" style={{ color: gs.statPoints > 0 ? '#ffdd00' : '#8888aa' }}>{gs.statPoints}</span>
+          </div>
           {hpDiff !== 0 && (
             <div className="sp-row">
               <span className="sp-label" style={{ color: '#8888a8' }}>HP上限</span>
@@ -147,13 +149,6 @@ export function UIPanel() {
                 {hpDiff > 0 ? `+${hpDiff}` : hpDiff}
               </span>
             </div>
-          )}
-          <div className="sp-row sp-exp">
-            <span className="sp-label">EXP</span>
-            <span className="sp-val sp-exp-val">{gs.exp}/{expNeeded}</span>
-          </div>
-          {gs.statPoints > 0 && (
-            <p className="stat-points-remaining">残り {gs.statPoints}pt</p>
           )}
         </div>
 
@@ -192,7 +187,9 @@ export function UIPanel() {
         {/* アイテム欄：アコーディオン（アイテム／装備／魔法の書） */}
         <div className="items-panel">
 
-          <div className="ip-tabs">
+          <p className="section-title-sm ip-inventory-title">インベントリ</p>
+
+          <div className="ip-tabs ip-tabs-indent">
             {ACCORDION_TABS.map(({ key, label }) => (
               <button
                 key={key}
@@ -221,6 +218,12 @@ export function UIPanel() {
                     )}
                   </div>
                 ))}
+                {gs.heals.length === 0 && <p className="icr-empty">なし</p>}
+              </div>
+            )}
+
+            {openTab === 'equip' && (
+              <div className="ip-scroll">
                 {gs.bag.map(item => (
                   <div key={item.id}>
                     <div className={`icr icr-bag ${selId === item.id ? 'icr-sel' : ''}`}
@@ -229,25 +232,15 @@ export function UIPanel() {
                       <span className="icr-name">{item.name}</span>
                     </div>
                     {selId === item.id && (
-                      <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
+                      <div className="icr-act-row">
+                        <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
+                        <button className="icr-act icr-act-discard" onClick={() => { window.discardFromBag?.(item.id); setSelId(null) }}>すてる</button>
+                        <button className="icr-act icr-act-cancel" onClick={() => setSelId(null)}>キャンセル</button>
+                      </div>
                     )}
                   </div>
                 ))}
-                {gs.heals.length + gs.bag.length === 0 && <p className="icr-empty">なし</p>}
-              </div>
-            )}
-
-            {openTab === 'equip' && (
-              <div className="ip-scroll">
-                {SLOTS.map(slot => {
-                  const item = gs.equipment[slot.key]
-                  return (
-                    <div key={slot.key} className={`icr ${item ? 'icr-bag' : ''}`}>
-                      <span>{slot.icon}</span>
-                      <span className="icr-name">[{slot.label}] {item ? item.name : '（装備なし）'}</span>
-                    </div>
-                  )
-                })}
+                {gs.bag.length === 0 && <p className="icr-empty">なし</p>}
               </div>
             )}
 

@@ -4,6 +4,7 @@ import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHous
 import { spawnItems } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
+import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 
 const VISION_RADIUS = 5
 
@@ -29,6 +30,7 @@ const ENEMY_TEXTURE_MAP: Record<string, string> = {
   '半魚人':              'fishman',
   'ナイトメア':          'nightmare',
   '深淵の騎士':          'abyssalknight',
+  '黄金蟲':              'goldenbug',
   'エクリプス':          'eclipse',
   'エンジェリング':      'angeling',
   'デビルリング':        'deviling',
@@ -143,6 +145,9 @@ export class GameScene extends Phaser.Scene {
       ['fishman',         '/assets/characters/enemies/fishman.png'],
       ['nightmare',       '/assets/characters/enemies/nightmare.png'],
       ['abyssalknight',   '/assets/characters/enemies/abyssalknight.png'],
+      ['goldenbug',       '/assets/characters/enemies/goldenbug.png'],
+      ['eclipse',         '/assets/characters/enemies/eclipse.png'],
+      ['angeling',        '/assets/characters/enemies/angeling.png'],
     ]
     for (const [key, path] of enemyImages) this.load.image(key, path)
 
@@ -162,8 +167,10 @@ export class GameScene extends Phaser.Scene {
     window.isGameSceneActive = true
     window.resolveEquip    = (equip: boolean) => this.resolveEquipModal(equip)
     window.equipFromBag   = (itemId: string) => this.equipFromBag(itemId)
+    window.discardFromBag = (itemId: string) => this.discardFromBag(itemId)
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
+    window.saveGame        = () => this.doSaveGame()
 
     const W = this.scale.width
     const H = this.scale.height
@@ -189,6 +196,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private initGame() {
+    const saved = loadGame()
+    if (saved) {
+      this.initGameFromSave(saved)
+      return
+    }
+
     const map = generateDungeon()
     const playerPos = getPlayerStartPosition(map)
     const areaBossFloors = generateAreaBossFloors()
@@ -249,6 +262,37 @@ export class GameScene extends Phaser.Scene {
     }
     this.buildFloorVariants(map)
     this.createTileSprites(map)
+  }
+
+  // セーブデータからの再開：保存時点のマップ・敵・アイテム配置をそのまま復元する
+  // （再生成すると「リロードで良いダンジョンを引き直す」抜け道になるため、スナップショットを丸ごと復元する）
+  private initGameFromSave(saved: SaveData) {
+    const floor = saved.player.floor
+    const map = saved.map
+
+    this.state = {
+      player: { ...saved.player },
+      enemies: saved.enemies,
+      items: saved.items,
+      map,
+      turn: saved.turn,
+      spells: saved.spells,
+      heals: saved.heals,
+      bag: saved.bag,
+      messages: [`セーブデータをロードしました（${floorLabel(floor)}から再開）`],
+      areaBossFloors: saved.areaBossFloors,
+      floorType: saved.floorType,
+    }
+    this.buildFloorVariants(map)
+    this.createTileSprites(map)
+  }
+
+  // セーブ実行（プレイ中のセーブボタンから呼ばれる）
+  private doSaveGame() {
+    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType } = this.state
+    saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType })
+    this.addMessage('セーブしました。ゲームを閉じても次回「GAMESTART」を押した際にここから再開します。')
+    this.showPickupNotif('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
   }
 
   private showTelopIfNeeded() {
@@ -396,6 +440,7 @@ export class GameScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
       backgroundColor: '#00000099',
       padding: { x: 14, y: 7 },
+      align: 'center',
     }).setOrigin(0.5).setDepth(60)
     this.tweens.add({
       targets: t, alpha: 0, duration: 500, delay: 1500,
@@ -462,6 +507,15 @@ export class GameScene extends Phaser.Scene {
     this.poisonTick()
     this.effectTick()
     this.renderMap()
+    this.updateWindowGameState()
+  }
+
+  private discardFromBag(itemId: string) {
+    if (this.isPaused || this.isStatAllocOpen) return
+    const item = this.state.bag.find(b => b.id === itemId)
+    if (!item) return
+    this.state.bag = this.state.bag.filter(b => b.id !== itemId)
+    this.addMessage(`${item.name}を捨てた`)
     this.updateWindowGameState()
   }
 
@@ -833,6 +887,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private gameOver() {
+    clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
     this.input.keyboard!.off('keydown', this.handleInput, this)
     window.isGameSceneActive = false
     window.dispatchEvent(new Event('game-scene-changed'))

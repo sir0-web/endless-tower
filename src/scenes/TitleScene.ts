@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { playBGM, isMuted, toggleMute } from '../game/sound'
 import { fetchRanking } from '../game/supabase'
+import { hasSave, clearSave } from '../game/save'
 
 const PIXEL_FONT  = '"Press Start 2P", monospace'
 const BTN_WIDTH   = 300   // 全ボタン共通の固定幅
@@ -38,7 +39,10 @@ export class TitleScene extends Phaser.Scene {
     const top     = H * 0.60
 
     // ①〜④ すべて同じ固定幅 BTN_WIDTH で生成
-    this.makeBtn(cx, top,          'GAME START',  btnFont, () => { this.scene.start('GameScene') })
+    this.makeBtn(cx, top,          'GAME START',  btnFont, () => {
+      if (hasSave()) this.openResumeConfirm(W, H)
+      else this.scene.start('GameScene')
+    })
     this.makeBtn(cx, top + gap,    'RANKING',     btnFont, () => { void this.goRanking() })
     this.makeBtn(cx, top + gap * 2,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
     this.makeBtn(cx, top + gap * 3,'HOW TO PLAY', btnFont, () => { this.openHowTo(W, H) })
@@ -64,6 +68,45 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private closeOverlay() { this.overlay?.destroy(); this.overlay = null }
+
+  // ── 中断データ再開確認モーダル ──
+  private openResumeConfirm(W: number, H: number) {
+    if (this.overlay) return
+    const cx = W / 2, cy = H / 2
+
+    const panel = this.add.rectangle(cx, cy, Math.min(460, W * 0.88), 260, 0x0a0a22, 0.96)
+      .setStrokeStyle(2, 0x4455aa)
+    const body = this.add.text(cx, cy - 50, [
+      '前回の中断データがあります。',
+      '中断データから再開しますか？',
+    ].join('\n'), {
+      fontFamily: PIXEL_FONT, fontSize: '12px', color: '#d8d8ff',
+      align: 'center', lineSpacing: 14,
+    }).setOrigin(0.5)
+
+    const yesBtn = this.add.text(cx - 90, cy + 60, 'はい', {
+      fontFamily: PIXEL_FONT, fontSize: '14px', color: '#88ff88',
+      backgroundColor: '#003322', padding: { x: 18, y: 10 },
+      fixedWidth: 120, align: 'center',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    yesBtn.on('pointerdown', () => {
+      this.closeOverlay()
+      this.scene.start('GameScene')
+    })
+
+    const noBtn = this.add.text(cx + 90, cy + 60, 'いいえ', {
+      fontFamily: PIXEL_FONT, fontSize: '14px', color: '#ff8888',
+      backgroundColor: '#330000', padding: { x: 18, y: 10 },
+      fixedWidth: 120, align: 'center',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    noBtn.on('pointerdown', () => {
+      clearSave()
+      this.closeOverlay()
+      this.scene.start('GameScene')
+    })
+
+    this.overlay = this.add.container(0, 0, [panel, body, yesBtn, noBtn]).setDepth(50)
+  }
 
   // ── 設定モーダル（ミュート + キー設定）──
   private openSettings(W: number, H: number) {

@@ -141,6 +141,7 @@ declare global {
     useHeal?: (itemId: string) => void
     resolveEquip?: (equip: boolean) => void
     equipFromBag?: (itemId: string) => void
+    discardFromBag?: (itemId: string) => void
     isGameSceneActive?: boolean
     onEnemyKilled?: () => void
     applySlotEffect?: (result: string) => void
@@ -148,5 +149,6 @@ declare global {
     showSlotAnnouncement?: (result: string, sub?: string) => void
     onSlotEffectApplied?: () => void
     gameMove?: (key: string) => void
+    saveGame?: () => void
   }
 }
