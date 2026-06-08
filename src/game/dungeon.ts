@@ -222,7 +222,7 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
   for (let i = 0; i < count; i++) {
     const pos = floors[Math.floor(Math.random() * floors.length)]
     const base = available[Math.floor(Math.random() * available.length)]
-    const scale = 1 + floor * 0.08
+    const scale = 1 + floor * 0.12
     enemies.push({
       id: `enemy_${i}_${Date.now()}`,
       position: { ...pos },

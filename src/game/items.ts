@@ -52,7 +52,6 @@ const EQUIP_ITEMS: {
 
 export function spawnItems(
   map: TileType[][],
-  floor: number,
   options: { countMult?: number; equipRate?: number } = {}
 ): Item[] {
   const { countMult = 1, equipRate = 0.2 } = options
@@ -64,7 +63,7 @@ export function spawnItems(
   }
 
   const items: Item[] = []
-  const count = Math.floor((1 + Math.floor(floor / 3)) * countMult)
+  const count = countMult
 
   for (let i = 0; i < count; i++) {
     const pos = floors[Math.floor(Math.random() * floors.length)]

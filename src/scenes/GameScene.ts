@@ -257,10 +257,10 @@ export class GameScene extends Phaser.Scene {
       },
       enemies: [...normalEnemies, ...bosses],
       items: floorType === 'lucky'
-        ? spawnItems(map, 1, { countMult: 2, equipRate: 0.30 })
+        ? spawnItems(map, { countMult: 2, equipRate: 0.30 })
         : floorType === 'chaos'
-        ? spawnItems(map, 1, { countMult: 3 })
-        : spawnItems(map, 1),
+        ? spawnItems(map, { countMult: 3 })
+        : spawnItems(map),
       map,
       turn: 0,
       spells: [],
@@ -858,7 +858,7 @@ export class GameScene extends Phaser.Scene {
     this.state.player.position = { ...playerPos }
 
     const floorType = this.determineFloorType(this.state.player.luk)
-    const base     = 5 + floor
+    const base     = 5
     const lukBonus = Math.floor(this.state.player.luk * 0.5)
     const count    = base + Math.floor(Math.random() * (base + lukBonus))
     const normalEnemies = floorType === 'chaos'
@@ -880,10 +880,10 @@ export class GameScene extends Phaser.Scene {
 
     this.state.enemies = [...normalEnemies, ...bosses]
     this.state.items = floorType === 'lucky'
-      ? spawnItems(map, floor, { countMult: 2, equipRate: 0.30 })
+      ? spawnItems(map, { countMult: 2, equipRate: 0.30 })
       : floorType === 'chaos'
-      ? spawnItems(map, floor, { countMult: 3 })
-      : spawnItems(map, floor)
+      ? spawnItems(map, { countMult: 3 })
+      : spawnItems(map)
     this.state.floorType = floorType
     this.buildFloorVariants(map)
     this.createTileSprites(map)
@@ -973,7 +973,7 @@ export class GameScene extends Phaser.Scene {
         player.hp = player.maxHp; player.stamina = player.maxStamina
         const tripleEquips: string[] = []
         for (let i = 0; i < 3; i++) {
-          const pool  = spawnItems(this.state.map, player.floor, { countMult: 1, equipRate: 1.0 })
+          const pool  = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0 })
           const equip = pool.find(it => it.type === 'equip')
           if (equip) {
             this.state.bag.push({ ...equip, position: { x: 0, y: 0 } })
@@ -1004,7 +1004,8 @@ export class GameScene extends Phaser.Scene {
         this.slotSpawnEquip()
         window.showSlotAnnouncement?.('sequential')
         break
-      case 'kakuhen': {
+      case 'kakuhen':
+      case 'kakuhen_miss': {
         player.statPoints += 30
         this.addMessage('✨ ステータスポイント+30獲得！')
         window.showSlotAnnouncement?.('kakuhen')
@@ -1029,13 +1030,16 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (result !== 'miss' && result !== 'kakuhen' && Math.random() < 0.01) {
-      // 当選アナウンス（最長3000ms＋フェード500ms）が消えるのを待ってから演出開始
+    const isWin  = result !== 'miss' && result !== 'kakuhen' && result !== 'kakuhen_miss'
+    const isMiss = result === 'miss'
+    if ((isWin || isMiss) && Math.random() < 0.01) {
+      const kakuhenVideo = isWin ? 'kakuhen' : 'kakuhen_miss'
+      // 当選/ハズレアナウンス（最長3000ms＋フェード500ms）が消えるのを待ってから演出開始
       this.time.delayedCall(3500, () => {
         this.addMessage('🌌 アルカナチャンス発動！')
         window.showSlotAnnouncement?.('kakuhen_start')
         this.time.delayedCall(3000, () => {
-          window.playBonusVideo?.('kakuhen')
+          window.playBonusVideo?.(kakuhenVideo)
         })
       })
     }
@@ -1046,8 +1050,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private slotSpawnEquip() {
-    const { player } = this.state
-    const pool = spawnItems(this.state.map, player.floor, { countMult: 1, equipRate: 1.0 })
+    const pool = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0 })
     const equip = pool.find(i => i.type === 'equip')
     if (equip) {
       this.state.bag.push({ ...equip, position: { x: 0, y: 0 } })
