@@ -73,31 +73,40 @@ export class TitleScene extends Phaser.Scene {
   private openResumeConfirm(W: number, H: number) {
     if (this.overlay) return
     const cx = W / 2, cy = H / 2
+    const isMobile = window.innerWidth < 768
 
-    const panel = this.add.rectangle(cx, cy, Math.min(460, W * 0.88), 260, 0x0a0a22, 0.96)
+    const bodySize = isMobile ? '22px' : '12px'
+    const btnSize  = isMobile ? '24px' : '14px'
+    const panelH   = isMobile ? 340 : 260
+    const btnOffY  = isMobile ? 100 : 60
+    const btnOffX  = isMobile ? 130 : 90
+    const btnW     = isMobile ? 160 : 120
+
+    const panel = this.add.rectangle(cx, cy, Math.min(560, W * 0.92), panelH, 0x0a0a22, 0.96)
       .setStrokeStyle(2, 0x4455aa)
-    const body = this.add.text(cx, cy - 50, [
+    const body = this.add.text(cx, cy - 60, [
       '前回の中断データがあります。',
       '中断データから再開しますか？',
     ].join('\n'), {
-      fontFamily: PIXEL_FONT, fontSize: '12px', color: '#d8d8ff',
-      align: 'center', lineSpacing: 14,
+      fontFamily: PIXEL_FONT, fontSize: bodySize, color: '#d8d8ff',
+      align: 'center', lineSpacing: isMobile ? 22 : 14,
+      wordWrap: { width: Math.min(520, W * 0.86) },
     }).setOrigin(0.5)
 
-    const yesBtn = this.add.text(cx - 90, cy + 60, 'はい', {
-      fontFamily: PIXEL_FONT, fontSize: '14px', color: '#88ff88',
-      backgroundColor: '#003322', padding: { x: 18, y: 10 },
-      fixedWidth: 120, align: 'center',
+    const yesBtn = this.add.text(cx - btnOffX, cy + btnOffY, 'はい', {
+      fontFamily: PIXEL_FONT, fontSize: btnSize, color: '#88ff88',
+      backgroundColor: '#003322', padding: { x: 18, y: 12 },
+      fixedWidth: btnW, align: 'center',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     yesBtn.on('pointerdown', () => {
       this.closeOverlay()
       this.scene.start('GameScene')
     })
 
-    const noBtn = this.add.text(cx + 90, cy + 60, 'いいえ', {
-      fontFamily: PIXEL_FONT, fontSize: '14px', color: '#ff8888',
-      backgroundColor: '#330000', padding: { x: 18, y: 10 },
-      fixedWidth: 120, align: 'center',
+    const noBtn = this.add.text(cx + btnOffX, cy + btnOffY, 'いいえ', {
+      fontFamily: PIXEL_FONT, fontSize: btnSize, color: '#ff8888',
+      backgroundColor: '#330000', padding: { x: 18, y: 12 },
+      fixedWidth: btnW, align: 'center',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     noBtn.on('pointerdown', () => {
       clearSave()
