@@ -64,6 +64,8 @@ export class GameScene extends Phaser.Scene {
   private enemyHpBars:  Map<string, { bg: Phaser.GameObjects.Rectangle; fg: Phaser.GameObjects.Rectangle }> = new Map()
   // アイテム描画: Text（回復/魔法）または Image（装備品＝宝箱スプライト）
   private itemGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
+  // イベントフロアNPC（施設の話しかけ役）描画
+  private facilityGraphics: Map<string, Phaser.GameObjects.Text> = new Map()
   private telopText!: Phaser.GameObjects.Text
 
   private inventoryPanel!: Phaser.GameObjects.Container
@@ -81,7 +83,7 @@ export class GameScene extends Phaser.Scene {
   // textureSourceがnullになり、再生時に "Cannot read properties of null (reading 'sourceSize')" でクラッシュする
   private playerTexturesTransparent = false
   private isEventFloor = false   // イベントフロア（宿屋ミッドガルド）滞在中フラグ
-  private eventFacilities: { id: string; kind: import('../types').FacilityKind; position: import('../types').Position }[] = []
+  private eventFacilities: { id: string; kind: import('../types').FacilityKind; name: string; icon: string; position: import('../types').Position }[] = []
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
@@ -938,9 +940,9 @@ export class GameScene extends Phaser.Scene {
     this.state.enemies = []
     this.state.items = []
     this.eventFacilities = [
-      { id: 'facility_refine',    kind: 'refine',    position: { x: 6,  y: 9 } },
-      { id: 'facility_shadow',    kind: 'shadow',    position: { x: 9,  y: 9 } },
-      { id: 'facility_spellbook', kind: 'spellbook', position: { x: 12, y: 9 } },
+      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', position: { x: 6,  y: 9 } },
+      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', position: { x: 9,  y: 9 } },
+      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', position: { x: 12, y: 9 } },
     ]
     this.state.floorType = 'normal'
     this.buildFloorVariants(map)
@@ -1323,7 +1325,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private isVisible(tx: number, ty: number): boolean {
-    if (this.state.floorType === 'lucky') return true
+    if (this.state.floorType === 'lucky' || this.isEventFloor) return true
     const { player } = this.state
     const dx = tx - player.position.x
     const dy = ty - player.position.y
@@ -1594,6 +1596,27 @@ export class GameScene extends Phaser.Scene {
       }
       (g as Phaser.GameObjects.Image).setVisible(vis)
       if (vis) (g as Phaser.GameObjects.Image).setPosition(ipx + rts / 2, ipy + rts / 2)
+    }
+
+    // ── イベントフロアNPC描画 ──
+    const liveFacilityIds = new Set(this.eventFacilities.map(f => f.id))
+    for (const [id, g] of this.facilityGraphics) {
+      if (!liveFacilityIds.has(id)) { g.destroy(); this.facilityGraphics.delete(id) }
+    }
+    if (this.isEventFloor) {
+      for (const facility of this.eventFacilities) {
+        const fpx = facility.position.x * rts - offsetX
+        const fpy = facility.position.y * rts - offsetY
+        const inViewF = fpx > -rts * 2 && fpx < W + rts && fpy > -rts * 2 && fpy < H + rts
+        let g = this.facilityGraphics.get(facility.id)
+        if (!g) {
+          g = this.add.text(0, 0, facility.icon, { fontSize: `${Math.round(rts * 0.7)}px` })
+            .setOrigin(0.5).setDepth(4)
+          this.facilityGraphics.set(facility.id, g)
+        }
+        g.setVisible(inViewF)
+        if (inViewF) g.setPosition(fpx + rts / 2, fpy + rts / 2)
+      }
     }
 
     // ── 敵描画 ──
