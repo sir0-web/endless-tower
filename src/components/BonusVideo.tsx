@@ -8,6 +8,7 @@ const RESULT_SRCS: Record<string, string> = {
   'adjacent':   '/assets/slot/adjacent.mp4',
   'sequential': '/assets/slot/sequential.mp4',
   'miss':       '/assets/slot/miss.mp4',
+  'kakuhen':    '/assets/slot/swordlady.mp4',
 }
 
 export function BonusVideo() {

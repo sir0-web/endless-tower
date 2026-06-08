@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-type SlotResult = '777' | 'triple' | 'skulls' | 'lr_match' | 'adjacent' | 'sequential' | 'miss'
+type SlotResult = '777' | 'triple' | 'skulls' | 'lr_match' | 'adjacent' | 'sequential' | 'miss' | 'kakuhen' | 'kakuhen_start'
 
 interface Config {
   text: string
@@ -92,6 +92,28 @@ const CONFIGS: Record<SlotResult, Config> = {
     flash: false,
     sparkles: 0,
   },
+  kakuhen_start: {
+    text: '🌌アルカナチャンス！🌌',
+    sub: '',
+    color: '#ff66ff',
+    fontSize: 'clamp(40px, 8vw, 72px)',
+    animClass: 'sa-anim-zoom',
+    holdMs: 3000,
+    overlay: true,
+    flash: false,
+    sparkles: 32,
+  },
+  kakuhen: {
+    text: '✨ボーナス獲得✨',
+    sub: 'ステータスポイント+30獲得！',
+    color: '#ff66ff',
+    fontSize: 'clamp(36px, 7vw, 60px)',
+    animClass: 'sa-anim-slide',
+    holdMs: 2500,
+    overlay: false,
+    flash: false,
+    sparkles: 20,
+  },
 }
 
 interface Sparkle {
@@ -182,13 +204,15 @@ export function SlotAnnouncement() {
         >
           {cfg.text}
         </p>
-        <p
-          key={active.seq + 1}
-          className="sa-sub"
-          style={{ color: cfg.color }}
-        >
-          {active.subOverride ?? cfg.sub}
-        </p>
+        {(active.subOverride ?? cfg.sub) && (
+          <p
+            key={active.seq + 1}
+            className="sa-sub"
+            style={{ color: cfg.color }}
+          >
+            {active.subOverride ?? cfg.sub}
+          </p>
+        )}
       </div>
     </div>
   )

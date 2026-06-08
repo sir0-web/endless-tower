@@ -148,6 +148,7 @@ export class GameScene extends Phaser.Scene {
       ['goldenbug',       '/assets/characters/enemies/goldenbug.png'],
       ['eclipse',         '/assets/characters/enemies/eclipse.png'],
       ['angeling',        '/assets/characters/enemies/angeling.png'],
+      ['furioni',         '/assets/characters/enemies/furioni.png'],
     ]
     for (const [key, path] of enemyImages) this.load.image(key, path)
 
@@ -171,6 +172,15 @@ export class GameScene extends Phaser.Scene {
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
     window.saveGame        = () => this.doSaveGame()
+
+    // 開発サーバー限定：コンソールから warpFloor(階数) で好きな階に飛べる
+    if (import.meta.env.DEV) {
+      window.warpFloor = (floor: number) => {
+        this.state.player.floor = Math.max(1, Math.floor(floor)) - 1
+        this.nextFloor()
+      }
+      console.log('[DEV] warpFloor(階数) で好きな階にワープできます。例: warpFloor(10)')
+    }
 
     const W = this.scale.width
     const H = this.scale.height
@@ -994,6 +1004,12 @@ export class GameScene extends Phaser.Scene {
         this.slotSpawnEquip()
         window.showSlotAnnouncement?.('sequential')
         break
+      case 'kakuhen': {
+        player.statPoints += 30
+        this.addMessage('✨ ステータスポイント+30獲得！')
+        window.showSlotAnnouncement?.('kakuhen')
+        break
+      }
       default: {
         let missSub = 'ハズレ…'
         if (Math.random() < 0.3) {
@@ -1011,6 +1027,17 @@ export class GameScene extends Phaser.Scene {
         }
         window.showSlotAnnouncement?.('miss', missSub)
       }
+    }
+
+    if (result !== 'miss' && result !== 'kakuhen' && Math.random() < 0.01) {
+      // 当選アナウンス（最長3000ms＋フェード500ms）が消えるのを待ってから演出開始
+      this.time.delayedCall(3500, () => {
+        this.addMessage('🌌 アルカナチャンス発動！')
+        window.showSlotAnnouncement?.('kakuhen_start')
+        this.time.delayedCall(3000, () => {
+          window.playBonusVideo?.('kakuhen')
+        })
+      })
     }
 
     if (player.hp <= 0) { player.hp = 0; this.gameOver() }
@@ -1371,7 +1398,10 @@ export class GameScene extends Phaser.Scene {
         const baseName   = enemy.name.replace(/^【[^】]+】/, '')
         const textureKey = ENEMY_TEXTURE_MAP[baseName]
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
-          const eSize = ['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3 : rts - 2
+          const eSize = ['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3
+            : ['eclipse', 'angeling', 'goldenbug'].includes(textureKey) ? rts * 1.5
+            : textureKey === 'furioni' ? rts * 2.0
+            : rts - 2
           g = this.add.image(0, 0, textureKey)
             .setDisplaySize(eSize, eSize).setDepth(5)
         } else {

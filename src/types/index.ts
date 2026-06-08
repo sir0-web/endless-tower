@@ -150,5 +150,6 @@ declare global {
     onSlotEffectApplied?: () => void
     gameMove?: (key: string) => void
     saveGame?: () => void
+    warpFloor?: (floor: number) => void
   }
 }
