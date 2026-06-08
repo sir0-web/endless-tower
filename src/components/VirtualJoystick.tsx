@@ -27,6 +27,8 @@ export function VirtualJoystick() {
     const onStart = (e: TouchEvent) => {
       // スマホのみ（PC はキーボードで操作）
       if (window.innerWidth >= 768) return
+      // ボタン類タップ時はジョイスティックを起動しない
+      if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
       const t = e.touches[0]
       baseRef.current = { x: t.clientX, y: t.clientY }
       activeRef.current = true
