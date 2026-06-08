@@ -16,7 +16,7 @@ const GAME_H = BASE_H   // ゲーム画面も全体に合わせて伸ばす
 const GAME_W = Math.floor(BASE_W * 0.65)  // 832
 
 function calcScale() {
-  return Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H, 1)
+  return Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H)
 }
 
 function isMobileViewport() {
