@@ -253,12 +253,17 @@ html, body {
 
 .g-confirm-backdrop {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
   background: rgba(0, 0, 0, 0.62);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 500;
+  z-index: 9999;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .g-confirm {
@@ -266,9 +271,13 @@ html, body {
   border: 1px solid rgba(160, 160, 255, 0.45);
   border-radius: 10px;
   padding: 28px 30px 22px;
-  max-width: min(460px, 90vw);
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
   text-align: center;
   animation: g-toast-in 0.22s ease both;
+  box-sizing: border-box;
 }
 
 .g-confirm-msg {
