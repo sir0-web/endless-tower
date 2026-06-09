@@ -64,10 +64,19 @@ const ACCORDION_TABS: { key: AccordionTab; label: string }[] = [
   { key: 'spell', label: '魔法の書'   },
 ]
 
+const SPELL_INFO: Record<string, { icon: string; desc: string; effect: string }> = {
+  '炎の書':   { icon: '🔥', desc: '最も近い敵に炎のダメージを与える',           effect: 'ダメージ: INT × 3 + 10' },
+  '祝福の書': { icon: '✨', desc: 'STR・INT・DEX・AGI を一時的に強化（10ターン）', effect: '各ステータス +5' },
+  '光の書':   { icon: '💫', desc: '10ターン間、毎ターン HP を回復する',          effect: 'HP回復: 10ターン持続' },
+  '沼の書':   { icon: '🌊', desc: 'フロア上の全ての敵を減速させる',              effect: '全敵スロー: 3ターン' },
+  '隕石の書': { icon: '☄️', desc: 'フロア上の全ての敵に隕石を降らせる',          effect: 'ダメージ: INT × 2 + 5（全敵）' },
+}
+
 export function UIPanel() {
   const [gs, setGs] = useState<GameStateSnapshot>(DEFAULT)
   const [selId, setSelId] = useState<string | null>(null)
   const [openTab, setOpenTab] = useState<AccordionTab | null>(null)
+  const [spellDetail, setSpellDetail] = useState<string | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -84,14 +93,14 @@ export function UIPanel() {
   useEffect(() => {
     if (!selId) return
     const all = [...gs.heals, ...gs.spells, ...gs.bag].map(x => x.id)
-    if (!all.includes(selId)) setSelId(null)
+    if (!all.includes(selId)) { setSelId(null); setSpellDetail(null) }
   }, [gs.heals, gs.spells, gs.bag, selId])
 
   const healGroups  = group(gs.heals)
   const spellGroups = group(gs.spells)
 
   // アイテム行クリック
-  const selectItem = (id: string) => setSelId(s => s === id ? null : id)
+  const selectItem = (id: string) => { setSpellDetail(null); setSelId(s => s === id ? null : id) }
 
   // 選択中の装備アイテムとステータス差分
   const selEquip = selId ? gs.bag.find(x => x.id === selId && x.type === 'equip') : null
@@ -246,18 +255,41 @@ export function UIPanel() {
 
             {openTab === 'spell' && (
               <div className="ip-scroll">
-                {Object.entries(spellGroups).map(([name, items]) => (
-                  <div key={name}>
-                    <div className={`icr icr-spell-book ${selId === items[0].id ? 'icr-sel' : ''}`}
-                      onClick={() => selectItem(items[0].id)}>
-                      <span>📖</span>
-                      <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                {Object.entries(spellGroups).map(([name, items]) => {
+                  const info = SPELL_INFO[name]
+                  const isSelected = selId === items[0].id
+                  const showDetail = isSelected && spellDetail === name
+                  return (
+                    <div key={name}>
+                      <div className={`icr icr-spell-book ${isSelected ? 'icr-sel' : ''}`}
+                        onClick={() => selectItem(items[0].id)}>
+                        <span>📖</span>
+                        <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                      </div>
+                      {isSelected && (
+                        <>
+                          <div className="icr-act-row">
+                            <button className="icr-act icr-act-spell"
+                              onClick={() => { window.useSpell?.(items[0].id); setSelId(null); setSpellDetail(null) }}>
+                              使う
+                            </button>
+                            <button className="icr-act icr-act-detail"
+                              onClick={() => setSpellDetail(s => s === name ? null : name)}>
+                              詳細
+                            </button>
+                          </div>
+                          {showDetail && info && (
+                            <div className="spell-detail-panel">
+                              <div className="spell-detail-title">{info.icon} {name}</div>
+                              <div className="spell-detail-desc">{info.desc}</div>
+                              <div className="spell-detail-effect">{info.effect}</div>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
-                    {selId === items[0].id && (
-                      <button className="icr-act icr-act-spell" onClick={() => { window.useSpell?.(items[0].id); setSelId(null) }}>使う</button>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
                 {gs.spells.length === 0 && <p className="icr-empty">なし</p>}
               </div>
             )}

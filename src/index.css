@@ -735,6 +735,48 @@ html, body {
 }
 .icr-act-spell:hover { background: #2a1055; }
 
+.icr-act-detail {
+  background: #0a1220;
+  color: #88aaff;
+  border-color: #2244aa;
+}
+.icr-act-detail:hover { background: #12253a; color: #ffffff; }
+
+/* ── 魔法の書 詳細パネル ── */
+.spell-detail-panel {
+  background: #100c20;
+  border: 1px solid #3a2a66;
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  animation: detail-in 0.18s ease both;
+}
+
+.spell-detail-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #bb99ff;
+  margin-bottom: 4px;
+}
+
+.spell-detail-desc {
+  font-size: 12px;
+  color: #c0b8e0;
+  line-height: 1.6;
+  margin-bottom: 3px;
+}
+
+.spell-detail-effect {
+  font-size: 12px;
+  font-weight: 700;
+  color: #88ccff;
+}
+
+@keyframes detail-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .icr {
   display: flex; align-items: center; gap: 3px;
   padding: 3px 4px; border-radius: 3px;
