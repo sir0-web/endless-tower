@@ -65,7 +65,7 @@ export class GameScene extends Phaser.Scene {
   // アイテム描画: Text（回復/魔法）または Image（装備品＝宝箱スプライト）
   private itemGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
   // イベントフロアNPC（施設の話しかけ役）描画
-  private facilityGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
+  private facilityGraphics: Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Text> = new Map()
   private telopText!: Phaser.GameObjects.Text
   // スマホ用メッセージポップアップ（再利用）
   private mobileMsg:      Phaser.GameObjects.Text | null = null
@@ -1765,7 +1765,7 @@ export class GameScene extends Phaser.Scene {
           this.facilityGraphics.set(facility.id, g)
         }
         g.setVisible(inViewF)
-        if (inViewF) (g as Phaser.GameObjects.Components.Transform).setPosition(fpx + rts / 2, fpy + rts / 2)
+        if (inViewF) g.setPosition(fpx + rts / 2, fpy + rts / 2)
       }
     }
 
