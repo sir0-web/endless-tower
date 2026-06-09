@@ -967,7 +967,6 @@ export class GameScene extends Phaser.Scene {
     this.state.floorType = floorType
     this.buildFloorVariants(map)
     this.createTileSprites(map)
-    this.addMessage(`${floorLabel(floor)}に降りた！`)
     playStairs()
     this.renderMap()
     this.updateWindowGameState()

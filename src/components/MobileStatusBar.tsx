@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { floorLabel } from '../game/utils'
+import { useEffect, useRef, useState } from 'react'
 import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
 
 interface StatusSnap {
@@ -11,26 +10,58 @@ interface StatusSnap {
 
 const DEFAULT: StatusSnap = { hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, floor: 1, level: 1, exp: 0 }
 
+function ordSuffix(n: number): string {
+  const m100 = n % 100
+  const m10  = n % 10
+  if (m100 >= 11 && m100 <= 13) return 'th'
+  if (m10 === 1) return 'st'
+  if (m10 === 2) return 'nd'
+  if (m10 === 3) return 'rd'
+  return 'th'
+}
+
 export function MobileStatusBar() {
   const [s, setS]       = useState<StatusSnap>(DEFAULT)
   const [active, setActive] = useState(false)
   const [mute, setMute] = useState(isMuted())
+  const [displayFloor, setDisplayFloor] = useState(1)
+  const [numAnim, setNumAnim]           = useState(false)
+  const prevFloorRef = useRef(-1)
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const update = () => {
       if (window.gameState && window.isGameSceneActive) {
         const { hp, maxHp, stamina, maxStamina, floor, level, exp } = window.gameState
+        const prev = prevFloorRef.current
+        if (prev > 0 && floor > prev) {
+          if (animTimerRef.current) clearTimeout(animTimerRef.current)
+          setNumAnim(true)
+          animTimerRef.current = setTimeout(() => {
+            setNumAnim(false)
+            setDisplayFloor(floor)
+            animTimerRef.current = null
+          }, 500)
+        } else {
+          setDisplayFloor(floor)
+        }
+        prevFloorRef.current = floor
         setS({ hp, maxHp, stamina, maxStamina, floor, level, exp })
         setActive(true)
       }
     }
-    const hide = () => setActive(false)
+    const hide = () => {
+      setActive(false)
+      prevFloorRef.current = -1
+      if (animTimerRef.current) { clearTimeout(animTimerRef.current); animTimerRef.current = null }
+    }
 
     window.addEventListener('gamestate-update', update)
     window.addEventListener('game-scene-changed', hide)
     return () => {
       window.removeEventListener('gamestate-update', update)
       window.removeEventListener('game-scene-changed', hide)
+      if (animTimerRef.current) clearTimeout(animTimerRef.current)
     }
   }, [])
 
@@ -48,7 +79,13 @@ export function MobileStatusBar() {
   return (
     <div className="mob-status-bar">
       <div className="mob-floor-row">
-        <span className="badge floor-badge mob-badge">{floorLabel(s.floor)}</span>
+        <span className="badge floor-badge mob-badge">
+          Basement{' '}
+          <span className={`floor-num${numAnim ? ' floor-num-anim' : ''}`}>
+            {displayFloor}{ordSuffix(displayFloor)}
+          </span>
+          {' '}Floor
+        </span>
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
         <button className="mob-mute-btn" data-priority-tap onClick={toggleMute}>{mute ? '🔇' : '🔊'}</button>
         <button className="mob-save-btn" data-priority-tap onClick={handleSave}>セーブ</button>
