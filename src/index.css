@@ -361,6 +361,12 @@ html, body {
     z-index: 50;
   }
 
+  /* スマホ：イベントメッセージバー（46px）の裏にキャンバスが入り込まないよう高さを制限 */
+  .game-canvas-area {
+    flex: none;
+    height: calc(100% - 46px);
+  }
+
   .ui-pane {
     flex: 1;
     width: 100%;
