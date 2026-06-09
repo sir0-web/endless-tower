@@ -1,11 +1,11 @@
 import type { Item, TileType, EquipSlot, SpellType } from '../types'
 
 export const SPELL_ITEMS: { name: string; spellType: SpellType }[] = [
-  { name: '炎の書',   spellType: 'firebolt'      },
-  { name: '祝福の書', spellType: 'blessing'      },
-  { name: '光の書',   spellType: 'lightblessing' },
-  { name: '沼の書',   spellType: 'quagmire'      },
-  { name: '隕石の書', spellType: 'meteostorm'    },
+  { name: 'ファイアボルトの書',     spellType: 'firebolt'      },
+  { name: 'ブレッシングの書',       spellType: 'blessing'      },
+  { name: 'ライトブレッシングの書', spellType: 'lightblessing' },
+  { name: 'クァグマイアの書',       spellType: 'quagmire'      },
+  { name: 'メテオストームの書',     spellType: 'meteostorm'    },
 ]
 
 const HEAL_ITEMS = [

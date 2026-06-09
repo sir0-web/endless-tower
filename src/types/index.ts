@@ -84,7 +84,7 @@ export interface Player {
   statPoints: number
   // エフェクト
   healingTurns: number
-  // 祝福の書（ブレッシング）：残りターン数と、付与した分のみを記録（レベルアップ等の変動と区別するため）
+  // ブレッシングの書：残りターン数と、付与した分のみを記録（レベルアップ等の変動と区別するため）
   blessingTurns: number
   blessingBonus: { str: number; int: number; dex: number; agi: number }
 }

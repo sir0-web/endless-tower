@@ -65,11 +65,11 @@ const ACCORDION_TABS: { key: AccordionTab; label: string }[] = [
 ]
 
 const SPELL_INFO: Record<string, { icon: string; desc: string; effect: string }> = {
-  '炎の書':   { icon: '🔥', desc: '最も近い敵に炎のダメージを与える',           effect: 'ダメージ: INT × 3 + 10' },
-  '祝福の書': { icon: '✨', desc: 'STR・INT・DEX・AGI を一時的に強化（10ターン）', effect: '各ステータス +5' },
-  '光の書':   { icon: '💫', desc: '10ターン間、毎ターン HP を回復する',          effect: 'HP回復: 10ターン持続' },
-  '沼の書':   { icon: '🌊', desc: 'フロア上の全ての敵を減速させる',              effect: '全敵スロー: 3ターン' },
-  '隕石の書': { icon: '☄️', desc: 'フロア上の全ての敵に隕石を降らせる',          effect: 'ダメージ: INT × 2 + 5（全敵）' },
+  'ファイアボルトの書':     { icon: '🔥', desc: '最も近い敵に炎のダメージを与える',           effect: 'ダメージ: INT × 3 + 10' },
+  'ブレッシングの書':       { icon: '✨', desc: 'STR・INT・DEX・AGI を一時的に強化（10ターン）', effect: '各ステータス +5' },
+  'ライトブレッシングの書': { icon: '💫', desc: '10ターン間、毎ターン HP を回復する',          effect: 'HP回復: 10ターン持続' },
+  'クァグマイアの書':       { icon: '🌊', desc: 'フロア上の全ての敵を減速させる',              effect: '全敵スロー: 3ターン' },
+  'メテオストームの書':     { icon: '☄️', desc: 'フロア上の全ての敵に隕石を降らせる',          effect: 'ダメージ: INT × 2 + 5（全敵）' },
 }
 
 export function UIPanel() {
