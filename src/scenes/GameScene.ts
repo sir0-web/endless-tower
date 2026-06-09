@@ -65,7 +65,7 @@ export class GameScene extends Phaser.Scene {
   // アイテム描画: Text（回復/魔法）または Image（装備品＝宝箱スプライト）
   private itemGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
   // イベントフロアNPC（施設の話しかけ役）描画
-  private facilityGraphics: Map<string, Phaser.GameObjects.Text> = new Map()
+  private facilityGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
   private telopText!: Phaser.GameObjects.Text
   // スマホ用メッセージポップアップ（再利用）
   private mobileMsg:      Phaser.GameObjects.Text | null = null
@@ -86,7 +86,7 @@ export class GameScene extends Phaser.Scene {
   // textureSourceがnullになり、再生時に "Cannot read properties of null (reading 'sourceSize')" でクラッシュする
   private playerTexturesTransparent = false
   private isEventFloor = false   // イベントフロア（ベースキャンプ「あるかなひろば」）滞在中フラグ
-  private eventFacilities: { id: string; kind: import('../types').FacilityKind; name: string; icon: string; position: import('../types').Position }[] = []
+  private eventFacilities: { id: string; kind: import('../types').FacilityKind; name: string; icon: string; texture?: string; position: import('../types').Position }[] = []
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
@@ -165,6 +165,9 @@ export class GameScene extends Phaser.Scene {
       ['eclipse',         '/assets/characters/enemies/eclipse.png'],
       ['angeling',        '/assets/characters/enemies/angeling.png'],
       ['furioni',         '/assets/characters/enemies/furioni.png'],
+      ['horu',            '/assets/characters/enemies/horu.png'],
+      ['master',          '/assets/characters/enemies/master.png'],
+      ['maho',            '/assets/characters/enemies/maho.png'],
     ]
     for (const [key, path] of enemyImages) this.load.image(key, path)
 
@@ -1029,9 +1032,9 @@ export class GameScene extends Phaser.Scene {
     this.state.enemies = []
     this.state.items = []
     this.eventFacilities = [
-      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', position: { x: 6,  y: 9 } },
-      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', position: { x: 9,  y: 9 } },
-      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', position: { x: 12, y: 9 } },
+      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', texture: 'horu',   position: { x: 6,  y: 9 } },
+      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', texture: 'master', position: { x: 9,  y: 9 } },
+      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', texture: 'maho',   position: { x: 12, y: 9 } },
     ]
     this.state.floorType = 'normal'
     this.buildFloorVariants(map)
@@ -1542,7 +1545,9 @@ export class GameScene extends Phaser.Scene {
         this.makeTransparent(`attack_${dir}_${i}`)
       }
     }
-
+    for (const key of ['horu', 'master', 'maho']) {
+      this.makeTransparent(key)
+    }
   }
 
   // ── プレイヤーアニメーション定義 ──
@@ -1749,12 +1754,18 @@ export class GameScene extends Phaser.Scene {
         const inViewF = fpx > -rts * 2 && fpx < W + rts && fpy > -rts * 2 && fpy < H + rts
         let g = this.facilityGraphics.get(facility.id)
         if (!g) {
-          g = this.add.text(0, 0, facility.icon, { fontSize: `${Math.round(rts * 0.7)}px` })
-            .setOrigin(0.5).setDepth(4)
+          const tex = facility.texture
+          if (tex && !this.failedTextures.has(tex) && this.textures.exists(tex)) {
+            g = this.add.image(0, 0, tex)
+              .setDisplaySize(rts, rts).setOrigin(0.5).setDepth(4)
+          } else {
+            g = this.add.text(0, 0, facility.icon, { fontSize: `${Math.round(rts * 0.7)}px` })
+              .setOrigin(0.5).setDepth(4)
+          }
           this.facilityGraphics.set(facility.id, g)
         }
         g.setVisible(inViewF)
-        if (inViewF) g.setPosition(fpx + rts / 2, fpy + rts / 2)
+        if (inViewF) (g as Phaser.GameObjects.Components.Transform).setPosition(fpx + rts / 2, fpy + rts / 2)
       }
     }
 
