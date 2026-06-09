@@ -57,7 +57,7 @@ export class GameScene extends Phaser.Scene {
   private state!: GameState
   private graphics!: Phaser.GameObjects.Graphics
   private playerGraphic: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite | null = null
-  private playerDir:        'down' | 'up' | 'right' | 'left' = 'down'
+  private playerDir: 'down' | 'up' | 'right' | 'left' | 'down-right' | 'down-left' | 'up-right' | 'up-left' = 'down'
   private isPlayerAttacking = false
   private hasPlayerAnims    = false
   private enemyGraphics: Map<string, Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image> = new Map()
@@ -379,21 +379,36 @@ export class GameScene extends Phaser.Scene {
     const useWASD  = km !== 'arrows'
     const k        = event.key
 
-    if      ((k === 'ArrowUp'    && useArr) || ((k === 'w' || k === 'W') && useWASD)) dy = -1
+    // 斜め移動（テンキー・ローグライクキー q/e/z/c・バーチャルジョイスティック）
+    if      (k === 'Numpad7' || k === 'DiagUL' || ((k === 'q' || k === 'Q') && useWASD)) { dx = -1; dy = -1 }
+    else if (k === 'Numpad9' || k === 'DiagUR' || ((k === 'e' || k === 'E') && useWASD)) { dx =  1; dy = -1 }
+    else if (k === 'Numpad1' || k === 'DiagDL' || ((k === 'z' || k === 'Z') && useWASD)) { dx = -1; dy =  1 }
+    else if (k === 'Numpad3' || k === 'DiagDR' || ((k === 'c' || k === 'C') && useWASD)) { dx =  1; dy =  1 }
+    // 通常移動
+    else if ((k === 'ArrowUp'    && useArr) || ((k === 'w' || k === 'W') && useWASD)) dy = -1
     else if ((k === 'ArrowDown'  && useArr) || ((k === 's' || k === 'S') && useWASD)) dy = 1
     else if ((k === 'ArrowLeft'  && useArr) || ((k === 'a' || k === 'A') && useWASD)) dx = -1
     else if ((k === 'ArrowRight' && useArr) || ((k === 'd' || k === 'D') && useWASD)) dx = 1
     else return
 
     // 移動方向を記録
-    if      (dx === 1)  this.playerDir = 'right'
-    else if (dx === -1) this.playerDir = 'left'
-    else if (dy === 1)  this.playerDir = 'down'
-    else if (dy === -1) this.playerDir = 'up'
+    if      (dx === 1  && dy === 0)  this.playerDir = 'right'
+    else if (dx === -1 && dy === 0)  this.playerDir = 'left'
+    else if (dx === 0  && dy === 1)  this.playerDir = 'down'
+    else if (dx === 0  && dy === -1) this.playerDir = 'up'
+    else if (dx === 1  && dy === -1) this.playerDir = 'up-right'
+    else if (dx === -1 && dy === -1) this.playerDir = 'up-left'
+    else if (dx === 1  && dy === 1)  this.playerDir = 'down-right'
+    else if (dx === -1 && dy === 1)  this.playerDir = 'down-left'
 
     const nx = player.position.x + dx
     const ny = player.position.y + dy
 
+    // 斜め移動のコーナーカット防止（壁の角を斜めに越えない）
+    if (dx !== 0 && dy !== 0) {
+      if (this.state.map[player.position.y][nx] === 'wall') return
+      if (this.state.map[ny][player.position.x] === 'wall') return
+    }
     if (this.state.map[ny][nx] === 'wall') return
 
     const enemy = this.state.enemies.find(e => e.position.x === nx && e.position.y === ny)
@@ -668,12 +683,16 @@ export class GameScene extends Phaser.Scene {
   private enemyTurn() {
     const { player, enemies } = this.state
 
-    // プレイヤーを囲む上下左右4マス（包囲ポジション）
+    // プレイヤーを囲む8マス（包囲ポジション：上下左右＋斜め）
     const adjPos = [
-      { x: player.position.x - 1, y: player.position.y },
-      { x: player.position.x + 1, y: player.position.y },
+      { x: player.position.x - 1, y: player.position.y     },
+      { x: player.position.x + 1, y: player.position.y     },
       { x: player.position.x,     y: player.position.y - 1 },
       { x: player.position.x,     y: player.position.y + 1 },
+      { x: player.position.x - 1, y: player.position.y - 1 },
+      { x: player.position.x + 1, y: player.position.y - 1 },
+      { x: player.position.x - 1, y: player.position.y + 1 },
+      { x: player.position.x + 1, y: player.position.y + 1 },
     ]
 
     // 近い敵から処理して包囲ポジションを確保させる
@@ -682,19 +701,21 @@ export class GameScene extends Phaser.Scene {
       (Math.abs(player.position.x - b.position.x) + Math.abs(player.position.y - b.position.y))
     )
 
-    // 既にプレイヤー隣接マスにいる敵のポジションを確保済みとしてマーク
+    // 既にプレイヤー隣接マスにいる敵のポジションを確保済みとしてマーク（チェビシェフ距離1）
     const takenAdj = new Set<string>(
       sorted
-        .filter(e => Math.abs(player.position.x - e.position.x) + Math.abs(player.position.y - e.position.y) === 1)
+        .filter(e => Math.max(Math.abs(player.position.x - e.position.x), Math.abs(player.position.y - e.position.y)) === 1)
         .map(e => `${e.position.x},${e.position.y}`)
     )
 
     for (const enemy of sorted) {
-      const dx = player.position.x - enemy.position.x
-      const dy = player.position.y - enemy.position.y
-      const dist = Math.abs(dx) + Math.abs(dy)
+      const edx = player.position.x - enemy.position.x
+      const edy = player.position.y - enemy.position.y
+      const chebDist = Math.max(Math.abs(edx), Math.abs(edy))
+      const manhDist = Math.abs(edx) + Math.abs(edy)
 
-      if (dist === 1) {
+      if (chebDist === 1) {
+        // 隣接（斜め含む）→攻撃
         const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
         const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
         const effectiveDef = player.vit + Math.floor(player.level / 2)
@@ -709,7 +730,7 @@ export class GameScene extends Phaser.Scene {
           : `${enemy.name}から${dmg}ダメージ！`)
         if (player.hp <= 0) { this.gameOver(); return }
 
-      } else if (dist < 8) {
+      } else if (manhDist < 10) {
         // 空いている包囲ポジションを最も近いものから探す
         const candidates = adjPos
           .filter(p => {
@@ -727,19 +748,42 @@ export class GameScene extends Phaser.Scene {
 
         const tdx = target.x - enemy.position.x
         const tdy = target.y - enemy.position.y
-        const mx = Math.abs(tdx) >= Math.abs(tdy) ? Math.sign(tdx) : 0
-        const my = Math.abs(tdx) >= Math.abs(tdy) ? 0 : Math.sign(tdy)
-        const nx = enemy.position.x + mx
-        const ny = enemy.position.y + my
 
-        const tile = this.state.map[ny]?.[nx]
-        const isWalkable = tile === 'floor' || tile === 'trap'
-        const isPlayerPos = nx === player.position.x && ny === player.position.y
-        const occupied = enemies.some(e => e !== enemy && e.position.x === nx && e.position.y === ny)
+        // まず斜め移動を試みる（コーナーカット防止）
+        let moved = false
+        if (tdx !== 0 && tdy !== 0) {
+          const diagX = enemy.position.x + Math.sign(tdx)
+          const diagY = enemy.position.y + Math.sign(tdy)
+          const diagTile = this.state.map[diagY]?.[diagX]
+          const hTile    = this.state.map[enemy.position.y]?.[enemy.position.x + Math.sign(tdx)]
+          const vTile    = this.state.map[enemy.position.y + Math.sign(tdy)]?.[enemy.position.x]
+          const diagWalkable  = diagTile === 'floor' || diagTile === 'trap'
+          const noCorner      = (hTile === 'floor' || hTile === 'trap') && (vTile === 'floor' || vTile === 'trap')
+          const diagNotPlayer = !(diagX === player.position.x && diagY === player.position.y)
+          const diagFree      = !enemies.some(e => e !== enemy && e.position.x === diagX && e.position.y === diagY)
+          if (diagWalkable && noCorner && diagNotPlayer && diagFree) {
+            enemy.position.x = diagX
+            enemy.position.y = diagY
+            moved = true
+          }
+        }
 
-        if (isWalkable && !isPlayerPos && !occupied) {
-          enemy.position.x = nx
-          enemy.position.y = ny
+        // 斜め移動できなかった場合は単軸移動
+        if (!moved) {
+          const mx = Math.abs(tdx) >= Math.abs(tdy) ? Math.sign(tdx) : 0
+          const my = Math.abs(tdx) >= Math.abs(tdy) ? 0 : Math.sign(tdy)
+          const nx = enemy.position.x + mx
+          const ny = enemy.position.y + my
+
+          const tile = this.state.map[ny]?.[nx]
+          const isWalkable = tile === 'floor' || tile === 'trap'
+          const isPlayerPos = nx === player.position.x && ny === player.position.y
+          const occupied = enemies.some(e => e !== enemy && e.position.x === nx && e.position.y === ny)
+
+          if (isWalkable && !isPlayerPos && !occupied) {
+            enemy.position.x = nx
+            enemy.position.y = ny
+          }
         }
       }
     }
@@ -1549,18 +1593,30 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 全8方向をベースアニメーション（down/up/right）とflipXにマッピング */
+  private getAnimBaseDir(): { anim: 'down' | 'up' | 'right'; flipX: boolean; idleKey: string } {
+    switch (this.playerDir) {
+      case 'up':         return { anim: 'up',    flipX: false, idleKey: 'attack_up_1'    }
+      case 'down':       return { anim: 'down',  flipX: false, idleKey: 'attack_down_1'  }
+      case 'right':      return { anim: 'right', flipX: false, idleKey: 'attack_right_1' }
+      case 'left':       return { anim: 'right', flipX: true,  idleKey: 'attack_right_1' }
+      case 'up-right':   return { anim: 'right', flipX: false, idleKey: 'attack_right_1' }
+      case 'up-left':    return { anim: 'right', flipX: true,  idleKey: 'attack_right_1' }
+      case 'down-right': return { anim: 'right', flipX: false, idleKey: 'attack_right_1' }
+      case 'down-left':  return { anim: 'right', flipX: true,  idleKey: 'attack_right_1' }
+    }
+  }
+
   private playWalkAnim() {
     if (!this.hasPlayerAnims || this.isPlayerAttacking) return
     const sprite = this.playerGraphic
     if (!(sprite instanceof Phaser.GameObjects.Sprite)) return
-
-    sprite.setFlipX(this.playerDir === 'left')
-    sprite.play(`walk_${this.playerDir}`, true)
-
+    const { anim, flipX, idleKey } = this.getAnimBaseDir()
+    sprite.setFlipX(flipX)
+    sprite.play(`walk_${anim}`, true)
     this.time.delayedCall(450, () => {
       if (this.isPlayerAttacking || !sprite.active) return
       sprite.stop()
-      const idleKey = this.playerDir === 'left' ? 'attack_right_1' : `attack_${this.playerDir}_1`
       sprite.setTexture(idleKey)
     })
   }
@@ -1569,15 +1625,14 @@ export class GameScene extends Phaser.Scene {
     if (!this.hasPlayerAnims) return
     const sprite = this.playerGraphic
     if (!(sprite instanceof Phaser.GameObjects.Sprite)) return
-
+    const { anim, flipX, idleKey } = this.getAnimBaseDir()
     sprite.off('animationcomplete')
     this.isPlayerAttacking = true
-    sprite.setFlipX(this.playerDir === 'left')
-    sprite.play(`attack_${this.playerDir}`, true)
+    sprite.setFlipX(flipX)
+    sprite.play(`attack_${anim}`, true)
     sprite.once('animationcomplete', () => {
       this.isPlayerAttacking = false
       if (!sprite.active) return
-      const idleKey = this.playerDir === 'left' ? 'attack_right_1' : `attack_${this.playerDir}_1`
       sprite.setTexture(idleKey)
     })
   }
@@ -1771,11 +1826,11 @@ export class GameScene extends Phaser.Scene {
     // ── プレイヤー描画 ──
     if (!this.playerGraphic) {
       if (this.hasPlayerAnims) {
-        const initKey = `attack_${this.playerDir === 'left' ? 'right' : this.playerDir}_1`
-        const sprite = this.add.sprite(0, 0, initKey)
+        const { idleKey, flipX } = this.getAnimBaseDir()
+        const sprite = this.add.sprite(0, 0, idleKey)
           .setDisplaySize(rts * 1.25, rts * 1.38)
           .setDepth(6)
-        if (this.playerDir === 'left') sprite.setFlipX(true)
+        if (flipX) sprite.setFlipX(true)
         this.playerGraphic = sprite
       } else {
         this.playerGraphic = this.add.rectangle(0, 0, rts - 2, rts - 2, 0x44ff44).setDepth(6)

@@ -72,9 +72,16 @@ export function VirtualJoystick() {
 
       let dir: string | null = null
       if (dist >= DEAD_ZONE) {
-        dir = Math.abs(dx) >= Math.abs(dy)
-          ? (dx > 0 ? 'ArrowRight' : 'ArrowLeft')
-          : (dy > 0 ? 'ArrowDown'  : 'ArrowUp')
+        const ang = Math.atan2(dy, dx)
+        const PI  = Math.PI
+        if      (ang >= -PI/8    && ang <  PI/8)    dir = 'ArrowRight'
+        else if (ang >= PI/8     && ang <  3*PI/8)  dir = 'DiagDR'
+        else if (ang >= 3*PI/8   && ang <  5*PI/8)  dir = 'ArrowDown'
+        else if (ang >= 5*PI/8   && ang <  7*PI/8)  dir = 'DiagDL'
+        else if (ang >= 7*PI/8   || ang <  -7*PI/8) dir = 'ArrowLeft'
+        else if (ang >= -7*PI/8  && ang <  -5*PI/8) dir = 'DiagUL'
+        else if (ang >= -5*PI/8  && ang <  -3*PI/8) dir = 'ArrowUp'
+        else                                         dir = 'DiagUR'
       }
 
       if (dir !== dirRef.current) {
