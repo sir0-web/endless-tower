@@ -1,15 +1,11 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-interface ToastState {
-  message: string
-}
+interface ToastState   { message: string }
+interface ConfirmState { message: string; onYes: () => void; onNo: () => void }
 
-interface ConfirmState {
-  message: string
-  onYes: () => void
-  onNo: () => void
-}
+function lockScroll()   { document.body.style.overflow = 'hidden' }
+function unlockScroll() { document.body.style.overflow = '' }
 
 export function GameToast() {
   const [toast,   setToast]   = useState<ToastState | null>(null)
@@ -21,21 +17,27 @@ export function GameToast() {
       setTimeout(() => setToast(null), 2800)
     }
     window.showResumeConfirm = (onYes, onNo) => {
+      // スクロール位置をリセットしてfixedが確実に画面中央に来るようにする
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+      lockScroll()
       setConfirm({ message: '前回の中断データがあります。\n中断データから再開しますか？', onYes, onNo })
     }
     return () => {
       window.showGameToast     = undefined
       window.showResumeConfirm = undefined
+      unlockScroll()
     }
   }, [])
 
-  // transform: scale() の影響を受けないよう document.body 直下にポータル描画
+  const handleYes = () => { unlockScroll(); confirm?.onYes(); setConfirm(null) }
+  const handleNo  = () => { unlockScroll(); confirm?.onNo();  setConfirm(null) }
+
   return createPortal(
     <>
       {toast && (
         <div className="g-toast">
-          {toast.message.split('\n').map((line, i) => (
-            <span key={i}>{line}{i < toast.message.split('\n').length - 1 && <br />}</span>
+          {toast.message.split('\n').map((line, i, arr) => (
+            <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
           ))}
         </div>
       )}
@@ -44,19 +46,13 @@ export function GameToast() {
         <div className="g-confirm-backdrop">
           <div className="g-confirm">
             <p className="g-confirm-msg">
-              {confirm.message.split('\n').map((line, i) => (
-                <span key={i}>{line}{i < confirm.message.split('\n').length - 1 && <br />}</span>
+              {confirm.message.split('\n').map((line, i, arr) => (
+                <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
               ))}
             </p>
             <div className="g-confirm-btns">
-              <button
-                className="g-confirm-yes"
-                onClick={() => { confirm.onYes(); setConfirm(null) }}
-              >はい</button>
-              <button
-                className="g-confirm-no"
-                onClick={() => { confirm.onNo(); setConfirm(null) }}
-              >いいえ</button>
+              <button className="g-confirm-yes" onClick={handleYes}>はい</button>
+              <button className="g-confirm-no"  onClick={handleNo}>いいえ</button>
             </div>
           </div>
         </div>

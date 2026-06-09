@@ -253,16 +253,13 @@ html, body {
 
 .g-confirm-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100dvh;
-  background: rgba(0, 0, 0, 0.62);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  padding: 20px;
+  padding: 24px;
   box-sizing: border-box;
 }
 
@@ -273,7 +270,7 @@ html, body {
   padding: 28px 30px 22px;
   width: 100%;
   max-width: 460px;
-  max-height: calc(100dvh - 40px);
+  max-height: 80vh;
   overflow-y: auto;
   text-align: center;
   animation: g-toast-in 0.22s ease both;
