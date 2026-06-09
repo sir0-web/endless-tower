@@ -348,7 +348,7 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
-    height: 75vw;
+    height: 100vw;
     overflow: hidden;
   }
 
@@ -1203,7 +1203,7 @@ html, body {
 /* スマホ：スロット当選演出をUIパネル（リール上）に限定表示 */
 @media (max-width: 767px) {
   .sa-root {
-    top: 120vw;
+    top: 100vw;
     bottom: 0;
     left: 0;
     right: 0;
@@ -1229,6 +1229,49 @@ html, body {
     min-height: 36px;
     min-width: 44px;
     padding: 6px 8px;
+  }
+}
+
+/* スマホ：スロットマシーン縮小（マップ拡大の代償） */
+@media (max-width: 767px) {
+  .bonus-video-area {
+    height: 100px;
+  }
+
+  .slot-machine {
+    padding: 4px 8px;
+  }
+
+  .slot-label {
+    font-size: 14px;
+    padding: 4px 8px;
+    margin: -4px -8px 4px;
+  }
+
+  .slot-reel {
+    width: 72px;
+    height: 72px;
+  }
+
+  .reel-img {
+    width: 56px;
+    height: 56px;
+  }
+
+  .scm-seg {
+    width: 16px;
+    height: 6px;
+  }
+
+  .scm-count {
+    font-size: 9px;
+  }
+
+  .slot-stock-badge {
+    font-size: 14px;
+    padding: 3px 7px;
+    bottom: 6px;
+    right: 8px;
   }
 }
 
