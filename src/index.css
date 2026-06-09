@@ -252,8 +252,7 @@ html, body {
 }
 
 .g-confirm-backdrop {
-  position: fixed;
-  inset: 0;
+  /* position/top/left/width/height は JS インラインで設定（iOS Safari 対策） */
   background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
