@@ -12,6 +12,7 @@ import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal } from './components/EventFacilityModals'
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { GameToast } from './components/GameToast'
+import { EventMsgBar } from './components/EventMsgBar'
 
 const BASE_W = 1280
 const BASE_H = 880   // 全体の縦サイズ：少し伸ばし
@@ -87,6 +88,7 @@ function App() {
           <div className="game-canvas-area" ref={canvasAreaRef}>
             <ScrollLockButton />
           </div>
+          <EventMsgBar />
         </div>
         <div className="ui-pane">
           <UIPanel />

@@ -2136,3 +2136,46 @@ html, body {
   60%  { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* ── イベントメッセージバー（スマホ版：マップ枠下） ── */
+.event-msg-bar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .event-msg-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: 58px;
+    padding: 4px 10px;
+    background: rgba(0, 0, 8, 0.90);
+    border-top: 1px solid #1e1e38;
+    overflow: hidden;
+  }
+
+  .emb-msg {
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.4;
+    text-shadow: 1px 1px 3px #000, -1px -1px 3px #000;
+    animation: emb-in 0.4s ease both;
+  }
+
+  .emb-fading .emb-msg {
+    animation: emb-out 0.6s ease both;
+  }
+}
+
+@keyframes emb-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes emb-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-4px); }
+}

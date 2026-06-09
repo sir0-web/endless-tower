@@ -336,6 +336,12 @@ export class GameScene extends Phaser.Scene {
     const color = floorType === 'chaos' ? '#ff6600'
       : floorType === 'lucky' ? '#aaddff'
       : '#ff4444'
+
+    if (window.innerWidth < 768) {
+      window.showEventMessage?.(parts.join('\n'), color)
+      return
+    }
+
     this.telopText.setColor(color)
     this.telopText.setText(parts.join('\n'))
     this.telopText.setAlpha(1)
@@ -620,19 +626,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showLevelUpNotif(prevLevel: number, newLevel: number) {
+    if (window.innerWidth < 768) {
+      window.showEventMessage?.(`⚔レベルアップ⚔\nLv${prevLevel}→Lv${newLevel} になりました`, '#ffdd44')
+      return
+    }
+
     const W = this.scale.width
     const H = this.scale.height
 
-    const isMobile = window.innerWidth < 768
     const main = this.add.text(W / 2, H / 2 - 20, '⚔レベルアップ⚔', {
-      fontSize: isMobile ? '60px' : '30px', color: '#ffdd44',
+      fontSize: '30px', color: '#ffdd44',
       stroke: '#000000', strokeThickness: 5,
       backgroundColor: '#00000099',
       padding: { x: 16, y: 8 },
     }).setOrigin(0.5).setDepth(65)
 
     const sub = this.add.text(W / 2, H / 2 + 24, `Lv${prevLevel}→Lv${newLevel} になりました`, {
-      fontSize: isMobile ? '36px' : '18px', color: '#ffffff',
+      fontSize: '18px', color: '#ffffff',
       stroke: '#000000', strokeThickness: 4,
       backgroundColor: '#00000099',
       padding: { x: 12, y: 6 },

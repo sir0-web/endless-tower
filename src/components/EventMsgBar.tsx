@@ -1,0 +1,36 @@
+import { useEffect, useRef, useState } from 'react'
+
+interface MsgState { text: string; color: string; key: number }
+
+export function EventMsgBar() {
+  const [msg, setMsg] = useState<MsgState | null>(null)
+  const [fading, setFading] = useState(false)
+  const t1 = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const t2 = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    window.showEventMessage = (text, color = '#ffdd44') => {
+      if (t1.current) clearTimeout(t1.current)
+      if (t2.current) clearTimeout(t2.current)
+      setFading(false)
+      setMsg({ text, color, key: Date.now() })
+      t1.current = setTimeout(() => setFading(true), 2800)
+      t2.current = setTimeout(() => setMsg(null), 3500)
+    }
+    return () => {
+      window.showEventMessage = undefined
+      if (t1.current) clearTimeout(t1.current)
+      if (t2.current) clearTimeout(t2.current)
+    }
+  }, [])
+
+  return (
+    <div className={`event-msg-bar${fading ? ' emb-fading' : ''}`}>
+      {msg && msg.text.split('\n').map((line, i) => (
+        <span key={`${msg.key}-${i}`} className="emb-msg" style={{ color: msg.color }}>
+          {line}
+        </span>
+      ))}
+    </div>
+  )
+}

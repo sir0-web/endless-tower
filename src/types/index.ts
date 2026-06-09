@@ -162,6 +162,7 @@ declare global {
     // ── グローバルUI ──
     showGameToast?: (message: string) => void
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
+    showEventMessage?: (message: string, color?: string) => void
     // ── イベントフロア施設 ──
     openFacility?: (kind: FacilityKind) => void
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
