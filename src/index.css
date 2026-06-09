@@ -348,7 +348,7 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
-    height: 100vw;
+    height: 90vw;
     overflow: hidden;
   }
 
@@ -1254,7 +1254,7 @@ html, body {
 /* スマホ：スロット当選演出をUIパネル（リール上）に限定表示 */
 @media (max-width: 767px) {
   .sa-root {
-    top: 100vw;
+    top: 90vw;
     bottom: 0;
     left: 0;
     right: 0;
