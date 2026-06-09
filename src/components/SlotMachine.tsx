@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const SYMBOLS = 7
-const CREDIT_MAX = 10
+const SYMBOLS    = 7
+const CREDIT_MAX = 3
+const STOCK_MAX  = 10
 function rand() { return Math.floor(Math.random() * SYMBOLS) + 1 }
 type Triplet = [number, number, number]
 
@@ -138,18 +139,20 @@ export function SlotMachine() {
   // spinRef を常に最新の executeSpin に同期（自己参照のため）
   useEffect(() => { spinRef.current = executeSpin }, [executeSpin])
 
-  // スロットを1回回す（回転中ならストックに積む）
+  // スロットを1回回す（回転中ならストックに積む、上限STOCK_MAX）
   const triggerSpin = useCallback(() => {
     if (busyRef.current) {
-      stockRef.current++
-      setSlotStock(stockRef.current)
+      if (stockRef.current < STOCK_MAX) {
+        stockRef.current++
+        setSlotStock(stockRef.current)
+      }
     } else {
       executeSpin()
     }
   }, [executeSpin])
 
   // 外部トリガー：敵撃破時に呼ばれる（モンスターコイン1個獲得→クレジットメーター+1）
-  // メーターが10たまったらリセットしてスロットを1回回す
+  // メーターが3たまったらリセットしてスロットを1回回す（ストック上限10）
   const gainCoin = useCallback(() => {
     creditsRef.current++
     if (creditsRef.current >= CREDIT_MAX) {
