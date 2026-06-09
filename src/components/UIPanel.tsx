@@ -115,8 +115,37 @@ export function UIPanel() {
     ? (selEquip.hpBonus ?? 0) - (selEquip.equipSlot ? (gs.equipment[selEquip.equipSlot]?.hpBonus ?? 0) : 0)
     : 0
 
+  const hpPct    = gs.maxHp      > 0 ? Math.max(0, Math.round((gs.hp      / gs.maxHp)      * 100)) : 0
+  const staPct   = gs.maxStamina > 0 ? Math.round((gs.stamina / gs.maxStamina) * 100) : 0
+  const expNeeded = gs.level * 30 + 10
+  const expPct   = Math.min(100, Math.round((gs.exp / expNeeded) * 100))
+
   return (
     <div className="ui-panel">
+
+      {/* ── 最上段：フロア・Lv・HP/STA/EXP バー ── */}
+      <div className="pc-status-top">
+        <div className="pc-status-badges">
+          <span className="badge floor-badge">B{gs.floor}F</span>
+          <span className="badge level-badge">Lv {gs.level}</span>
+          {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
+        </div>
+        <div className="bar-il-row">
+          <span className="bar-il-lbl">HP</span>
+          <div className="bar-il-track"><div className="bar-fill" style={{ width: `${hpPct}%`, backgroundColor: '#22c55e' }} /></div>
+          <span className="bar-il-num">{Math.max(0, gs.hp)}/{gs.maxHp}</span>
+        </div>
+        <div className="bar-il-row">
+          <span className="bar-il-lbl">STA</span>
+          <div className="bar-il-track"><div className="bar-fill" style={{ width: `${staPct}%`, backgroundColor: '#3b82f6' }} /></div>
+          <span className="bar-il-num">{gs.stamina}/{gs.maxStamina}</span>
+        </div>
+        <div className="bar-il-row">
+          <span className="bar-il-lbl">EXP</span>
+          <div className="bar-il-track"><div className="bar-fill" style={{ width: `${expPct}%`, backgroundColor: '#e0e0e0' }} /></div>
+          <span className="bar-il-num">{gs.exp}/{expNeeded}</span>
+        </div>
+      </div>
 
       {/* ── スロットマシーン（敵撃破でオートスピン） ── */}
       <SlotMachine />

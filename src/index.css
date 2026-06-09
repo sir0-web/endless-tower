@@ -406,6 +406,21 @@ html, body {
   overflow: hidden;
 }
 
+/* ── PC版ステータス上部バー（HP/STA/EXP） ── */
+.pc-status-top {
+  flex-shrink: 0;
+  padding: 6px 10px 4px;
+  border-bottom: 1px solid #1e1e38;
+  background: rgba(5, 5, 20, 0.6);
+}
+
+.pc-status-badges {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 5px;
+  align-items: center;
+}
+
 /* ── フロア・レベルバッジを圧縮 ── */
 .status-section .floor-badge,
 .status-section .level-badge {
