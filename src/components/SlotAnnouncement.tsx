@@ -153,10 +153,21 @@ export function SlotAnnouncement() {
   useEffect(() => {
     window.showSlotAnnouncement = (result: string, sub?: string) => {
       if (!(result in CONFIGS)) return
+      const typedResult = result as SlotResult
+      const cfg = CONFIGS[typedResult]
+
+      // スマホ且つシンプルな演出（overlay/flash/sparklesなし）→ EventMsgBar へ
+      if (window.innerWidth < 768 && !cfg.overlay && !cfg.flash && cfg.sparkles === 0) {
+        const subText = sub ?? cfg.sub
+        const msg = subText ? `${cfg.text}\n${subText}` : cfg.text
+        window.showEventMessage?.(msg, cfg.color)
+        return
+      }
+
       clearAll()
       setHiding(false)
-      setActive({ result: result as SlotResult, seq: Date.now(), subOverride: sub })
-      const holdMs = CONFIGS[result as SlotResult].holdMs
+      setActive({ result: typedResult, seq: Date.now(), subOverride: sub })
+      const holdMs = cfg.holdMs
       addTimer(() => setHiding(true), holdMs)
       addTimer(() => { setActive(null); setHiding(false) }, holdMs + 500)
     }
