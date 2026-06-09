@@ -348,11 +348,10 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
-    height: 84vw;
+    height: calc(84vw + 108px);
     overflow: hidden;
   }
 
-  /* スマホ：ステータスバーをキャンバス上にオーバーレイ（flexフローから外してマップを最大化） */
   .mob-status-bar {
     display: block;
     position: absolute;
@@ -361,10 +360,10 @@ html, body {
     z-index: 50;
   }
 
-  /* スマホ：イベントメッセージバー（46px）の裏にキャンバスが入り込まないよう高さを制限 */
   .game-canvas-area {
     flex: none;
-    height: calc(100% - 46px);
+    margin-top: 108px;
+    height: calc(100% - 108px - 46px);
   }
 
   .ui-pane {

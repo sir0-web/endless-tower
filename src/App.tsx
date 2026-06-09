@@ -63,7 +63,11 @@ function App() {
     // 初期レイアウト確定後にスケールを再計算し、コンテナとのズレ（隙間）を解消する
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
 
-    return () => { gameRef.current?.destroy(true); gameRef.current = null }
+    // game-canvas-area のサイズが変わったとき（ステータスバー出現/消滅など）スケールを再計算
+    const obs = new ResizeObserver(() => { gameRef.current?.scale.refresh() })
+    if (canvasAreaRef.current) obs.observe(canvasAreaRef.current)
+
+    return () => { obs.disconnect(); gameRef.current?.destroy(true); gameRef.current = null }
   }, [])
 
   // スマホ: 通常レスポンシブ / PC: 固定サイズ＋スケール縮小
