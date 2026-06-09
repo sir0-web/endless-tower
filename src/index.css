@@ -348,7 +348,7 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
-    height: 56vw;
+    height: 84vw;
     overflow: hidden;
   }
 
