@@ -1,4 +1,4 @@
-function ordinalSuffix(n: number): string {
+export function ordinalSuffix(n: number): string {
   const mod100 = n % 100
   const mod10  = n % 10
   if (mod100 >= 11 && mod100 <= 13) return 'th'
