@@ -132,9 +132,21 @@ export class GameOverScene extends Phaser.Scene {
       fontSize: fs(26), color: '#00ff88', fontStyle: 'bold',
     }).setOrigin(0.5)
 
+    // 名前未入力警告テキスト（一時表示用）
+    const noNameMsg = this.add.text(cx, submitY - fsPx(26) - 8, '先に名前を入力してください', {
+      fontSize: fs(16), color: '#ff4444',
+      backgroundColor: '#330000', padding: { x: 10, y: 4 },
+    }).setOrigin(0.5).setAlpha(0).setDepth(20)
+
     submitBtn.setInteractive({ useHandCursor: true })
     submitBtn.on('pointerdown', () => {
-      if (this.playerName.length > 0 && !this.submitted) this.registerRanking()
+      if (this.submitted) return
+      if (this.playerName.length > 0) {
+        this.registerRanking()
+      } else {
+        noNameMsg.setAlpha(1)
+        this.time.delayedCall(2000, () => noNameMsg.setAlpha(0))
+      }
     })
     submitBtn.on('pointerover', () => {
       submitBtn.setColor('#ffffff')
