@@ -1630,7 +1630,7 @@ export class GameScene extends Phaser.Scene {
         if (this.failedTextures.has(key) || !this.textures.exists(key)) return null
 
         return this.add.image(0, 0, key)
-          .setDisplaySize(rts + 2, rts + 2)
+          .setDisplaySize(rts + 6, rts + 6)
           .setDepth(-1)
           .setVisible(false)
       })
