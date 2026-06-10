@@ -22,7 +22,9 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
   const [bouncing,  setBouncing]  = useState<[boolean,boolean,boolean]>([false,false,false])
   const [glowing,   setGlowing]   = useState(false)
   const [slotStock, setSlotStock] = useState(0)
-  const [credits,   setCredits]   = useState(0)   // モンスターコイン → クレジットメーター（10で1回転）
+  const [credits,   setCredits]   = useState(0)
+  const [spinMode,  setSpinMode]  = useState<'auto' | 'manual'>('auto')
+  const [canStop,   setCanStop]   = useState<[boolean,boolean,boolean]>([false,false,false])
 
   const busyRef         = useRef(false)
   const stockRef        = useRef(0)
@@ -33,8 +35,11 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
   const safetyTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const finalsRef       = useRef<Triplet>([1, 1, 1])
   const displayRef      = useRef<Triplet>([1, 1, 1])
+  const spinModeRef     = useRef<'auto' | 'manual'>('auto')
+  const canStopRef      = useRef<[boolean,boolean,boolean]>([false,false,false])
+  const reelStoppedRef  = useRef<[boolean,boolean,boolean]>([false,false,false])
+  const stoppedCountRef = useRef(0)
 
-  // ── 全タイマーを安全にクリア ──
   const clearAllTimers = useCallback(() => {
     ivRef.current.forEach((iv, i) => {
       if (iv !== null) { clearInterval(iv); ivRef.current[i] = null }
@@ -47,7 +52,6 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     }
   }, [])
 
-  // タイマーを登録してリストで管理
   const addTimer = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(() => {
       timerRefs.current = timerRefs.current.filter(x => x !== t)
@@ -57,16 +61,21 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     return t
   }, [])
 
-  // 異常検知：強制リセット
   const forceReset = useCallback(() => {
     clearAllTimers()
     busyRef.current = false
+    stoppedCountRef.current = 0
+    reelStoppedRef.current = [false, false, false]
+    canStopRef.current = [false, false, false]
+    setCanStop([false, false, false])
     setSpinning([false, false, false])
     setBouncing([false, false, false])
     setDisplay([...displayRef.current] as Triplet)
   }, [clearAllTimers])
 
+  // リール停止（重複ガード付き、全停止で結果評価）
   const stopReel = useCallback((idx: number) => {
+    if (reelStoppedRef.current[idx]) return
     if (ivRef.current[idx] !== null) {
       clearInterval(ivRef.current[idx]!)
       ivRef.current[idx] = null
@@ -77,9 +86,18 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     setSpinning(s => { const n = [...s] as typeof s; n[idx] = false; return n })
     setBouncing(s => { const n = [...s] as typeof s; n[idx] = true;  return n })
     addTimer(() => setBouncing(s => { const n = [...s] as typeof s; n[idx] = false; return n }), 400)
+
+    reelStoppedRef.current[idx] = true
+    stoppedCountRef.current++
+    if (stoppedCountRef.current === 3) {
+      addTimer(() => {
+        const result = evaluate(finalsRef.current)
+        if (['777', 'triple', 'skulls'].includes(result)) setGlowing(true)
+        window.playBonusVideo?.(result)
+      }, 500)
+    }
   }, [addTimer])
 
-  // 動画＋効果適用が完全に終わった後に BonusVideo から呼ばれる
   const processAfterEffect = useCallback(() => {
     busyRef.current = false
     if (safetyTimerRef.current !== null) {
@@ -99,21 +117,24 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
   }, [processAfterEffect])
 
   const executeSpin = useCallback(() => {
-    // 2重起動ガード
     if (busyRef.current) return
     busyRef.current = true
     setGlowing(false)
 
-    // 安全タイマー：動画再生時間を考慮して長めに設定
     if (safetyTimerRef.current !== null) clearTimeout(safetyTimerRef.current)
     safetyTimerRef.current = setTimeout(() => {
       if (busyRef.current) { forceReset() }
     }, 30000)
 
+    // 停止状態をリセット
+    stoppedCountRef.current = 0
+    reelStoppedRef.current = [false, false, false]
+    canStopRef.current = [false, false, false]
+    setCanStop([false, false, false])
+
     finalsRef.current = [rand(), rand(), rand()]
     setSpinning([true, true, true])
 
-    // リール回転開始（既存インターバルをクリアしてから）
     ;[0, 1, 2].forEach(i => {
       if (ivRef.current[i] !== null) { clearInterval(ivRef.current[i]!); ivRef.current[i] = null }
       ivRef.current[i] = setInterval(() => {
@@ -122,24 +143,20 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
       }, 80)
     })
 
-    // リールを順番に停止
-    addTimer(() => stopReel(0), 600)
-    addTimer(() => stopReel(1), 1200)
-    addTimer(() => {
-      stopReel(2)
-      addTimer(() => {
-        const result = evaluate(finalsRef.current)
-        if (['777', 'triple', 'skulls'].includes(result)) setGlowing(true)
-        // busyRef は動画終了→効果適用後に BonusVideo → onSlotEffectApplied でリセットされる
-        window.playBonusVideo?.(result)
-      }, 500)
-    }, 1800)
+    // 各リールの最短停止可能時間（マニュアルモード用・オートでも共通）
+    addTimer(() => { canStopRef.current[0] = true; setCanStop(s => { const n = [...s] as typeof s; n[0] = true; return n }) }, 400)
+    addTimer(() => { canStopRef.current[1] = true; setCanStop(s => { const n = [...s] as typeof s; n[1] = true; return n }) }, 800)
+    addTimer(() => { canStopRef.current[2] = true; setCanStop(s => { const n = [...s] as typeof s; n[2] = true; return n }) }, 1200)
+
+    if (spinModeRef.current === 'auto') {
+      addTimer(() => stopReel(0), 600)
+      addTimer(() => stopReel(1), 1200)
+      addTimer(() => stopReel(2), 1800)
+    }
   }, [addTimer, stopReel, forceReset])
 
-  // spinRef を常に最新の executeSpin に同期（自己参照のため）
   useEffect(() => { spinRef.current = executeSpin }, [executeSpin])
 
-  // スロットを1回回す（回転中ならストックに積む、上限STOCK_MAX）
   const triggerSpin = useCallback(() => {
     if (busyRef.current) {
       if (stockRef.current < STOCK_MAX) {
@@ -151,8 +168,6 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     }
   }, [executeSpin])
 
-  // 外部トリガー：敵撃破時に呼ばれる（モンスターコイン1個獲得→クレジットメーター+1）
-  // メーターが3たまったらリセットしてスロットを1回回す（ストック上限10）
   const gainCoin = useCallback(() => {
     creditsRef.current++
     if (creditsRef.current >= CREDIT_MAX) {
@@ -167,15 +182,18 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     return () => { window.onEnemyKilled = undefined }
   }, [gainCoin])
 
-  // ゲームシーン切り替え時に回転状態・ストックをリセット
   useEffect(() => {
     const reset = () => {
       clearAllTimers()
-      busyRef.current  = false
-      stockRef.current = 0
+      busyRef.current    = false
+      stockRef.current   = 0
       creditsRef.current = 0
+      stoppedCountRef.current = 0
+      reelStoppedRef.current  = [false, false, false]
+      canStopRef.current      = [false, false, false]
       setSlotStock(0)
       setCredits(0)
+      setCanStop([false, false, false])
       setSpinning([false, false, false])
       setBouncing([false, false, false])
       setGlowing(false)
@@ -184,17 +202,36 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     return () => window.removeEventListener('game-scene-changed', reset)
   }, [clearAllTimers])
 
-  // アンマウント時に全タイマーをクリア
   useEffect(() => {
     return () => {
       clearAllTimers()
-      busyRef.current = false
+      busyRef.current  = false
       stockRef.current = 0
     }
   }, [clearAllTimers])
 
+  const toggleMode = useCallback(() => {
+    setSpinMode(prev => {
+      const next = prev === 'auto' ? 'manual' : 'auto'
+      spinModeRef.current = next
+      return next
+    })
+  }, [])
+
+  const handleManualStop = useCallback((idx: number) => {
+    if (spinModeRef.current !== 'manual') return
+    if (!canStopRef.current[idx]) return
+    stopReel(idx)
+  }, [stopReel])
+
   return (
-    <div className={`slot-cabinet${glowing ? ' slot-glowing' : ''}`}>
+    <div className={`slot-cabinet${glowing ? ' slot-glowing' : ''}${spinMode === 'manual' ? ' sc-mode-manual' : ''}`}>
+
+      {/* AUTO / MANUAL 切替 */}
+      <button className="sc-mode-btn" onClick={toggleMode}>
+        {spinMode === 'auto' ? 'AUTO' : 'MANUAL'}
+      </button>
+
       {/* リール3本 */}
       <div className="sc-reels">
         {([0, 1, 2] as const).map(i => (
@@ -216,12 +253,30 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
         ))}
       </div>
 
+      {/* ストップボタン row（リール直下） */}
+      <div className="sc-stop-row">
+        {([0, 1, 2] as const).map(i => (
+          <button
+            key={i}
+            className={`sc-stop-btn${canStop[i] && spinning[i] && spinMode === 'manual' ? ' sc-stop-active' : ''}`}
+            onClick={() => handleManualStop(i)}
+          >
+            STOP
+          </button>
+        ))}
+      </div>
+
       {/* LCD（BonusVideo） */}
       <div className="sc-lcd">
         {children}
       </div>
 
-      {/* クレジットメーター */}
+      {/* ストックバッジ（クレジット表示の上） */}
+      {slotStock > 0 && (
+        <div className="sc-stock">×{slotStock}</div>
+      )}
+
+      {/* クレジットメーター（筐体右下） */}
       <div className="sc-credit">
         <div className="scm-bar">
           {Array.from({ length: CREDIT_MAX }).map((_, i) => (
@@ -230,11 +285,6 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
         </div>
         <p className="scm-count">{credits}/{CREDIT_MAX}</p>
       </div>
-
-      {/* ストックバッジ */}
-      {slotStock > 0 && (
-        <div className="sc-stock">×{slotStock}</div>
-      )}
     </div>
   )
 }

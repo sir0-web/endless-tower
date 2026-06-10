@@ -939,12 +939,69 @@ html, body {
   opacity: 1;
 }
 
-/* ── クレジットメーター（リールとLCDの隙間: top≈51%） ── */
+/* ── ストップボタン row（リール直下の隙間） ── */
+.sc-stop-row {
+  position: absolute;
+  top: 51.5%;
+  left: 11.72%;
+  width: 76.17%;
+  height: 5%;
+  display: flex;
+  gap: 7.69%;
+  align-items: center;
+}
+
+.sc-stop-btn {
+  flex: 1;
+  height: 100%;
+  background: #0e0820;
+  border: 1px solid #3a1870;
+  border-radius: 3px;
+  color: #443366;
+  font-size: clamp(7px, 1vw, 10px);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: default;
+  transition: background 0.1s, color 0.1s, border-color 0.1s, box-shadow 0.1s;
+}
+
+.sc-stop-btn.sc-stop-active {
+  background: #bb2200;
+  border-color: #ff4400;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(255, 80, 0, 0.5);
+}
+
+/* ── AUTO/MANUAL 切替ボタン ── */
+.sc-mode-btn {
+  position: absolute;
+  top: 4%;
+  right: 4%;
+  background: #0e0820;
+  border: 1px solid #3a1870;
+  border-radius: 3px;
+  color: #9966cc;
+  font-size: clamp(7px, 1vw, 10px);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  z-index: 1;
+}
+
+.sc-mode-manual .sc-mode-btn {
+  background: #2e0010;
+  border-color: #cc3366;
+  color: #ff66aa;
+}
+
+/* ── クレジットメーター（筐体右下） ── */
 .sc-credit {
   position: absolute;
-  top: 51%;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 1.5%;
+  right: 4%;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -984,11 +1041,11 @@ html, body {
   white-space: nowrap;
 }
 
-/* ── ストックバッジ（タイトル下の装飾エリアに配置） ── */
+/* ── ストックバッジ（クレジット表示の上） ── */
 .sc-stock {
   position: absolute;
-  top: 8%;
-  right: 6%;
+  bottom: 6%;
+  right: 4%;
   background: #1a0e00;
   color: #ffdd00;
   border: 2px solid #ffaa00;
