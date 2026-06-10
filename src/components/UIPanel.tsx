@@ -147,11 +147,10 @@ export function UIPanel() {
         </div>
       </div>
 
-      {/* ── スロットマシーン（敵撃破でオートスピン） ── */}
-      <SlotMachine />
-
-      {/* ボーナス動画エリア（2枚揃い以上で /assets/slot/bonus.mp4 を再生） */}
-      <BonusVideo />
+      {/* ── スロット筐体（背景画像 + リール + 液晶） ── */}
+      <SlotMachine>
+        <BonusVideo />
+      </SlotMachine>
 
       {/* ── 中段：ステータス（左50%）＋装備（右50%） ── */}
       <div className="stats-equip-row">

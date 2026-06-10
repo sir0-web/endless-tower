@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 
 const SYMBOLS    = 7
 const CREDIT_MAX = 3
@@ -16,7 +16,7 @@ function evaluate(reels: Triplet): string {
   return 'miss'
 }
 
-export function SlotMachine() {
+export function SlotMachine({ children }: { children?: ReactNode }) {
   const [display,   setDisplay]   = useState<Triplet>([1, 1, 1])
   const [spinning,  setSpinning]  = useState<[boolean,boolean,boolean]>([false,false,false])
   const [bouncing,  setBouncing]  = useState<[boolean,boolean,boolean]>([false,false,false])
@@ -194,40 +194,46 @@ export function SlotMachine() {
   }, [clearAllTimers])
 
   return (
-    <div className={`slot-machine ${glowing ? 'slot-glowing' : ''}`}>
-      <p className="slot-label">女神の加護</p>
-      <div className="slot-row">
-        <div className="slot-reels">
-          {([0, 1, 2] as const).map(i => (
-            <div
-              key={i}
-              className={[
-                'slot-reel',
-                spinning[i] ? 'reel-spinning' : '',
-                bouncing[i] ? 'reel-bouncing' : '',
-                glowing      ? 'reel-glow'     : '',
-              ].filter(Boolean).join(' ')}
-            >
-              <img
-                src={`/assets/slot/slot${display[i]}.png`}
-                alt={`slot${display[i]}`}
-                className="reel-img"
-              />
-            </div>
+    <div className={`slot-cabinet${glowing ? ' slot-glowing' : ''}`}>
+      {/* リール3本 */}
+      <div className="sc-reels">
+        {([0, 1, 2] as const).map(i => (
+          <div
+            key={i}
+            className={[
+              'slot-reel',
+              spinning[i] ? 'reel-spinning' : '',
+              bouncing[i] ? 'reel-bouncing' : '',
+              glowing      ? 'reel-glow'     : '',
+            ].filter(Boolean).join(' ')}
+          >
+            <img
+              src={`/assets/slot/slot${display[i]}.png`}
+              alt={`slot${display[i]}`}
+              className="reel-img"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* LCD（BonusVideo） */}
+      <div className="sc-lcd">
+        {children}
+      </div>
+
+      {/* クレジットメーター */}
+      <div className="sc-credit">
+        <div className="scm-bar">
+          {Array.from({ length: CREDIT_MAX }).map((_, i) => (
+            <div key={i} className={`scm-seg ${i < credits ? 'scm-filled' : ''}`} />
           ))}
         </div>
-        <div className="slot-credit-meter">
-          <p className="scm-label">CREDIT</p>
-          <div className="scm-bar">
-            {Array.from({ length: CREDIT_MAX }).map((_, i) => (
-              <div key={i} className={`scm-seg ${i < credits ? 'scm-filled' : ''}`} />
-            ))}
-          </div>
-          <p className="scm-count">{credits}/{CREDIT_MAX}</p>
-        </div>
+        <p className="scm-count">{credits}/{CREDIT_MAX}</p>
       </div>
+
+      {/* ストックバッジ */}
       {slotStock > 0 && (
-        <div className="slot-stock-badge">×{slotStock}</div>
+        <div className="sc-stock">×{slotStock}</div>
       )}
     </div>
   )

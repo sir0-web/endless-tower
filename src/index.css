@@ -850,145 +850,44 @@ html, body {
 
 .icr-empty { font-size: 10px; color: #444466; text-align: center; margin-top: 6px; }
 
-/* ── ボーナス動画エリア（スロット直下） ── */
-.bonus-video-area {
-  flex-shrink: 0;
-  height: 220px;
-  background: #000000;
-  overflow: hidden;
-  position: relative;  /* 2つの video を重ねるための基準 */
-}
-
-/* idle / bonus の2枚を absolute で重ねて表示切替 */
-.bv-video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.bv-video.bv-active {
-  opacity: 1;
-}
-
-/* ── スロットマシーン ── */
-.slot-machine {
-  flex-shrink: 0;
-  background: #07071a;
-  border-bottom: 1px solid #332200;
-  padding: 8px 10px;
-  text-align: center;
-  transition: box-shadow 0.3s;
+/* ── スロット筐体（slot-machine.png 背景、縦横比 1024/1536） ── */
+.slot-cabinet {
   position: relative;
-}
-
-/* ストック数バッジ（回転中に積まれた数） */
-.slot-stock-badge {
-  position: absolute;
-  bottom: 10px;
-  right: 12px;
-  background: #1a0e00;
-  color: #ffdd00;
-  border: 2px solid #ffaa00;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-  animation: blink 0.7s step-start infinite;
-  pointer-events: none;
+  width: 100%;
+  max-width: min(420px, calc((100vh - 280px) / 1.5));
+  aspect-ratio: 1024 / 1536;
+  margin: 0 auto;
+  flex-shrink: 0;
+  background: url('/assets/slot/slot-machine.png') center / 100% 100% no-repeat;
+  transition: box-shadow 0.3s;
 }
 
 .slot-glowing {
-  box-shadow: 0 0 16px rgba(255, 220, 0, 0.5);
+  box-shadow: 0 0 20px rgba(255, 220, 0, 0.6);
 }
 
-.slot-label {
-  font-size: 18px;
-  font-weight: 700;
-  color: #ffffff;
-  background: #000000;
-  letter-spacing: 0;
-  padding: 6px 10px;
-  margin: -8px -10px 8px;
-  display: block;
-  text-align: center;
-}
-
-.slot-row {
+/* ── リール3本（cabinet 内の絶対配置） ── */
+.sc-reels {
+  position: absolute;
+  top: 17.6%;
+  left: 11.72%;
+  width: 76.17%;
+  height: 14.6%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-}
-
-.slot-reels {
-  display: flex;
-  gap: 5px;
-  justify-content: center;
-}
-
-/* クレジットメーター（モンスターコイン10個でスロット1回転） */
-.slot-credit-meter {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.scm-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.4px;
-  color: #44447a;
-}
-
-.scm-bar {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 2px;
-}
-
-.scm-seg {
-  width: 22px;
-  height: 8px;
-  border-radius: 2px;
-  background: #1a1a30;
-  border: 1px solid #553300;
-}
-
-.scm-seg.scm-filled {
-  background: #ffcc00;
-  border-color: #ffaa00;
-  box-shadow: 0 0 5px rgba(255, 204, 0, 0.6);
-}
-
-.scm-count {
-  font-size: 11px;
-  font-weight: 700;
-  color: #ffdd66;
+  gap: 7.69%;
 }
 
 .slot-reel {
-  width: 116px;
-  height: 116px;
-  border: 2px solid #886600;
-  border-radius: 6px;
-  background: #0c0c22;
+  flex: 1;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  transition: border-color 0.3s, box-shadow 0.3s;
 }
 
 .reel-img {
-  width: 96px;
-  height: 96px;
+  width: 90%;
+  height: 90%;
   object-fit: contain;
   image-rendering: pixelated;
   transition: filter 0.1s;
@@ -999,8 +898,7 @@ html, body {
 }
 
 .reel-glow {
-  border-color: #ffdd00;
-  box-shadow: 0 0 12px rgba(255, 220, 0, 0.8), inset 0 0 8px rgba(255, 220, 0, 0.2);
+  box-shadow: inset 0 0 10px rgba(255, 220, 0, 0.7);
 }
 
 @keyframes reel-bounce-anim {
@@ -1012,6 +910,92 @@ html, body {
 
 .reel-bouncing {
   animation: reel-bounce-anim 0.4s ease;
+}
+
+/* ── LCD（BonusVideo） ── */
+.sc-lcd {
+  position: absolute;
+  top: 36.46%;
+  left: 6.84%;
+  width: 86.43%;
+  height: 24.74%;
+  overflow: hidden;
+}
+
+/* idle / bonus の2枚を absolute で重ねて表示切替 */
+.bv-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.bv-video.bv-active {
+  opacity: 1;
+}
+
+/* ── クレジットメーター（ボタンパネル上の暗バー領域に重ねる） ── */
+.sc-credit {
+  position: absolute;
+  top: 64%;
+  left: 22%;
+  width: 58%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  padding: 2px 8px;
+  pointer-events: none;
+}
+
+.scm-bar {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+}
+
+.scm-seg {
+  width: 16px;
+  height: 10px;
+  border-radius: 2px;
+  background: #1a1a30;
+  border: 1px solid #553300;
+}
+
+.scm-seg.scm-filled {
+  background: #ffcc00;
+  border-color: #ffaa00;
+  box-shadow: 0 0 4px rgba(255, 204, 0, 0.6);
+}
+
+.scm-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffdd66;
+  white-space: nowrap;
+}
+
+/* ── ストックバッジ（タイトル下の装飾エリアに配置） ── */
+.sc-stock {
+  position: absolute;
+  top: 8%;
+  right: 6%;
+  background: #1a0e00;
+  color: #ffdd00;
+  border: 2px solid #ffaa00;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: clamp(10px, 1.5vw, 16px);
+  font-weight: 700;
+  line-height: 1;
+  animation: blink 0.7s step-start infinite;
+  pointer-events: none;
 }
 
 /* ── タブ風ラベル（ステータス・装備・ログ・アイテム・魔法の書） ── */
@@ -1323,46 +1307,10 @@ html, body {
   .equip-panel-compact .equip-panel-label { margin: -4px -6px 3px !important; }
 }
 
-/* スマホ：スロットマシーン縮小（マップ拡大の代償） */
+/* スマホ：筐体の高さ制約を解除（ui-pane がスクロール可能のため） */
 @media (max-width: 767px) {
-  .bonus-video-area {
-    height: 100px;
-  }
-
-  .slot-machine {
-    padding: 4px 8px;
-  }
-
-  .slot-label {
-    font-size: 14px;
-    padding: 4px 8px;
-    margin: -4px -8px 4px;
-  }
-
-  .slot-reel {
-    width: 72px;
-    height: 72px;
-  }
-
-  .reel-img {
-    width: 56px;
-    height: 56px;
-  }
-
-  .scm-seg {
-    width: 16px;
-    height: 6px;
-  }
-
-  .scm-count {
-    font-size: 9px;
-  }
-
-  .slot-stock-badge {
-    font-size: 14px;
-    padding: 3px 7px;
-    bottom: 6px;
-    right: 8px;
+  .slot-cabinet {
+    max-width: 420px;
   }
 }
 

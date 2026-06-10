@@ -88,7 +88,7 @@ export function BonusVideo() {
   }, [startBonus])
 
   return (
-    <div className="bonus-video-area">
+    <>
       <video
         ref={idleRef}
         src="/assets/slot/idle.mp4"
@@ -106,6 +106,6 @@ export function BonusVideo() {
           className={`bv-video ${mode === result ? 'bv-active' : ''}`}
         />
       ))}
-    </div>
+    </>
   )
 }
