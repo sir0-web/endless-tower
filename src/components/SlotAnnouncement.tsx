@@ -156,12 +156,14 @@ export function SlotAnnouncement() {
       const typedResult = result as SlotResult
       const cfg = CONFIGS[typedResult]
 
-      // シンプルな演出（overlay/flash/sparklesなし）→ EventMsgBar へ（PC・スマホ共通）
-      if (!cfg.overlay && !cfg.flash && cfg.sparkles === 0) {
+      if (!cfg.overlay) {
+        // テキストは常にEventMsgBarへ（PC・スマホ共通）
         const subText = sub ?? cfg.sub
         const msg = subText ? `${cfg.text}\n${subText}` : cfg.text
         window.showEventMessage?.(msg, cfg.color)
-        return
+        // エフェクト（flash/sparkles）がなければここで終了
+        if (!cfg.flash && cfg.sparkles === 0) return
+        // flash/sparklesがある場合はエフェクトのみSlotAnnouncementで継続（テキストなし）
       }
 
       clearAll()
@@ -207,24 +209,26 @@ export function SlotAnnouncement() {
         </div>
       )}
 
-      <div className="sa-body">
-        <p
-          key={active.seq}
-          className={`sa-text ${cfg.animClass}`}
-          style={{ color: cfg.color, fontSize: cfg.fontSize }}
-        >
-          {cfg.text}
-        </p>
-        {(active.subOverride ?? cfg.sub) && (
+      {cfg.overlay && (
+        <div className="sa-body">
           <p
-            key={active.seq + 1}
-            className="sa-sub"
-            style={{ color: cfg.color }}
+            key={active.seq}
+            className={`sa-text ${cfg.animClass}`}
+            style={{ color: cfg.color, fontSize: cfg.fontSize }}
           >
-            {active.subOverride ?? cfg.sub}
+            {cfg.text}
           </p>
-        )}
-      </div>
+          {(active.subOverride ?? cfg.sub) && (
+            <p
+              key={active.seq + 1}
+              className="sa-sub"
+              style={{ color: cfg.color }}
+            >
+              {active.subOverride ?? cfg.sub}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

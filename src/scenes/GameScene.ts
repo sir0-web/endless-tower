@@ -1305,33 +1305,26 @@ export class GameScene extends Phaser.Scene {
       }
       case 'triple': {
         player.hp = player.maxHp; player.stamina = player.maxStamina
-        const tripleEquips: string[] = []
         for (let i = 0; i < 3; i++) {
           const pool  = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0 })
           const equip = pool.find(it => it.type === 'equip')
           if (equip) {
             this.state.bag.push({ ...equip, position: { x: 0, y: 0 } })
-            tripleEquips.push(equip.name)
           }
         }
-        this.addMessage('🎰 スリーライン！HP・スタミナ全回復！')
-        if (tripleEquips.length > 0) this.addMessage(`装備品ゲット：${tripleEquips.join('、')}`)
         window.showSlotAnnouncement?.('triple')
         break
       }
       case 'skulls':
         player.hp = Math.max(1, Math.floor(player.hp / 2))
-        this.addMessage('💀 スカル3つ！HPが半分になった！')
         window.showSlotAnnouncement?.('skulls')
         break
       case 'lr_match':
         player.hp = Math.min(player.maxHp, player.hp + Math.floor(player.maxHp / 2))
-        this.addMessage('🎰 左右ライン！HP50%回復！')
         window.showSlotAnnouncement?.('lr_match')
         break
       case 'adjacent':
         player.stamina = Math.min(player.maxStamina, player.stamina + Math.floor(player.maxStamina / 2))
-        this.addMessage('🎰 隣接ライン！スタミナ50%回復！')
         window.showSlotAnnouncement?.('adjacent')
         break
       case 'sequential':
@@ -1341,7 +1334,6 @@ export class GameScene extends Phaser.Scene {
       case 'kakuhen':
       case 'kakuhen_miss': {
         player.statPoints += 30
-        this.addMessage('✨ ステータスポイント+30獲得！')
         window.showSlotAnnouncement?.('kakuhen')
         break
       }
@@ -1351,14 +1343,10 @@ export class GameScene extends Phaser.Scene {
           if (Math.random() < 0.5) {
             player.stamina = Math.max(0, player.stamina - 20)
             missSub = 'スタミナ -20…'
-            this.addMessage('🎰 ハズレ…スタミナ-20')
           } else {
             player.poisoned = true; player.poisonTurns = 5
             missSub = '毒状態になった…'
-            this.addMessage('🎰 ハズレ…毒状態に！')
           }
-        } else {
-          this.addMessage('🎰 ハズレ…')
         }
         window.showSlotAnnouncement?.('miss', missSub)
       }
