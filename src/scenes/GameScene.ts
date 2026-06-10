@@ -1759,12 +1759,19 @@ export class GameScene extends Phaser.Scene {
         const baseName   = enemy.name.replace(/^【[^】]+】/, '')
         const textureKey = ENEMY_TEXTURE_MAP[baseName]
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
-          const eSize = ['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3
-            : ['eclipse', 'angeling', 'goldenbug'].includes(textureKey) ? rts * 1.5
-            : textureKey === 'furioni' ? rts * 2.0
-            : rts - 2
-          g = this.add.image(0, 0, textureKey)
-            .setDisplaySize(eSize, eSize).setDepth(5)
+          if (['deviling', 'masterring'].includes(textureKey)) {
+            const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
+            const target = rts * 1.25
+            g = this.add.image(0, 0, textureKey)
+              .setDisplaySize(target / wFrac, target / hFrac).setDepth(5)
+          } else {
+            const eSize = ['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3
+              : ['eclipse', 'angeling', 'goldenbug'].includes(textureKey) ? rts * 1.5
+              : textureKey === 'furioni' ? rts * 2.0
+              : rts - 2
+            g = this.add.image(0, 0, textureKey)
+              .setDisplaySize(eSize, eSize).setDepth(5)
+          }
         } else {
           const color = enemy.isBoss
             ? (enemy.name.startsWith('【MVP】') ? 0xff8800
