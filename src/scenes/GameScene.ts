@@ -448,7 +448,7 @@ export class GameScene extends Phaser.Scene {
               this.isAnimating = false
               window.showEventMessage?.(
                 `落とし穴に落ちた！\nB§${fromFloor}§FからB§${toFloor}§Fへ転落した！`,
-                '#ff6600'
+                '#ffffff'
               )
             })
           })
