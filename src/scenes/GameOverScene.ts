@@ -61,7 +61,6 @@ export class GameOverScene extends Phaser.Scene {
     const inputH   = fsPx(24) + 24
     const g1Top    = H * 0.33
     const g1Bot    = H * 0.535
-    const g1Cx     = (g1Top + g1Bot) / 2
     const g1H      = g1Bot - g1Top
 
     // グループ1外枠
@@ -109,7 +108,6 @@ export class GameOverScene extends Phaser.Scene {
     })
 
     // ── グループ2: ボタン2つ ──
-    const btnRowH  = fsPx(26) + 32
     const submitY  = H * 0.655
     const retryY   = H * 0.775
     const g2Top    = H * 0.605
