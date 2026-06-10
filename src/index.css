@@ -973,28 +973,40 @@ html, body {
   box-shadow: 0 0 6px rgba(255, 80, 0, 0.5);
 }
 
-/* ── AUTO/MANUAL 切替ボタン ── */
+/* ── AUTO/MANUAL 切替ボタン（左下：クレジット表示と対称） ── */
 .sc-mode-btn {
   position: absolute;
-  top: 4%;
-  right: 4%;
-  background: #0e0820;
-  border: 1px solid #3a1870;
-  border-radius: 3px;
-  color: #9966cc;
-  font-size: clamp(7px, 1vw, 10px);
+  bottom: 1.5%;
+  left: 4%;
+  background: #1a0a3a;
+  border: 2px solid #6633aa;
+  border-radius: 4px;
+  color: #cc99ff;
+  font-size: clamp(9px, 1.3vw, 13px);
   font-weight: 700;
-  letter-spacing: 0.5px;
-  padding: 2px 6px;
+  letter-spacing: 1px;
+  padding: 3px 8px;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 6px rgba(100, 50, 200, 0.4);
   z-index: 1;
 }
 
+.sc-mode-btn:hover {
+  background: #2a1050;
+  box-shadow: 0 0 10px rgba(150, 80, 255, 0.6);
+}
+
 .sc-mode-manual .sc-mode-btn {
-  background: #2e0010;
-  border-color: #cc3366;
-  color: #ff66aa;
+  background: #3a0018;
+  border-color: #ff3388;
+  color: #ff88cc;
+  box-shadow: 0 0 8px rgba(255, 50, 120, 0.5);
+}
+
+.sc-mode-manual .sc-mode-btn:hover {
+  background: #500022;
+  box-shadow: 0 0 12px rgba(255, 80, 150, 0.7);
 }
 
 /* ── クレジットメーター（筐体右下） ── */
