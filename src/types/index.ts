@@ -1,4 +1,4 @@
-export type TileType = 'floor' | 'wall' | 'stairs' | 'trap'
+export type TileType = 'floor' | 'wall' | 'stairs' | 'trap' | 'mud' | 'spring' | 'pitfall'
 
 export interface Position {
   x: number
@@ -73,6 +73,8 @@ export interface Player {
   maxStamina: number
   poisoned: boolean
   poisonTurns: number
+  mudTurns: number
+  mudSkipNext: boolean
   equipment: Equipment
   // 新ステータス
   str: number
@@ -117,6 +119,7 @@ export interface GameState {
   messages: string[]
   areaBossFloors: Record<number, string>
   floorType: 'normal' | 'lucky' | 'chaos'
+  driedSprings: string[]
 }
 
 export interface WindowGameState {

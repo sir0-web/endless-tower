@@ -15,6 +15,7 @@ export interface SaveData {
   turn: number
   areaBossFloors: Record<number, string>
   floorType: 'normal' | 'lucky' | 'chaos'
+  driedSprings: string[]
   savedAt: number
 }
 

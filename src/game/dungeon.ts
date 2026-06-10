@@ -58,6 +58,36 @@ export function generateDungeon(): TileType[][] {
     map[ty][tx] = 'trap'
   }
 
+  const mudCount = 2 + Math.floor(Math.random() * 3)
+  for (let i = 0; i < mudCount; i++) {
+    let mx, my
+    do {
+      mx = Math.floor(Math.random() * MAP_WIDTH)
+      my = Math.floor(Math.random() * MAP_HEIGHT)
+    } while (map[my][mx] !== 'floor')
+    map[my][mx] = 'mud'
+  }
+
+  const springCount = 1 + Math.floor(Math.random() * 2)
+  for (let i = 0; i < springCount; i++) {
+    let sx, sy
+    do {
+      sx = Math.floor(Math.random() * MAP_WIDTH)
+      sy = Math.floor(Math.random() * MAP_HEIGHT)
+    } while (map[sy][sx] !== 'floor')
+    map[sy][sx] = 'spring'
+  }
+
+  const pitCount = 2 + Math.floor(Math.random() * 3)
+  for (let i = 0; i < pitCount; i++) {
+    let px, py
+    do {
+      px = Math.floor(Math.random() * MAP_WIDTH)
+      py = Math.floor(Math.random() * MAP_HEIGHT)
+    } while (map[py][px] !== 'floor')
+    map[py][px] = 'pitfall'
+  }
+
   return map
 }
 

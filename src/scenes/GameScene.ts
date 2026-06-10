@@ -129,6 +129,9 @@ export class GameScene extends Phaser.Scene {
     this.load.image('tile-box', '/assets/dungeon/box/box.png')
     // trap.png — ベノムダスト（ハズレ時は紫Graphicsにフォールバック）
     this.load.image('trap', '/assets/dungeon/trap/trap.png')
+    this.load.image('tile-mud',     '/assets/dungeon/mud/mud.png')
+    this.load.image('tile-spring',  '/assets/dungeon/spring/spring.png')
+    this.load.image('tile-pitfall', '/assets/dungeon/pitfall/pitfall.png')
 
     // プレイヤー画像（スタティック・フォールバック用）
     this.load.image('player', '/assets/characters/player.png')
@@ -269,6 +272,8 @@ export class GameScene extends Phaser.Scene {
         maxStamina: 200,
         poisoned: false,
         poisonTurns: 0,
+        mudTurns: 0,
+        mudSkipNext: false,
         equipment: {},
         str: 3, agi: 1, dex: 1, int: 1, vit: 3, luk: 1,
         statPoints: 0,
@@ -290,6 +295,7 @@ export class GameScene extends Phaser.Scene {
       messages: ['地下タワーに潜入した！'],
       areaBossFloors,
       floorType,
+      driedSprings: [],
     }
     this.buildFloorVariants(map)
     this.createTileSprites(map)
@@ -313,6 +319,7 @@ export class GameScene extends Phaser.Scene {
       messages: [`セーブデータをロードしました（${floorLabel(floor)}から再開）`],
       areaBossFloors: saved.areaBossFloors,
       floorType: saved.floorType,
+      driedSprings: saved.driedSprings ?? [],
     }
     this.buildFloorVariants(map)
     this.createTileSprites(map)
@@ -320,8 +327,8 @@ export class GameScene extends Phaser.Scene {
 
   // セーブ実行（プレイ中のセーブボタンから呼ばれる）
   private doSaveGame() {
-    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType } = this.state
-    saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType })
+    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings } = this.state
+    saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings })
     window.showGameToast?.('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
   }
 
@@ -403,6 +410,28 @@ export class GameScene extends Phaser.Scene {
     else if (dx === 1  && dy === 1)  this.playerDir = 'down-right'
     else if (dx === -1 && dy === 1)  this.playerDir = 'down-left'
 
+    // 泥の沼スロー処理
+    if (player.mudTurns > 0) {
+      player.mudTurns--
+      if (player.mudSkipNext) {
+        player.mudSkipNext = false
+        if (player.mudTurns > 0) {
+          window.showEventMessage?.(`泥沼で動きが鈍い…（残り${player.mudTurns}ターン）`, '#c2a020')
+        } else {
+          window.showEventMessage?.('泥沼の影響が消えた！', '#c2a020')
+        }
+        this.state.turn++
+        this.enemyTurn()
+        this.hungerTick()
+        this.poisonTick()
+        this.effectTick()
+        this.renderMap()
+        this.updateWindowGameState()
+        return
+      }
+      player.mudSkipNext = true
+    }
+
     const nx = player.position.x + dx
     const ny = player.position.y + dy
 
@@ -424,6 +453,14 @@ export class GameScene extends Phaser.Scene {
 
       if (this.state.map[ny][nx] === 'stairs') {
         this.nextFloor()
+        return
+      }
+
+      if (this.state.map[ny][nx] === 'pitfall') {
+        const fallDepth = 1 + Math.floor(Math.random() * 3)
+        window.showEventMessage?.(`落とし穴！${fallDepth}F下に落下した…`, '#ff6600')
+        this.state.player.floor += fallDepth - 1
+        this.enterNormalFloor()
         return
       }
 
@@ -571,6 +608,21 @@ export class GameScene extends Phaser.Scene {
       player.poisonTurns = 5
       this.addMessage('ベノムダストを踏んだ！毒状態に！')
       if (player.hp <= 0) this.gameOver()
+    }
+    if (tile === 'mud') {
+      player.mudTurns = 10
+      player.mudSkipNext = false
+      this.addMessage('泥の沼に踏み入った！10ターン動きが鈍くなる！')
+    }
+    if (tile === 'spring') {
+      const key = `${player.position.x},${player.position.y}`
+      if (this.state.driedSprings.includes(key)) {
+        this.addMessage('泉は枯れている…')
+      } else {
+        player.hp = player.maxHp
+        this.state.driedSprings.push(key)
+        this.addMessage('回復の泉に触れた！HPが全回復した！')
+      }
     }
   }
 
@@ -724,7 +776,7 @@ export class GameScene extends Phaser.Scene {
         const candidates = adjPos
           .filter(p => {
             const tile = this.state.map[p.y]?.[p.x]
-            return (tile === 'floor' || tile === 'trap') && !takenAdj.has(`${p.x},${p.y}`)
+            return (tile === 'floor' || tile === 'trap' || tile === 'mud' || tile === 'spring' || tile === 'pitfall') && !takenAdj.has(`${p.x},${p.y}`)
           })
           .sort((a, b) =>
             (Math.abs(a.x - enemy.position.x) + Math.abs(a.y - enemy.position.y)) -
@@ -746,8 +798,9 @@ export class GameScene extends Phaser.Scene {
           const diagTile = this.state.map[diagY]?.[diagX]
           const hTile    = this.state.map[enemy.position.y]?.[enemy.position.x + Math.sign(tdx)]
           const vTile    = this.state.map[enemy.position.y + Math.sign(tdy)]?.[enemy.position.x]
-          const diagWalkable  = diagTile === 'floor' || diagTile === 'trap'
-          const noCorner      = (hTile === 'floor' || hTile === 'trap') && (vTile === 'floor' || vTile === 'trap')
+          const isW = (t: string | undefined) => t === 'floor' || t === 'trap' || t === 'mud' || t === 'spring' || t === 'pitfall'
+          const diagWalkable  = isW(diagTile)
+          const noCorner      = isW(hTile) && isW(vTile)
           const diagNotPlayer = !(diagX === player.position.x && diagY === player.position.y)
           const diagFree      = !enemies.some(e => e !== enemy && e.position.x === diagX && e.position.y === diagY)
           if (diagWalkable && noCorner && diagNotPlayer && diagFree) {
@@ -765,7 +818,7 @@ export class GameScene extends Phaser.Scene {
           const ny = enemy.position.y + my
 
           const tile = this.state.map[ny]?.[nx]
-          const isWalkable = tile === 'floor' || tile === 'trap'
+          const isWalkable = tile === 'floor' || tile === 'trap' || tile === 'mud' || tile === 'spring' || tile === 'pitfall'
           const isPlayerPos = nx === player.position.x && ny === player.position.y
           const occupied = enemies.some(e => e !== enemy && e.position.x === nx && e.position.y === ny)
 
@@ -963,6 +1016,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private enterNormalFloor() {
+    this.state.driedSprings = []
     this.state.player.floor++
     const floor = this.state.player.floor
     const map = generateDungeon()
@@ -1632,10 +1686,13 @@ export class GameScene extends Phaser.Scene {
     this.tileSprites = map.map((row, y) =>
       row.map((tile, x) => {
         let key: string
-        if      (tile === 'wall')   key = 'tile-wall'
-        else if (tile === 'floor')  key = this.floorVariantMap[y]?.[x] ?? 'tile-floor1'
-        else if (tile === 'stairs') key = 'tile-stairs'
-        else if (tile === 'trap')   key = 'trap'
+        if      (tile === 'wall')    key = 'tile-wall'
+        else if (tile === 'floor')   key = this.floorVariantMap[y]?.[x] ?? 'tile-floor1'
+        else if (tile === 'stairs')  key = 'tile-stairs'
+        else if (tile === 'trap')    key = 'trap'
+        else if (tile === 'mud')     key = 'tile-mud'
+        else if (tile === 'spring')  key = 'tile-spring'
+        else if (tile === 'pitfall') key = 'tile-pitfall'
         else return null
 
         if (this.failedTextures.has(key) || !this.textures.exists(key)) return null
@@ -1681,10 +1738,13 @@ export class GameScene extends Phaser.Scene {
         const py = y * rts - offsetY
         if (px < -rts || px > W || py < -rts || py > H) continue
         if (!this.isVisible(x, y)) continue
-        if      (tile === 'wall')   this.graphics.fillStyle(0x333333)
-        else if (tile === 'floor')  this.graphics.fillStyle(0x888866)
-        else if (tile === 'stairs') this.graphics.fillStyle(0x4444ff)
-        else if (tile === 'trap')   this.graphics.fillStyle(0x662288)
+        if      (tile === 'wall')    this.graphics.fillStyle(0x333333)
+        else if (tile === 'floor')   this.graphics.fillStyle(0x888866)
+        else if (tile === 'stairs')  this.graphics.fillStyle(0x4444ff)
+        else if (tile === 'trap')    this.graphics.fillStyle(0x662288)
+        else if (tile === 'mud')     this.graphics.fillStyle(0x8B4513)
+        else if (tile === 'spring')  this.graphics.fillStyle(0x00ccaa)
+        else if (tile === 'pitfall') this.graphics.fillStyle(0x111111)
         else continue
         this.graphics.fillRect(px, py, rts, rts)
       }
