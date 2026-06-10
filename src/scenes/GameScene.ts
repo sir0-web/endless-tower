@@ -439,6 +439,7 @@ export class GameScene extends Phaser.Scene {
         const fromFloor = this.state.player.floor
         const toFloor   = fromFloor + fallDepth
         this.isAnimating = true
+        this.renderMap()
         this.spinPlayer(3, 600, () => {
           this.state.player.floor += fallDepth - 1
           this.enterNormalFloor()
