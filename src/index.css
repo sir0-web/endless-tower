@@ -850,15 +850,15 @@ html, body {
 
 .icr-empty { font-size: 10px; color: #444466; text-align: center; margin-top: 6px; }
 
-/* ── スロット筐体（slot-machine.png 背景、縦横比 1024/1536） ── */
+/* ── スロット筐体（液晶下端でクロップ：y=0-975/1536 を表示） ── */
 .slot-cabinet {
   position: relative;
   width: 100%;
-  max-width: min(420px, calc((100vh - 280px) / 1.5));
-  aspect-ratio: 1024 / 1536;
+  max-width: min(460px, calc((100vh - 280px) / 0.952));
+  aspect-ratio: 1024 / 975;
   margin: 0 auto;
   flex-shrink: 0;
-  background: url('/assets/slot/slot-machine.png') center / 100% 100% no-repeat;
+  background: url('/assets/slot/slot-machine.png') top center / 100% auto no-repeat;
   transition: box-shadow 0.3s;
 }
 
@@ -866,13 +866,13 @@ html, body {
   box-shadow: 0 0 20px rgba(255, 220, 0, 0.6);
 }
 
-/* ── リール3本（cabinet 内の絶対配置） ── */
+/* ── リール3本（975px基準で再計算: y=270-495 → 27.7%-50.8%） ── */
 .sc-reels {
   position: absolute;
-  top: 17.6%;
+  top: 27.7%;
   left: 11.72%;
   width: 76.17%;
-  height: 14.6%;
+  height: 23.1%;
   display: flex;
   gap: 7.69%;
 }
@@ -912,13 +912,13 @@ html, body {
   animation: reel-bounce-anim 0.4s ease;
 }
 
-/* ── LCD（BonusVideo） ── */
+/* ── LCD（975px基準で再計算: y=560-940 → 57.4%-96.4%） ── */
 .sc-lcd {
   position: absolute;
-  top: 36.46%;
+  top: 57.4%;
   left: 6.84%;
   width: 86.43%;
-  height: 24.74%;
+  height: 39.0%;
   overflow: hidden;
 }
 
@@ -937,21 +937,22 @@ html, body {
   opacity: 1;
 }
 
-/* ── クレジットメーター（ボタンパネル上の暗バー領域に重ねる） ── */
+/* ── クレジットメーター（リールとLCDの隙間: top≈51%） ── */
 .sc-credit {
   position: absolute;
-  top: 64%;
-  left: 22%;
-  width: 58%;
+  top: 51%;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.7);
   border-radius: 4px;
   padding: 2px 8px;
   pointer-events: none;
+  white-space: nowrap;
 }
 
 .scm-bar {
@@ -1310,7 +1311,7 @@ html, body {
 /* スマホ：筐体の高さ制約を解除（ui-pane がスクロール可能のため） */
 @media (max-width: 767px) {
   .slot-cabinet {
-    max-width: 420px;
+    max-width: 460px;
   }
 }
 
