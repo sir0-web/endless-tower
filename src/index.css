@@ -926,10 +926,10 @@ html, body {
 /* idle / bonus の2枚を absolute で重ねて表示切替（80%縮小・中央配置） */
 .bv-video {
   position: absolute;
-  top: -7.6%;
-  left: -7.6%;
-  width: 115.2%;
-  height: 115.2%;
+  top: -4.72%;
+  left: -4.72%;
+  width: 109.44%;
+  height: 109.44%;
   object-fit: contain;
   opacity: 0;
   transition: opacity 0.2s;
