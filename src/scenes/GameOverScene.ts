@@ -54,21 +54,35 @@ export class GameOverScene extends Phaser.Scene {
     floorT.setX(startX + prefixT.width)
     suffixT.setX(startX + prefixT.width + floorT.width)
 
-    // 入力ラベル
-    this.add.text(cx, H * 0.37, '名前を入力してランキングに登録', {
+    // ── グループ1: ラベル＋入力フィールド ──
+    const groupW   = Math.min(520, W * 0.80)
+    const labelY   = H * 0.38
+    const inputY   = H * 0.47
+    const inputH   = fsPx(24) + 24
+    const g1Top    = H * 0.33
+    const g1Bot    = H * 0.535
+    const g1Cx     = (g1Top + g1Bot) / 2
+    const g1H      = g1Bot - g1Top
+
+    // グループ1外枠
+    const group1Bg = this.add.graphics()
+    group1Bg.fillStyle(0x0d0d22, 1)
+    group1Bg.fillRect(cx - groupW / 2, g1Top, groupW, g1H)
+    group1Bg.lineStyle(2, 0x6666bb, 1)
+    group1Bg.strokeRect(cx - groupW / 2, g1Top, groupW, g1H)
+
+    // ラベル
+    this.add.text(cx, labelY, '名前を入力してランキングに登録', {
       fontSize: fs(20), color: '#cccccc',
     }).setOrigin(0.5)
 
-    // 名前入力フィールド（枠付き）
-    const inputY = H * 0.47
-    const inputW = Math.min(520, W * 0.78)
-    const inputH = fsPx(24) + 28
+    // 入力フィールド内枠
     const inputBg = this.add.graphics()
-    this.drawBox(inputBg, cx, inputY, inputW, inputH, 0x1a1a44, 0x8888ff)
+    this.drawBox(inputBg, cx, inputY, groupW - 24, inputH, 0x1a1a44, 0x8888ff)
 
     this.nameInput = this.add.text(cx, inputY, this.PLACEHOLDER, {
       fontSize: fs(22), color: '#555577',
-      fixedWidth: inputW - 16,
+      fixedWidth: groupW - 40,
       align: 'center',
     }).setOrigin(0.5)
 
@@ -94,15 +108,28 @@ export class GameOverScene extends Phaser.Scene {
       this.refreshNameInput()
     })
 
-    // ── ボタン共通 ──
-    const btnW = Math.min(500, W * 0.74)
-    const btnH = fsPx(26) + 32
+    // ── グループ2: ボタン2つ ──
+    const btnRowH  = fsPx(26) + 32
+    const submitY  = H * 0.655
+    const retryY   = H * 0.775
+    const g2Top    = H * 0.605
+    const g2Bot    = H * 0.825
+    const g2H      = g2Bot - g2Top
 
-    // 登録してランキングをみる
-    const submitY  = H * 0.63
-    const submitBg = this.add.graphics()
-    this.drawBox(submitBg, cx, submitY, btnW, btnH, 0x003322, 0x00ff88)
+    // グループ2外枠
+    const group2Bg = this.add.graphics()
+    group2Bg.fillStyle(0x0d0d0d, 1)
+    group2Bg.fillRect(cx - groupW / 2, g2Top, groupW, g2H)
+    group2Bg.lineStyle(2, 0x666666, 1)
+    group2Bg.strokeRect(cx - groupW / 2, g2Top, groupW, g2H)
 
+    // ボタン間の区切り線
+    const divY = (submitY + retryY) / 2
+    group2Bg.lineStyle(1, 0x444444, 1)
+    group2Bg.lineBetween(cx - groupW / 2 + 12, divY, cx + groupW / 2 - 12, divY)
+
+    // 登録してランキングをみる（ホバー背景）
+    const submitHover = this.add.graphics()
     const submitBtn = this.add.text(cx, submitY, '登録してランキングをみる', {
       fontSize: fs(26), color: '#00ff88', fontStyle: 'bold',
     }).setOrigin(0.5)
@@ -113,18 +140,16 @@ export class GameOverScene extends Phaser.Scene {
     })
     submitBtn.on('pointerover', () => {
       submitBtn.setColor('#ffffff')
-      this.drawBox(submitBg, cx, submitY, btnW, btnH, 0x006644, 0x00ff88)
+      submitHover.fillStyle(0x006644, 0.5)
+      submitHover.fillRect(cx - groupW / 2, g2Top, groupW, divY - g2Top)
     })
     submitBtn.on('pointerout', () => {
       submitBtn.setColor('#00ff88')
-      this.drawBox(submitBg, cx, submitY, btnW, btnH, 0x003322, 0x00ff88)
+      submitHover.clear()
     })
 
-    // 登録せずにTOPへ戻る
-    const retryY  = H * 0.79
-    const retryBg = this.add.graphics()
-    this.drawBox(retryBg, cx, retryY, btnW, btnH, 0x111111, 0x888888)
-
+    // 登録せずにTOPへ戻る（ホバー背景）
+    const retryHover = this.add.graphics()
     const retryBtn = this.add.text(cx, retryY, '登録せずにTOPへ戻る', {
       fontSize: fs(26), color: '#aaaaaa', fontStyle: 'bold',
     }).setOrigin(0.5)
@@ -133,11 +158,12 @@ export class GameOverScene extends Phaser.Scene {
     retryBtn.on('pointerdown', () => { this.scene.start('TitleScene') })
     retryBtn.on('pointerover', () => {
       retryBtn.setColor('#ffffff')
-      this.drawBox(retryBg, cx, retryY, btnW, btnH, 0x333333, 0xaaaaaa)
+      retryHover.fillStyle(0x333333, 0.5)
+      retryHover.fillRect(cx - groupW / 2, divY, groupW, g2Bot - divY)
     })
     retryBtn.on('pointerout', () => {
       retryBtn.setColor('#aaaaaa')
-      this.drawBox(retryBg, cx, retryY, btnW, btnH, 0x111111, 0x888888)
+      retryHover.clear()
     })
   }
 
