@@ -156,8 +156,8 @@ export function SlotAnnouncement() {
       const typedResult = result as SlotResult
       const cfg = CONFIGS[typedResult]
 
-      // スマホ且つシンプルな演出（overlay/flash/sparklesなし）→ EventMsgBar へ
-      if (window.innerWidth < 768 && !cfg.overlay && !cfg.flash && cfg.sparkles === 0) {
+      // シンプルな演出（overlay/flash/sparklesなし）→ EventMsgBar へ（PC・スマホ共通）
+      if (!cfg.overlay && !cfg.flash && cfg.sparkles === 0) {
         const subText = sub ?? cfg.sub
         const msg = subText ? `${cfg.text}\n${subText}` : cfg.text
         window.showEventMessage?.(msg, cfg.color)

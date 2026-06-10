@@ -486,21 +486,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showPickupNotif(text: string) {
-    // スマホは showMobileMsg（下部ポップアップ）で表示するためスキップ
-    if (window.innerWidth < 768) return
-    const W = this.scale.width
-    const H = this.scale.height
-    const t = this.add.text(W / 2, H / 2, text, {
-      fontSize: '22px', color: '#ffffff',
-      stroke: '#000000', strokeThickness: 4,
-      backgroundColor: '#00000099',
-      padding: { x: 14, y: 7 },
-      align: 'center',
-    }).setOrigin(0.5).setDepth(60)
-    this.tweens.add({
-      targets: t, alpha: 0, duration: 500, delay: 1500,
-      onComplete: () => t.destroy(),
-    })
+    // PC・スマホともに EventMsgBar へ（キャンバス内テキストは使わない）
+    window.showEventMessage?.(text, '#ffdd44')
   }
 
   private doEquip(item: import('../types').Item) {
