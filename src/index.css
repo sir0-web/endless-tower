@@ -363,7 +363,7 @@ html, body {
   .game-canvas-area {
     flex: none;
     margin-top: 108px;
-    height: calc(100% - 108px - 60px);
+    height: calc(100% - 108px - 74px);
   }
 
   .ui-pane {
@@ -2335,7 +2335,7 @@ html, body {
 @media (max-width: 767px) {
   /* スマホ: 固定高さに収めて画像を引き伸ばし */
   .event-msg-bar {
-    height: 60px;
+    height: 74px;
   }
   .emb-bg {
     width: 100%;
