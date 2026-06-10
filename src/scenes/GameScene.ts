@@ -599,14 +599,14 @@ export class GameScene extends Phaser.Scene {
       player.poisoned = true
       player.poisonTurns = 5
       this.addMessage('ベノムダストを踏んだ！毒状態に！')
-      window.showEventMessage?.('毒の沼にハマってしまった', '#aa44ff')
+      window.showEventMessage?.(`毒の沼にハマってしまった\n残り§${player.poisonTurns}§ターン`, '#aa44ff')
       if (player.hp <= 0) this.gameOver()
     }
     if (tile === 'mud') {
       player.mudTurns = 10
       player.mudSkipNext = false
       this.addMessage('泥の沼に踏み入った！10ターン動きが鈍くなる！')
-      window.showEventMessage?.('泥沼にハマってしまった', '#c2a020')
+      window.showEventMessage?.(`泥沼にハマってしまった\n残り§${player.mudTurns}§ターン`, '#c2a020')
     }
     if (tile === 'spring') {
       const key = `${player.position.x},${player.position.y}`
@@ -615,7 +615,7 @@ export class GameScene extends Phaser.Scene {
       } else {
         player.hp = player.maxHp
         this.state.driedSprings.push(key)
-        this.addMessage('回復の泉に触れた！HPが全回復した！')
+        this.addMessage('回復の泉に浸かった')
       }
     }
   }

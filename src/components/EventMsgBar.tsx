@@ -30,7 +30,11 @@ export function EventMsgBar() {
       <div className="emb-content">
         {msg && msg.text.split('\n').map((line, i) => (
           <span key={`${msg.key}-${i}`} className="emb-msg" style={{ color: msg.color }}>
-            {line}
+            {line.split('§').map((seg, j) =>
+              j % 2 === 1
+                ? <span key={j} style={{ color: '#ff4444' }}>{seg}</span>
+                : seg
+            )}
           </span>
         ))}
       </div>
