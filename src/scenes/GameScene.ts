@@ -447,7 +447,7 @@ export class GameScene extends Phaser.Scene {
             this.spinPlayer(3, 600, () => {
               this.isAnimating = false
               window.showEventMessage?.(
-                `落とし穴に落ちて${fromFloor}階から${toFloor}階へ転落した`,
+                `落とし穴に落ちた！\nB§${fromFloor}§FからB§${toFloor}§Fへ転落した！`,
                 '#ff6600'
               )
             })
