@@ -1471,7 +1471,7 @@ export class GameScene extends Phaser.Scene {
         this.makeTransparent(`attack_${dir}_${i}`)
       }
     }
-    for (const key of ['horu', 'master', 'maho']) {
+    for (const key of ['horu', 'master', 'maho', 'deviling', 'masterring']) {
       this.makeTransparent(key)
     }
   }
