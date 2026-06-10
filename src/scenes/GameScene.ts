@@ -78,7 +78,8 @@ export class GameScene extends Phaser.Scene {
   private isEquipModalOpen = false
   private awaitingEquipModal = false
   private pendingItem: import('../types').Item | null = null
-  private isGameOver = false   // gameOver()の多重発火防止（同一ターン内で複数回HP<=0判定が走るため）
+  private isGameOver   = false   // gameOver()の多重発火防止（同一ターン内で複数回HP<=0判定が走るため）
+  private isAnimating  = false   // 落とし穴スピンなどの演出中フラグ（入力ブロック用）
   // テクスチャ/アニメーションはゲーム全体で共有（シーン再起動毎にリセットされない）ため、
   // 透過処理（テクスチャの remove→addCanvas）は初回のみ実行する。
   // 2回目以降に再実行すると、既存のwalk/attackアニメーションが参照している古いFrameの
@@ -112,6 +113,7 @@ export class GameScene extends Phaser.Scene {
     this.playerDir          = 'down'
     this.isPlayerAttacking  = false
     this.isGameOver         = false
+    this.isAnimating        = false
     this.isEventFloor       = false
     this.eventFacilities    = []
   }
@@ -339,7 +341,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleInput(event: KeyboardEvent) {
-    if (this.isStatAllocOpen || this.isEquipModalOpen) return
+    if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
     if (event.key === 'Escape') {
       if (this.inventoryOpen) {
         this.toggleInventory()
@@ -434,9 +436,22 @@ export class GameScene extends Phaser.Scene {
 
       if (this.state.map[ny][nx] === 'pitfall') {
         const fallDepth = 1 + Math.floor(Math.random() * 3)
-        window.showEventMessage?.(`落とし穴！${fallDepth}F下に落下した…`, '#ff6600')
-        this.state.player.floor += fallDepth - 1
-        this.enterNormalFloor()
+        const fromFloor = this.state.player.floor
+        const toFloor   = fromFloor + fallDepth
+        this.isAnimating = true
+        this.spinPlayer(3, 600, () => {
+          this.state.player.floor += fallDepth - 1
+          this.enterNormalFloor()
+          this.time.delayedCall(80, () => {
+            this.spinPlayer(3, 600, () => {
+              this.isAnimating = false
+              window.showEventMessage?.(
+                `落とし穴に落ちて${fromFloor}階から${toFloor}階へ転落した`,
+                '#ff6600'
+              )
+            })
+          })
+        })
         return
       }
 
@@ -583,12 +598,14 @@ export class GameScene extends Phaser.Scene {
       player.poisoned = true
       player.poisonTurns = 5
       this.addMessage('ベノムダストを踏んだ！毒状態に！')
+      window.showEventMessage?.('毒の沼にハマってしまった', '#aa44ff')
       if (player.hp <= 0) this.gameOver()
     }
     if (tile === 'mud') {
       player.mudTurns = 10
       player.mudSkipNext = false
       this.addMessage('泥の沼に踏み入った！10ターン動きが鈍くなる！')
+      window.showEventMessage?.('泥沼にハマってしまった', '#c2a020')
     }
     if (tile === 'spring') {
       const key = `${player.position.x},${player.position.y}`
@@ -1054,6 +1071,22 @@ export class GameScene extends Phaser.Scene {
 
   private showMidgardTitle() {
     window.showEventMessage?.('ベースキャンプ「あるかなひろば」に到着！', '#ffd766')
+  }
+
+  /** プレイヤーをその場で turns 回転させ、完了後に onComplete を呼ぶ */
+  private spinPlayer(turns: number, duration: number, onComplete: () => void) {
+    if (!this.playerGraphic) { onComplete(); return }
+    const target = this.playerGraphic
+    this.tweens.add({
+      targets: target,
+      angle: `+=${turns * 360}`,
+      duration,
+      ease: 'Linear',
+      onComplete: () => {
+        target.setAngle(0)
+        onComplete()
+      },
+    })
   }
 
   /** イベントフロアの施設に話しかけたときの処理（移動と同じ操作で起動） */
