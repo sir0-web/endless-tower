@@ -930,7 +930,7 @@ html, body {
   left: 18%;
   width: 64%;
   height: 64%;
-  object-fit: cover;
+  object-fit: contain;
   opacity: 0;
   transition: opacity 0.2s;
 }
