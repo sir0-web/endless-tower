@@ -2320,7 +2320,7 @@ html, body {
 }
 
 .emb-msg {
-  font-size: clamp(21px, 2.1vw, 31px);
+  font-size: clamp(30px, 3vw, 44px);
   font-weight: 700;
   text-align: center;
   line-height: 1.4;
