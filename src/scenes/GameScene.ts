@@ -387,12 +387,13 @@ export class GameScene extends Phaser.Scene {
     const useArr   = km !== 'wasd'
     const useWASD  = km !== 'arrows'
     const k        = event.key
+    const code     = event.code ?? ''  // テンキーは event.key が '7' 等になるため code で判定
 
     // 斜め移動（テンキー・ローグライクキー q/e/z/c・バーチャルジョイスティック）
-    if      (k === 'Numpad7' || k === 'DiagUL' || ((k === 'q' || k === 'Q') && useWASD)) { dx = -1; dy = -1 }
-    else if (k === 'Numpad9' || k === 'DiagUR' || ((k === 'e' || k === 'E') && useWASD)) { dx =  1; dy = -1 }
-    else if (k === 'Numpad1' || k === 'DiagDL' || ((k === 'z' || k === 'Z') && useWASD)) { dx = -1; dy =  1 }
-    else if (k === 'Numpad3' || k === 'DiagDR' || ((k === 'c' || k === 'C') && useWASD)) { dx =  1; dy =  1 }
+    if      (code === 'Numpad7' || k === 'DiagUL' || ((k === 'q' || k === 'Q') && useWASD)) { dx = -1; dy = -1 }
+    else if (code === 'Numpad9' || k === 'DiagUR' || ((k === 'e' || k === 'E') && useWASD)) { dx =  1; dy = -1 }
+    else if (code === 'Numpad1' || k === 'DiagDL' || ((k === 'z' || k === 'Z') && useWASD)) { dx = -1; dy =  1 }
+    else if (code === 'Numpad3' || k === 'DiagDR' || ((k === 'c' || k === 'C') && useWASD)) { dx =  1; dy =  1 }
     // 通常移動
     else if ((k === 'ArrowUp'    && useArr) || ((k === 'w' || k === 'W') && useWASD)) dy = -1
     else if ((k === 'ArrowDown'  && useArr) || ((k === 's' || k === 'S') && useWASD)) dy = 1
