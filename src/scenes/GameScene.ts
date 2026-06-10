@@ -1634,10 +1634,10 @@ export class GameScene extends Phaser.Scene {
       case 'down':       return { anim: 'down',  flipX: false, idleKey: 'attack_down_1'  }
       case 'right':      return { anim: 'right', flipX: false, idleKey: 'attack_right_1' }
       case 'left':       return { anim: 'right', flipX: true,  idleKey: 'attack_right_1' }
-      case 'up-right':   return { anim: 'right', flipX: false, idleKey: 'attack_right_1' }
-      case 'up-left':    return { anim: 'right', flipX: true,  idleKey: 'attack_right_1' }
-      case 'down-right': return { anim: 'right', flipX: false, idleKey: 'attack_right_1' }
-      case 'down-left':  return { anim: 'right', flipX: true,  idleKey: 'attack_right_1' }
+      case 'up-right':   return { anim: 'up',   flipX: false, idleKey: 'attack_up_1'   }
+      case 'up-left':    return { anim: 'up',   flipX: true,  idleKey: 'attack_up_1'   }
+      case 'down-right': return { anim: 'down', flipX: false, idleKey: 'attack_down_1' }
+      case 'down-left':  return { anim: 'down', flipX: true,  idleKey: 'attack_down_1' }
     }
   }
 
