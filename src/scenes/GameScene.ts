@@ -239,9 +239,8 @@ export class GameScene extends Phaser.Scene {
     const areaBossFloors = generateAreaBossFloors()
 
     const floorType = this.determineFloorType(1)  // 初期LUK=1
-    const initBase = 5 + 1  // floor 1
-    const initLukBonus = 0   // 初期LUK=1 → floor(1*0.5)=0
-    const initCount = initBase + Math.floor(Math.random() * (initBase + initLukBonus))
+    const initBase = 3  // 1Fはチュートリアル的に少なめ（3〜5体）
+    const initCount = initBase + Math.floor(Math.random() * 3)
     const normalEnemies = floorType === 'chaos'
       ? spawnMonsterHouseEnemies(map, 1, playerPos)
       : spawnEnemies(map, initCount, 1)
