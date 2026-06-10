@@ -24,7 +24,6 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create() {
-    window.onSceneChange?.('gameover')
     playBGM('gameover')
     const W  = this.scale.width
     const H  = this.scale.height
