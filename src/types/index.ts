@@ -171,5 +171,7 @@ declare global {
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
     runShadowChallenge?: () => ShadowResult | null
     runSpellbookChallenge?: (spellId: string) => SpellbookResult | null
+    // ── シーン変更通知 ──
+    onSceneChange?: (scene: string) => void
   }
 }

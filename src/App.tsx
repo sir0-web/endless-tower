@@ -27,25 +27,54 @@ function isMobileViewport() {
   return window.innerWidth < 768
 }
 
+// タイトル時のPhaser解像度
+const TITLE_W = BASE_W
+const TITLE_H = BASE_H
+
+function getTitleCanvasDims(isTitle: boolean): [number, number] {
+  if (!isTitle) return [GAME_W, GAME_H]
+  if (isMobileViewport()) return [window.innerWidth, window.innerHeight]
+  return [TITLE_W, TITLE_H]
+}
+
 function App() {
-  const canvasAreaRef = useRef<HTMLDivElement>(null)
-  const gameRef       = useRef<Phaser.Game | null>(null)
-  const [appScale, setAppScale] = useState(calcScale)
-  const [isMobile, setIsMobile] = useState(isMobileViewport)
+  const canvasAreaRef  = useRef<HTMLDivElement>(null)
+  const gameRef        = useRef<Phaser.Game | null>(null)
+  const currentScene   = useRef<string>('title')
+  const [appScale, setAppScale]   = useState(calcScale)
+  const [isMobile, setIsMobile]   = useState(isMobileViewport)
+  const [isTitleMode, setIsTitleMode] = useState(true)
 
   // ウィンドウリサイズでスケール再計算 + Phaser canvas 更新
   useEffect(() => {
     const onResize = () => {
       setIsMobile(isMobileViewport())
       setAppScale(calcScale())
-      gameRef.current?.scale.resize(GAME_W, GAME_H)
+      const isTitle = currentScene.current === 'title'
+      const [w, h] = getTitleCanvasDims(isTitle)
+      gameRef.current?.scale.resize(w, h)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Phaser 初期化
+  // シーン変更ブリッジ
   useEffect(() => {
+    window.onSceneChange = (scene) => {
+      currentScene.current = scene
+      const isTitle = scene === 'title'
+      setIsTitleMode(isTitle)
+      const [w, h] = getTitleCanvasDims(isTitle)
+      gameRef.current?.scale.resize(w, h)
+      requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
+    }
+    return () => { window.onSceneChange = undefined }
+  }, [])
+
+  // Phaser 初期化（最初のシーンはTitleSceneなのでTITLE_W×TITLE_Hで初期化）
+  useEffect(() => {
+    const initW = isMobileViewport() ? window.innerWidth  : TITLE_W
+    const initH = isMobileViewport() ? window.innerHeight : TITLE_H
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
       parent: canvasAreaRef.current!,
@@ -54,16 +83,14 @@ function App() {
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: GAME_W,
-        height: GAME_H,
+        width: initW,
+        height: initH,
       },
     }
     gameRef.current = new Phaser.Game(config)
 
-    // 初期レイアウト確定後にスケールを再計算し、コンテナとのズレ（隙間）を解消する
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
 
-    // game-canvas-area のサイズが変わったとき（ステータスバー出現/消滅など）スケールを再計算
     const obs = new ResizeObserver(() => { gameRef.current?.scale.refresh() })
     if (canvasAreaRef.current) obs.observe(canvasAreaRef.current)
 
@@ -86,7 +113,7 @@ function App() {
 
   return (
     <div style={wrapperStyle}>
-      <div className="app-layout">
+      <div className={`app-layout${isTitleMode ? ' title-mode' : ''}`}>
         <div className="game-pane">
           <MobileStatusBar />
           <div className="game-canvas-area" ref={canvasAreaRef}>

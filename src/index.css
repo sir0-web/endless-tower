@@ -39,6 +39,14 @@ html, body {
   position: relative;
 }
 
+/* ── タイトル画面モード: game-paneを全幅・ui-paneを非表示 ── */
+.app-layout.title-mode .game-pane {
+  flex: 0 0 100%;
+}
+.app-layout.title-mode .ui-pane {
+  display: none;
+}
+
 .game-canvas-area {
   flex: 1;
   min-height: 0;
@@ -350,6 +358,21 @@ html, body {
     width: 100%;
     height: calc(84vw + 108px);
     overflow: hidden;
+  }
+
+  /* スマホ タイトルモード: 全画面に拡大 */
+  .app-layout.title-mode .game-pane {
+    height: 100dvh;
+  }
+  .app-layout.title-mode .game-canvas-area {
+    margin-top: 0 !important;
+    height: 100% !important;
+  }
+  .app-layout.title-mode .mob-status-bar {
+    display: none !important;
+  }
+  .app-layout.title-mode .event-msg-bar {
+    display: none;
   }
 
   .mob-status-bar {

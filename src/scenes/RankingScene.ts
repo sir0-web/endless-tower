@@ -24,6 +24,7 @@ export class RankingScene extends Phaser.Scene {
     this.floor   = data.floor
     this.level   = data.level ?? 1
     this.from    = data.from ?? 'gameover'
+    window.onSceneChange?.('ranking')
   }
 
   create() {

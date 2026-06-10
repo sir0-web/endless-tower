@@ -116,6 +116,7 @@ export class GameScene extends Phaser.Scene {
     this.isAnimating        = false
     this.isEventFloor       = false
     this.eventFacilities    = []
+    window.onSceneChange?.('game')
   }
 
   preload() {
