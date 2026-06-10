@@ -66,10 +66,9 @@ export class GameScene extends Phaser.Scene {
   private itemGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
   // イベントフロアNPC（施設の話しかけ役）描画
   private facilityGraphics: Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Text> = new Map()
-  private telopText!: Phaser.GameObjects.Text
-  // スマホ用メッセージポップアップ（再利用）
-  private mobileMsg:      Phaser.GameObjects.Text | null = null
-  private mobileMsgTween: Phaser.Tweens.Tween      | null = null
+  // 施設NPC画像の可視領域割合キャッシュ（透過除き可視部分 / 画像全体）
+  private facilityBoundsCache: Map<string, { wFrac: number; hFrac: number }> = new Map()
+
 
   private inventoryPanel!: Phaser.GameObjects.Container
   private pauseOverlay!: Phaser.GameObjects.Container
@@ -101,6 +100,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyGraphics      = new Map()
     this.enemyHpBars        = new Map()
     this.itemGraphics       = new Map()
+    this.facilityGraphics   = new Map()
     this.tileSprites        = []
     this.floorVariantMap    = []
     this.inventoryOpen      = false
@@ -206,17 +206,6 @@ export class GameScene extends Phaser.Scene {
       }
       console.log('[DEV] warpFloor(階数) で好きな階にワープできます。例: warpFloor(10)')
     }
-
-    const W = this.scale.width
-    const H = this.scale.height
-
-    this.telopText = this.add.text(W / 2, H / 2 - 40, '', {
-      fontSize: '22px',
-      color: '#ff4444',
-      stroke: '#000000',
-      strokeThickness: 4,
-      align: 'center',
-    }).setOrigin(0.5).setDepth(10)
 
     this.createPauseOverlay()
     this.createInventoryPanel()
@@ -346,21 +335,7 @@ export class GameScene extends Phaser.Scene {
       : floorType === 'lucky' ? '#aaddff'
       : '#ff4444'
 
-    if (window.innerWidth < 768) {
-      window.showEventMessage?.(parts.join('\n'), color)
-      return
-    }
-
-    this.telopText.setColor(color)
-    this.telopText.setText(parts.join('\n'))
-    this.telopText.setAlpha(1)
-
-    this.tweens.add({
-      targets: this.telopText,
-      alpha: 0,
-      duration: 3000,
-      delay: 2000,
-    })
+    window.showEventMessage?.(parts.join('\n'), color)
   }
 
   private handleInput(event: KeyboardEvent) {
@@ -683,35 +658,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showLevelUpNotif(prevLevel: number, newLevel: number) {
-    if (window.innerWidth < 768) {
+    // enemyTurn() の同期メッセージ群が EventMsgBar に流れた後に表示する
+    setTimeout(() => {
       window.showEventMessage?.(`⚔レベルアップ⚔\nLv${prevLevel}→Lv${newLevel} になりました`, '#ffdd44')
-      return
-    }
-
-    const W = this.scale.width
-    const H = this.scale.height
-
-    const main = this.add.text(W / 2, H / 2 - 20, '⚔レベルアップ⚔', {
-      fontSize: '30px', color: '#ffdd44',
-      stroke: '#000000', strokeThickness: 5,
-      backgroundColor: '#00000099',
-      padding: { x: 16, y: 8 },
-    }).setOrigin(0.5).setDepth(65)
-
-    const sub = this.add.text(W / 2, H / 2 + 24, `Lv${prevLevel}→Lv${newLevel} になりました`, {
-      fontSize: '18px', color: '#ffffff',
-      stroke: '#000000', strokeThickness: 4,
-      backgroundColor: '#00000099',
-      padding: { x: 12, y: 6 },
-    }).setOrigin(0.5).setDepth(65)
-
-    this.tweens.add({
-      targets: [main, sub],
-      alpha: 0,
-      duration: 600,
-      delay: 2200,
-      onComplete: () => { main.destroy(); sub.destroy() },
-    })
+    }, 150)
   }
 
   private doAllocateStat(stat: AllocStat) {
@@ -1017,6 +967,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private enterNormalFloor() {
+    this.isEventFloor = false
+    this.eventFacilities = []
     this.state.driedSprings = []
     this.state.player.floor++
     const floor = this.state.player.floor
@@ -1101,24 +1053,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showMidgardTitle() {
-    const W = this.scale.width
-    const H = this.scale.height
-    const title = this.add.text(W / 2, H / 2, 'ベースキャンプ「あるかなひろば」', {
-      fontSize: '36px', color: '#ffd766',
-      stroke: '#000000', strokeThickness: 6,
-      backgroundColor: '#00000099',
-      padding: { x: 20, y: 12 },
-    }).setOrigin(0.5).setDepth(70).setAlpha(0)
-
-    this.tweens.add({
-      targets: title, alpha: 1, duration: 1200,
-      onComplete: () => {
-        this.tweens.add({
-          targets: title, alpha: 0, duration: 1200, delay: 1800,
-          onComplete: () => title.destroy(),
-        })
-      },
-    })
+    window.showEventMessage?.('ベースキャンプ「あるかなひろば」に到着！', '#ffd766')
   }
 
   /** イベントフロアの施設に話しかけたときの処理（移動と同じ操作で起動） */
@@ -1259,45 +1194,7 @@ export class GameScene extends Phaser.Scene {
   private addMessage(msg: string) {
     this.state.messages.unshift(msg)
     if (this.state.messages.length > 50) this.state.messages.pop()
-    this.showMobileMsg(msg)
-  }
-
-  /** スマホ時、メッセージをゲームキャンバス上に大きくポップ表示 */
-  private showMobileMsg(msg: string) {
-    if (window.innerWidth >= 768) return
-    const W = this.scale.width
-    const H = this.scale.height
-
-    if (this.mobileMsgTween) { this.mobileMsgTween.stop(); this.mobileMsgTween = null }
-
-    if (!this.mobileMsg || !this.mobileMsg.active) {
-      this.mobileMsg = this.add.text(W / 2, H * 0.78, msg, {
-        fontSize: '30px', color: '#ffffff',
-        stroke: '#000000', strokeThickness: 4,
-        backgroundColor: '#000000bb',
-        padding: { x: 14, y: 8 },
-        wordWrap: { width: W * 0.88 },
-        align: 'center',
-      }).setOrigin(0.5).setDepth(60).setAlpha(0)
-    } else {
-      this.mobileMsg.setText(msg)
-      this.mobileMsg.setAlpha(0)
-    }
-
-    this.mobileMsgTween = this.tweens.add({
-      targets: this.mobileMsg,
-      alpha: 1,
-      duration: 180,
-      onComplete: () => {
-        this.mobileMsgTween = this.tweens.add({
-          targets: this.mobileMsg,
-          alpha: 0,
-          duration: 400,
-          delay: 1400,
-          onComplete: () => { this.mobileMsgTween = null },
-        })
-      },
-    })
+    window.showEventMessage?.(msg)
   }
 
   private updateWindowGameState() {
@@ -1706,6 +1603,37 @@ export class GameScene extends Phaser.Scene {
     )
   }
 
+  /** テクスチャの不透明ピクセル領域割合を返す（透過パディング補正用）。結果はキャッシュ。 */
+  private getVisibleFraction(key: string): { wFrac: number; hFrac: number } {
+    if (this.facilityBoundsCache.has(key)) return this.facilityBoundsCache.get(key)!
+    if (!this.textures.exists(key)) return { wFrac: 1, hFrac: 1 }
+    const src = this.textures.get(key).getSourceImage() as HTMLCanvasElement | HTMLImageElement
+    const w = (src as HTMLCanvasElement).width  || (src as HTMLImageElement).naturalWidth  || 0
+    const h = (src as HTMLCanvasElement).height || (src as HTMLImageElement).naturalHeight || 0
+    if (!w || !h) return { wFrac: 1, hFrac: 1 }
+    const c = document.createElement('canvas')
+    c.width = w; c.height = h
+    const ctx = c.getContext('2d', { willReadFrequently: true })!
+    ctx.drawImage(src as CanvasImageSource, 0, 0)
+    const d = ctx.getImageData(0, 0, w, h).data
+    let x0 = w, x1 = 0, y0 = h, y1 = 0
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (d[(y * w + x) * 4 + 3] > 8) {
+          if (x < x0) x0 = x
+          if (x > x1) x1 = x
+          if (y < y0) y0 = y
+          if (y > y1) y1 = y
+        }
+      }
+    }
+    const result = (x1 > x0 && y1 > y0)
+      ? { wFrac: (x1 - x0 + 1) / w, hFrac: (y1 - y0 + 1) / h }
+      : { wFrac: 1, hFrac: 1 }
+    this.facilityBoundsCache.set(key, result)
+    return result
+  }
+
   private renderMap() {
     this.graphics.clear()
     const { map, player, enemies, items } = this.state
@@ -1791,8 +1719,12 @@ export class GameScene extends Phaser.Scene {
         if (!g) {
           const tex = facility.texture
           if (tex && !this.failedTextures.has(tex) && this.textures.exists(tex)) {
+            // 可視領域でプレイヤーと同サイズになるよう透過パディング分を補正
+            const { wFrac, hFrac } = this.getVisibleFraction(tex)
+            const targetW = rts * 1.25
+            const targetH = rts * 1.38
             g = this.add.image(0, 0, tex)
-              .setDisplaySize(rts, rts).setOrigin(0.5).setDepth(4)
+              .setDisplaySize(targetW / wFrac, targetH / hFrac).setOrigin(0.5).setDepth(4)
           } else {
             g = this.add.text(0, 0, facility.icon, { fontSize: `${Math.round(rts * 0.7)}px` })
               .setOrigin(0.5).setDepth(4)

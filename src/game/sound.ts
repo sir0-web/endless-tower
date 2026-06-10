@@ -32,9 +32,16 @@ export function stopBGM(): void {
   bgmName = null
 }
 
+const sePool: Record<string, HTMLAudioElement> = {}
+
 function se(name: string): void {
   if (_muted) return
-  const a = new Audio(`/se/${name}.mp3`)
+  let a = sePool[name]
+  if (!a) {
+    a = new Audio(`/se/${name}.mp3`)
+    sePool[name] = a
+  }
+  a.currentTime = 0
   void a.play().catch(() => {})
 }
 
