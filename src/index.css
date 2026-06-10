@@ -912,13 +912,13 @@ html, body {
   animation: reel-bounce-anim 0.4s ease;
 }
 
-/* ── LCD（975px基準で再計算: y=560-940 → 57.4%-96.4%） ── */
+/* ── LCD（元エリアの80%サイズ、中央配置） ── */
 .sc-lcd {
   position: absolute;
-  top: 57.4%;
-  left: 6.84%;
-  width: 86.43%;
-  height: 39.0%;
+  top: 61.3%;
+  left: 15.5%;
+  width: 69.1%;
+  height: 31.2%;
   overflow: hidden;
 }
 
