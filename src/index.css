@@ -2320,7 +2320,7 @@ html, body {
 }
 
 .emb-msg {
-  font-size: clamp(30px, 3vw, 44px);
+  font-size: clamp(21px, 2.1vw, 31px);
   font-weight: 700;
   text-align: center;
   line-height: 1.4;
@@ -2343,7 +2343,7 @@ html, body {
     object-fit: fill;
   }
   .emb-msg {
-    font-size: clamp(26px, 7vw, 34px);
+    font-size: clamp(18px, 4.9vw, 24px);
   }
   /* PC専用ステータス上部バーはスマホでは非表示 */
   .pc-status-top {
