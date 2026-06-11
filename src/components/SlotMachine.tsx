@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { logEvent } from '../game/supabase'
 
 const SYMBOLS    = 7
 const CREDIT_MAX = 3
@@ -92,6 +93,7 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     if (stoppedCountRef.current === 3) {
       addTimer(() => {
         const result = evaluate(finalsRef.current)
+        logEvent('slot_result', { slot_result: result })
         if (['777', 'triple', 'skulls'].includes(result)) setGlowing(true)
         window.playBonusVideo?.(result)
       }, 500)

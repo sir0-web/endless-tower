@@ -5,6 +5,7 @@ import { spawnItems, SPELL_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
+import { logEvent } from '../game/supabase'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
@@ -1006,6 +1007,7 @@ export class GameScene extends Phaser.Scene {
     this.state.driedSprings = []
     this.state.player.floor++
     const floor = this.state.player.floor
+    logEvent('floor_reached', { floor, level: this.state.player.level })
     const map = generateDungeon()
     const playerPos = getPlayerStartPosition(map)
     this.state.map = map
@@ -1237,6 +1239,7 @@ export class GameScene extends Phaser.Scene {
   private gameOver() {
     if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
     this.isGameOver = true
+    logEvent('death', { floor: this.state.player.floor, level: this.state.player.level })
     clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
     this.input.keyboard!.off('keydown', this.handleInput, this)
     window.isGameSceneActive = false

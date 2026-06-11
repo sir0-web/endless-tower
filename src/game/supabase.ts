@@ -17,6 +17,34 @@ export async function submitRanking(playerName: string, floor: number, level: nu
   return null
 }
 
+// ── プレイヤー識別（匿名UUID。同じブラウザ＝同じ player_id として集計可能）──
+const PLAYER_ID_KEY = 'et_player_id'
+export function getPlayerId(): string {
+  let id = localStorage.getItem(PLAYER_ID_KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem(PLAYER_ID_KEY, id)
+  }
+  return id
+}
+
+// ── 行動ログ（バランス調整の統計用。fire-and-forget でゲーム進行を妨げない）──
+type GameEventType = 'floor_reached' | 'slot_result' | 'death'
+interface GameEventPayload {
+  floor?: number
+  level?: number
+  slot_result?: string
+}
+
+export function logEvent(eventType: GameEventType, payload: GameEventPayload = {}): void {
+  void supabase
+    .from('game_events')
+    .insert({ player_id: getPlayerId(), event_type: eventType, ...payload })
+    .then(({ error }) => {
+      if (error) console.warn('行動ログ送信失敗:', error.message)
+    })
+}
+
 export async function fetchRanking() {
   const { data, error } = await supabase
     .from('rankings')
