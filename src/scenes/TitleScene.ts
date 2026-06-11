@@ -25,10 +25,23 @@ export class TitleScene extends Phaser.Scene {
     const H  = this.scale.height
     const cx = W / 2
 
+    // 入場フェードイン
+    this.cameras.main.fadeIn(500, 0, 0, 0)
+
     // ── 背景画像（cover 挙動）──
     if (this.textures.exists('title-bg')) {
       const bg = this.add.image(cx, H / 2, 'title-bg').setDepth(0)
-      bg.setScale(Math.max(W / bg.width, H / bg.height))
+      const baseScale = Math.max(W / bg.width, H / bg.height)
+      bg.setScale(baseScale)
+      // ごく僅かにゆっくりズームしてタイトルに動きを出す（Ken Burns風）
+      this.tweens.add({
+        targets: bg,
+        scale: baseScale * 1.06,
+        duration: 12000,
+        ease: 'Sine.InOut',
+        yoyo: true,
+        repeat: -1,
+      })
     } else {
       this.add.rectangle(cx, H / 2, W, H, 0x060610).setDepth(0)
     }
@@ -39,19 +52,56 @@ export class TitleScene extends Phaser.Scene {
     const top     = H * 0.60
 
     // ①〜④ すべて同じ固定幅 BTN_WIDTH で生成
-    this.makeBtn(cx, top,          'GAME START',  btnFont, () => {
-      if (hasSave()) {
-        window.showResumeConfirm?.(
-          () => { this.scene.start('GameScene') },
-          () => { clearSave(); this.scene.start('GameScene') }
-        )
-      } else {
-        this.scene.start('GameScene')
-      }
+    const startBtn = this.makeBtn(cx, top,          'GAME START',  btnFont, () => {
+      this.startGame()
     })
-    this.makeBtn(cx, top + gap,    'RANKING',     btnFont, () => { void this.goRanking() })
-    this.makeBtn(cx, top + gap * 2,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
-    this.makeBtn(cx, top + gap * 3,'HOW TO PLAY', btnFont, () => { this.openHowTo(W, H) })
+    const b2 = this.makeBtn(cx, top + gap,    'RANKING',     btnFont, () => { void this.goRanking() })
+    const b3 = this.makeBtn(cx, top + gap * 2,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
+    const b4 = this.makeBtn(cx, top + gap * 3,'HOW TO PLAY', btnFont, () => { this.openHowTo(W, H) })
+
+    // ボタンを下から段階的にフェードイン
+    const btns = [startBtn, b2, b3, b4]
+    btns.forEach((btn, i) => {
+      btn.setAlpha(0)
+      const baseY = btn.y
+      btn.setY(baseY + 16)
+      this.tweens.add({
+        targets: btn,
+        alpha: 1,
+        y: baseY,
+        duration: 360,
+        delay: 250 + i * 90,
+        ease: 'Back.Out',
+      })
+    })
+
+    // GAME START を脈動させて「押せる」感を出す
+    this.tweens.add({
+      targets: startBtn,
+      scale: 1.05,
+      duration: 900,
+      delay: 700,
+      ease: 'Sine.InOut',
+      yoyo: true,
+      repeat: -1,
+    })
+  }
+
+  /** フェードアウトしてからシーン遷移する共通ヘルパー */
+  private fadeToScene(key: string, data?: object) {
+    this.cameras.main.fadeOut(350, 0, 0, 0)
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(key, data))
+  }
+
+  private startGame() {
+    if (hasSave()) {
+      window.showResumeConfirm?.(
+        () => { this.fadeToScene('GameScene') },
+        () => { clearSave(); this.fadeToScene('GameScene') }
+      )
+    } else {
+      this.fadeToScene('GameScene')
+    }
   }
 
   // ── 全ボタン共通生成（fixedWidth で横幅統一・中央揃え）──
@@ -163,9 +213,9 @@ export class TitleScene extends Phaser.Scene {
   private async goRanking() {
     try {
       const ranking = await fetchRanking()
-      this.scene.start('RankingScene', { ranking, floor: 0, from: 'title' })
+      this.fadeToScene('RankingScene', { ranking, floor: 0, from: 'title' })
     } catch {
-      this.scene.start('RankingScene', { ranking: [], floor: 0, from: 'title' })
+      this.fadeToScene('RankingScene', { ranking: [], floor: 0, from: 'title' })
     }
   }
 }

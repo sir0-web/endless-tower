@@ -199,6 +199,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    this.cameras.main.fadeIn(500, 0, 0, 0)
     this.graphics    = this.add.graphics().setDepth(1)
     this.fogGraphics = this.add.graphics().setDepth(7)
     this.initGame()
@@ -1116,6 +1117,7 @@ export class GameScene extends Phaser.Scene {
     this.updateWindowGameState()
     this.showTelopIfNeeded()
     this.updateBGM()
+    this.cameras.main.fadeIn(300, 0, 0, 0)   // フロア切替の入場フェード
     if (floorType === 'chaos') this.showMonsterHouseEffect()
   }
 
@@ -1140,6 +1142,7 @@ export class GameScene extends Phaser.Scene {
     this.renderMap()
     this.updateWindowGameState()
     this.updateBGM()
+    this.cameras.main.fadeIn(300, 0, 0, 0)   // フロア切替の入場フェード
     this.showMidgardTitle()
   }
 
@@ -1312,7 +1315,9 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard!.off('keydown', this.handleInput, this)
     window.isGameSceneActive = false
     window.dispatchEvent(new Event('game-scene-changed'))
-    this.time.delayedCall(1000, () => {
+    // 少し間を置いてから暗転 → ゲームオーバー画面へ
+    this.time.delayedCall(700, () => this.cameras.main.fadeOut(500, 0, 0, 0))
+    this.time.delayedCall(1250, () => {
       this.scene.start('GameOverScene', { floor: this.state.player.floor, level: this.state.player.level })
     })
   }

@@ -29,6 +29,9 @@ export class GameOverScene extends Phaser.Scene {
     const H  = this.scale.height
     const cx = W / 2
 
+    // 入場フェードイン（黒からゆっくり浮かび上がる）
+    this.cameras.main.fadeIn(700, 0, 0, 0)
+
     const s    = Math.min(W / 800, H / 700)
     const fs   = (base: number) => `${Math.max(12, Math.round(base * s))}px`
     const fsPx = (base: number) => Math.max(12, Math.round(base * s))
@@ -158,7 +161,7 @@ export class GameOverScene extends Phaser.Scene {
     }).setOrigin(0.5)
 
     retryBtn.setInteractive({ useHandCursor: true })
-    retryBtn.on('pointerdown', () => { this.scene.start('TitleScene') })
+    retryBtn.on('pointerdown', () => { this.fadeToScene('TitleScene') })
     retryBtn.on('pointerover', () => {
       retryBtn.setColor('#ffffff')
       retryHover.fillStyle(0x333333, 0.5)
@@ -213,6 +216,12 @@ export class GameOverScene extends Phaser.Scene {
 
   private async showRanking() {
     const ranking = await fetchRanking()
-    this.scene.start('RankingScene', { ranking, floor: this.floor, level: this.level, from: 'gameover' })
+    this.fadeToScene('RankingScene', { ranking, floor: this.floor, level: this.level, from: 'gameover' })
+  }
+
+  /** フェードアウトしてからシーン遷移する共通ヘルパー */
+  private fadeToScene(key: string, data?: object) {
+    this.cameras.main.fadeOut(350, 0, 0, 0)
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(key, data))
   }
 }

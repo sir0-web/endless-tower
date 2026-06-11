@@ -32,6 +32,9 @@ export class RankingScene extends Phaser.Scene {
     const H  = this.scale.height
     const cx = W / 2
 
+    // 入場フェードイン
+    this.cameras.main.fadeIn(450, 0, 0, 0)
+
     // フォントサイズをキャンバスサイズに合わせてスケール
     const sc = Math.min(W / 800, H / 700)
     const fs = (base: number) => `${Math.max(10, Math.round(base * sc))}px`
@@ -98,7 +101,10 @@ export class RankingScene extends Phaser.Scene {
     }).setOrigin(0.5)
 
     btn.setInteractive({ useHandCursor: true })
-    btn.on('pointerdown', () => { this.scene.start('TitleScene') })
+    btn.on('pointerdown', () => {
+      this.cameras.main.fadeOut(350, 0, 0, 0)
+      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('TitleScene'))
+    })
     btn.on('pointerover',  () => { btn.setColor('#ffffff') })
     btn.on('pointerout',   () => { btn.setColor('#00ff88') })
   }
