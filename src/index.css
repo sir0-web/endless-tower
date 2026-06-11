@@ -272,8 +272,16 @@ html, body {
   max-height: 80vh;
   overflow-y: auto;
   text-align: center;
-  animation: g-toast-in 0.22s ease both;
+  /* 注意: g-toast-in は translateX(-50%) を含む（left:50% のトースト専用）。
+     flex中央配置のこのダイアログに適用すると幅の半分だけ左にズレて
+     スマホで「はい」が画面外に見切れるため、専用アニメーションを使う */
+  animation: g-confirm-in 0.22s ease both;
   box-sizing: border-box;
+}
+
+@keyframes g-confirm-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .g-confirm-msg {
