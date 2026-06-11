@@ -80,6 +80,14 @@ export class GameScene extends Phaser.Scene {
   private pendingItem: import('../types').Item | null = null
   private isGameOver   = false   // gameOver()の多重発火防止（同一ターン内で複数回HP<=0判定が走るため）
   private isAnimating  = false   // 落とし穴スピンなどの演出中フラグ（入力ブロック用）
+  private animatingTimer: ReturnType<typeof setTimeout> | null = null  // isAnimating安全タイムアウト
+  private onVisibilityChange = () => {
+    if (!document.hidden && this.isAnimating) {
+      // バックグラウンド復帰時にフラグが残っていたら強制解除
+      this.isAnimating = false
+      if (this.animatingTimer) { clearTimeout(this.animatingTimer); this.animatingTimer = null }
+    }
+  }
   // テクスチャ/アニメーションはゲーム全体で共有（シーン再起動毎にリセットされない）ため、
   // 透過処理（テクスチャの remove→addCanvas）は初回のみ実行する。
   // 2回目以降に再実行すると、既存のwalk/attackアニメーションが参照している古いFrameの
@@ -185,6 +193,7 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.graphics = this.add.graphics().setDepth(1)
     this.initGame()
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.input.keyboard!.on('keydown', this.handleInput, this)
     window.allocateStat = (stat: AllocStat) => this.doAllocateStat(stat)
     window.useSpell    = (itemId: string) => this.useSpellById(itemId)
@@ -439,6 +448,8 @@ export class GameScene extends Phaser.Scene {
         const fromFloor = this.state.player.floor
         const toFloor   = fromFloor + fallDepth
         this.isAnimating = true
+        if (this.animatingTimer) clearTimeout(this.animatingTimer)
+        this.animatingTimer = setTimeout(() => { this.isAnimating = false; this.animatingTimer = null }, 5000)
         this.renderMap()
         this.spinPlayer(3, 600, () => {
           this.state.player.floor += fallDepth - 1
@@ -446,6 +457,7 @@ export class GameScene extends Phaser.Scene {
           this.time.delayedCall(80, () => {
             this.spinPlayer(3, 600, () => {
               this.isAnimating = false
+              if (this.animatingTimer) { clearTimeout(this.animatingTimer); this.animatingTimer = null }
               window.showEventMessage?.(
                 `落とし穴に落ちた！\nB§${fromFloor}§FからB§${toFloor}§Fへ転落した！`,
                 '#ffffff'
@@ -1211,6 +1223,11 @@ export class GameScene extends Phaser.Scene {
     this.addMessage(`${target.name}を渡し、${gained.name}を手に入れた！`)
     this.updateWindowGameState()
     return { success: true, lostName: target.name, gainedName: gained.name }
+  }
+
+  shutdown() {
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
+    if (this.animatingTimer) { clearTimeout(this.animatingTimer); this.animatingTimer = null }
   }
 
   private gameOver() {
