@@ -3,7 +3,7 @@ import type { GameState, AllocStat } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, generateAreaBossFloors, getFloorTelopMessage, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
-import { playAttack, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
+import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { logEvent } from '../game/supabase'
 
@@ -673,6 +673,7 @@ export class GameScene extends Phaser.Scene {
       })
 
       if (isCrit) {
+        playCrit()
         this.cameras.main.shake(120, 0.006)
         this.addMessage(`${enemy.name}にクリティカル！${dmg}ダメージ！`)
       } else {
