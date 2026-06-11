@@ -223,6 +223,17 @@ export function spawnBosses(floor: number, areaBossFloors: Record<number, string
   return bosses
 }
 
+/** 混沌フロア（モンスターハウス）用：MINI/MVP/エリアボスの中からランダムに1体生成する */
+export function makeChaosBoss(floor: number) {
+  const pool: { name: string; hpMult: number; atkMult: number; defMult: number; prefix: string }[] = [
+    ...Object.values(MINI_BOSS_TABLE).map(b => ({ ...b, prefix: '【MINI】' })),
+    ...Object.values(MVP_BOSS_TABLE).map(b => ({ ...b, prefix: '【MVP】' })),
+    ...AREA_BOSS_TABLE.map(a => ({ name: a.name, hpMult: 3.6, atkMult: 2.1, defMult: 1.5, prefix: '【エリア】' })),
+  ]
+  const pick = pool[Math.floor(Math.random() * pool.length)]
+  return makeBoss(pick.name, floor, pick.hpMult, pick.atkMult, pick.defMult, pick.prefix)
+}
+
 export function getFloorTelopMessage(floor: number, areaBossFloors: Record<number, string>): string | null {
   const isMini = floor % 5 === 0 && floor % 10 !== 0
   const isMvp = floor % 10 === 0

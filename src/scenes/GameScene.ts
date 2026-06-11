@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
-import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, generateAreaBossFloors, getFloorTelopMessage, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
+import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, generateAreaBossFloors, getFloorTelopMessage, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
@@ -39,6 +39,7 @@ const ENEMY_TEXTURE_MAP: Record<string, string> = {
   'デビルリング':        'deviling',
   'マスターリング':      'masterring',
   'ゴーストリング':      'ghostring',
+  'ドレイク':            'drake',
   'トード':              'toad',
   'キングドラモ':        'kingdramo',
   'さすらい狼':          'wanderwolf',
@@ -160,9 +161,10 @@ export class GameScene extends Phaser.Scene {
     this.load.image('tile-box', '/assets/dungeon/box/box.png')
     // trap.png — ベノムダスト（ハズレ時は紫Graphicsにフォールバック）
     this.load.image('trap', '/assets/dungeon/trap/trap.png')
-    this.load.image('tile-mud',     '/assets/dungeon/mud/mud.png')
-    this.load.image('tile-spring',  '/assets/dungeon/spring/spring.png')
-    this.load.image('tile-pitfall', '/assets/dungeon/pitfall/pitfall.png')
+    this.load.image('tile-mud',        '/assets/dungeon/mud/mud.png')
+    this.load.image('tile-spring',     '/assets/dungeon/spring/spring.png')
+    this.load.image('tile-spring-dry', '/assets/dungeon/spring/spring_dry.png')
+    this.load.image('tile-pitfall',    '/assets/dungeon/pitfall/pitfall.png')
 
     // プレイヤー画像（スタティック・フォールバック用）
     this.load.image('player', '/assets/characters/player.png')
@@ -199,6 +201,8 @@ export class GameScene extends Phaser.Scene {
       ['eclipse',         '/assets/characters/enemies/eclipse.png'],
       ['angeling',        '/assets/characters/enemies/angeling.png'],
       ['furioni',         '/assets/characters/enemies/furioni.png'],
+      ['ghostring',       '/assets/characters/enemies/ghostring.png'],
+      ['drake',           '/assets/characters/enemies/drake.png'],
       ['horu',            '/assets/characters/enemies/horu.png'],
       ['master',          '/assets/characters/enemies/master.png'],
       ['maho',            '/assets/characters/enemies/maho.png'],
@@ -273,7 +277,7 @@ export class GameScene extends Phaser.Scene {
       ? spawnMonsterHouseEnemies(map, 1, playerPos)
       : spawnEnemies(map, initCount, 1)
     let bosses = spawnBosses(1, areaBossFloors)
-    if (floorType === 'chaos') bosses = [...bosses, this.makeChaosExtraBoss(1)]
+    if (floorType === 'chaos') bosses = [...bosses, makeChaosBoss(1)]
     const floorTiles: { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
@@ -678,6 +682,11 @@ export class GameScene extends Phaser.Scene {
         player.hp = player.maxHp
         this.state.driedSprings.push(key)
         this.addMessage('回復の泉に浸かった')
+        // 泉が枯れる見た目に切り替え
+        const sprite = this.tileSprites[player.position.y]?.[player.position.x]
+        if (sprite && !this.failedTextures.has('tile-spring-dry') && this.textures.exists('tile-spring-dry')) {
+          sprite.setTexture('tile-spring-dry').setDisplaySize(this.rts + 6, this.rts + 6)
+        }
       }
     }
   }
@@ -1202,7 +1211,7 @@ export class GameScene extends Phaser.Scene {
       ? spawnMonsterHouseEnemies(map, floor, playerPos)
       : spawnEnemies(map, count, floor)
     let bosses = spawnBosses(floor, this.state.areaBossFloors)
-    if (floorType === 'chaos') bosses = [...bosses, this.makeChaosExtraBoss(floor)]
+    if (floorType === 'chaos') bosses = [...bosses, makeChaosBoss(floor)]
 
     const floors: { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
@@ -1593,25 +1602,6 @@ export class GameScene extends Phaser.Scene {
     return 'normal'
   }
 
-  private makeChaosExtraBoss(floor: number) {
-    const scale = 1 + floor * 0.1
-    return {
-      id: `enemy_chaos_${floor}_${Date.now()}`,
-      position: { x: 0, y: 0 },
-      hp:      Math.floor((30 + floor * 5) * 3 * scale),
-      maxHp:   Math.floor((30 + floor * 5) * 3 * scale),
-      attack:  Math.floor((10 + floor * 2) * 1.5 * scale),
-      defense: Math.floor((5  + floor)     * 1.5 * scale),
-      str: Math.floor((4 + floor * 0.5) * 1.5),
-      vit: Math.floor((2 + floor * 0.3) * 1.5),
-      agi: Math.floor((5 + floor * 0.2) * 1.5),
-      luk: Math.floor((2 + floor * 0.1) * 1.8),
-      slowedTurns: 0,
-      name: '【混沌】アビスガーディアン',
-      isBoss: true as const,
-    }
-  }
-
   private showMonsterHouseEffect() {
     const W = this.scale.width
     const H = this.scale.height
@@ -1928,7 +1918,8 @@ export class GameScene extends Phaser.Scene {
         else if (tile === 'stairs')  key = 'tile-stairs'
         else if (tile === 'trap')    key = 'trap'
         else if (tile === 'mud')     key = 'tile-mud'
-        else if (tile === 'spring')  key = 'tile-spring'
+        // 泉：使用済み（枯渇）はセーブ復元時もそのまま枯れ画像で表示する
+        else if (tile === 'spring')  key = this.state?.driedSprings?.includes(`${x},${y}`) ? 'tile-spring-dry' : 'tile-spring'
         else if (tile === 'pitfall') key = 'tile-pitfall'
         else return null
 
@@ -2121,10 +2112,18 @@ export class GameScene extends Phaser.Scene {
       if (!g) {
         const baseName   = enemy.name.replace(/^【[^】]+】/, '')
         const textureKey = ENEMY_TEXTURE_MAP[baseName]
+        // 透過パディング補正でサイズ指定するテクスチャ
+        // heroSized: 可視部分が主人公（1.25×1.38タイル）と同サイズになるよう補正
+        const fracSized: Record<string, number> = { deviling: 1.25, masterring: 1.25 }
+        const heroSized = ['ghostring', 'drake']
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
-          if (['deviling', 'masterring'].includes(textureKey)) {
+          if (heroSized.includes(textureKey)) {
             const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
-            const target = rts * 1.25
+            g = this.add.image(ex, ey, textureKey)
+              .setDisplaySize(rts * 1.25 / wFrac, rts * 1.38 / hFrac).setDepth(5)
+          } else if (textureKey in fracSized) {
+            const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
+            const target = rts * fracSized[textureKey]
             g = this.add.image(ex, ey, textureKey)
               .setDisplaySize(target / wFrac, target / hFrac).setDepth(5)
           } else {
