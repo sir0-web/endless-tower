@@ -866,10 +866,10 @@ html, body {
   box-shadow: 0 0 20px rgba(255, 220, 0, 0.6);
 }
 
-/* ── リール3本（975px基準で再計算: y=270-495 → 27.7%-50.8%） ── */
+/* ── リール3本（入れ替え後: y=685-910 → 70.3%-93.4%） ── */
 .sc-reels {
   position: absolute;
-  top: 27.7%;
+  top: 70.3%;
   left: 11.72%;
   width: 76.17%;
   height: 23.1%;
@@ -912,13 +912,13 @@ html, body {
   animation: reel-bounce-anim 0.4s ease;
 }
 
-/* ── LCD（元サイズでフレームを完全に覆い、overflow:hidden + 黒背景でマスク） ── */
+/* ── LCD（入れ替え後: y=270-685 → 27.7%-70.3%） ── */
 .sc-lcd {
   position: absolute;
-  top: 57.4%;
+  top: 27.7%;
   left: 6.84%;
   width: 86.43%;
-  height: 39.0%;
+  height: 42.6%;
   overflow: hidden;
   background: #000;
 }
@@ -939,10 +939,10 @@ html, body {
   opacity: 1;
 }
 
-/* ── ストップボタン row（リール直下の隙間） ── */
+/* ── ストップボタン row（入れ替え後: y=917 → 94.1%） ── */
 .sc-stop-row {
   position: absolute;
-  top: 51.5%;
+  top: 94.1%;
   left: 11.72%;
   width: 76.17%;
   height: 5%;
