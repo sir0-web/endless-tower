@@ -7,8 +7,8 @@ import { playAttack, playDamage, playLevelUp, playStairs, playPotion, playEquip,
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
-const VISION_FOG_INNER = 4   // 霧グラデーション開始距離
-const VISION_FOG_OUTER = 7   // 霧グラデーション終了距離（以遠は真っ暗）
+const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
+const VISION_FOG_OUTER = 5   // 霧グラデーション終了距離（以遠は真っ暗）
 
 // 敵名 → テクスチャキー のマッピング（/assets/enemy/<key>.png を想定）
 // 全ボスは画像なし → 色付きRectangleにフォールバック
