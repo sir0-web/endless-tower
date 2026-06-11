@@ -102,6 +102,10 @@ export class GameScene extends Phaser.Scene {
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
+  // 描画オフセット（renderMap で毎フレーム更新。タイル座標→画面px変換に使用）
+  private rts = TILE_SIZE
+  private camOffsetX = 0
+  private camOffsetY = 0
 
   constructor() {
     super({ key: 'GameScene' })
@@ -649,6 +653,7 @@ export class GameScene extends Phaser.Scene {
 
       if (Math.random() > hitRate) {
         this.addMessage(`${enemy.name}への攻撃がはずれた！`)
+        this.popDamageNumber(enemy.position.x, enemy.position.y, '', { miss: true })
         continue
       }
 
@@ -657,7 +662,17 @@ export class GameScene extends Phaser.Scene {
       const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
       enemy.hp = Math.max(0, enemy.hp - dmg)
 
+      // ヒット演出：ダメージ数字ポップ＋敵フラッシュ（連撃は少し時間差で）
+      const delay = hit * 70
+      this.time.delayedCall(delay, () => {
+        if (this.isVisible(enemy.position.x, enemy.position.y)) {
+          this.popDamageNumber(enemy.position.x, enemy.position.y, dmg, { crit: isCrit })
+          this.flashSprite(enemy.id)
+        }
+      })
+
       if (isCrit) {
+        this.cameras.main.shake(120, 0.006)
         this.addMessage(`${enemy.name}にクリティカル！${dmg}ダメージ！`)
       } else {
         playAttack()
@@ -687,6 +702,7 @@ export class GameScene extends Phaser.Scene {
       player.statPoints += 5
       this.addMessage(`レベルアップ！Lv${player.level}  +5ステータスポイント！`)
       playLevelUp()
+      this.playLevelUpEffect()
       this.showLevelUpNotif(prevLevel, player.level)
       this.updateWindowGameState()
     }
@@ -697,6 +713,49 @@ export class GameScene extends Phaser.Scene {
     setTimeout(() => {
       window.showEventMessage?.(`⚔レベルアップ⚔\nLv${prevLevel}→Lv${newLevel} になりました`, '#ffdd44')
     }, 150)
+  }
+
+  /** レベルアップ演出：金色の閃光＋プレイヤー足元からの拡散リング＋「LEVEL UP」上昇テキスト */
+  private playLevelUpEffect() {
+    const { player } = this.state
+    const { x, y } = this.tileToScreen(player.position.x, player.position.y)
+
+    // 画面全体に淡い金フラッシュ
+    this.cameras.main.flash(260, 255, 220, 80)
+
+    // 拡散する金リング（Graphics circleをtweenで拡大＋フェード）
+    const ring = this.add.circle(x, y, this.rts * 0.4, 0xffdd44, 0)
+      .setStrokeStyle(Math.max(2, Math.round(this.rts * 0.08)), 0xffee88, 0.9)
+      .setDepth(19)
+    this.tweens.add({
+      targets: ring,
+      radius: this.rts * 1.8,
+      alpha: 0,
+      duration: 600,
+      ease: 'Cubic.Out',
+      onUpdate: () => ring.setStrokeStyle(Math.max(2, Math.round(this.rts * 0.08)), 0xffee88, ring.alpha),
+      onComplete: () => ring.destroy(),
+    })
+
+    // 上昇する「LEVEL UP」テキスト
+    const label = this.add.text(x, y - this.rts * 0.6, 'LEVEL UP!', {
+      fontSize: `${Math.round(this.rts * 0.5)}px`,
+      fontFamily: 'Arial, sans-serif',
+      color: '#ffee66',
+      fontStyle: 'bold',
+      stroke: '#7a4a00',
+      strokeThickness: Math.max(3, Math.round(this.rts * 0.12)),
+    }).setOrigin(0.5).setDepth(21).setScale(0.5)
+    this.tweens.add({ targets: label, scale: 1, duration: 200, ease: 'Back.Out' })
+    this.tweens.add({
+      targets: label,
+      y: y - this.rts * 1.6,
+      alpha: 0,
+      delay: 400,
+      duration: 700,
+      ease: 'Cubic.In',
+      onComplete: () => label.destroy(),
+    })
   }
 
   private doAllocateStat(stat: AllocStat) {
@@ -752,6 +811,15 @@ export class GameScene extends Phaser.Scene {
         const dmg = isCrit ? Math.floor(raw * 1.5) : raw
         player.hp = Math.max(0, player.hp - dmg)
         playDamage()
+        // 被ダメ演出：赤いダメージ数字＋プレイヤーフラッシュ＋画面シェイク
+        this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true, crit: isCrit })
+        this.flashPlayer()
+        this.cameras.main.shake(isCrit ? 200 : 110, isCrit ? 0.012 : 0.007)
+        // HP残量が少ないほど強い赤フラッシュ（ピンチ演出）
+        const hpRatio = player.hp / player.maxHp
+        if (player.hp > 0 && hpRatio <= 0.25) {
+          this.cameras.main.flash(180, 120, 0, 0)
+        }
         this.addMessage(isCrit
           ? `${enemy.name}からクリティカル！${dmg}ダメージ！`
           : `${enemy.name}から${dmg}ダメージ！`)
@@ -1455,6 +1523,91 @@ export class GameScene extends Phaser.Scene {
     return dx * dx + dy * dy <= VISION_FOG_OUTER * VISION_FOG_OUTER
   }
 
+  // ── 戦闘エフェクト（game feel） ──
+
+  /** タイル座標 → 画面中心px（直近 renderMap のオフセットを使用） */
+  private tileToScreen(tx: number, ty: number): { x: number; y: number } {
+    return {
+      x: tx * this.rts - this.camOffsetX + this.rts / 2,
+      y: ty * this.rts - this.camOffsetY + this.rts / 2,
+    }
+  }
+
+  /**
+   * ダメージ数字をタイル上にポップさせる。
+   * crit=大きく黄色、heal=緑＋、miss=灰色「MISS」、toPlayer=赤系（被ダメ）
+   */
+  private popDamageNumber(
+    tx: number, ty: number, value: number | string,
+    opts: { crit?: boolean; heal?: boolean; miss?: boolean; toPlayer?: boolean } = {}
+  ) {
+    const { x, y } = this.tileToScreen(tx, ty)
+    const { crit, heal, miss, toPlayer } = opts
+
+    const color = miss ? '#cccccc'
+      : heal ? '#66ff99'
+      : crit ? '#ffdd33'
+      : toPlayer ? '#ff5555'
+      : '#ffffff'
+    const baseSize = this.rts * (crit ? 0.62 : 0.46)
+    const text = miss ? 'MISS' : heal ? `+${value}` : `${value}`
+
+    // 横位置を少しランダムにずらして連続ヒットでも重ならないように
+    const jitterX = (Math.random() - 0.5) * this.rts * 0.4
+    const startY  = y - this.rts * 0.25
+
+    const label = this.add.text(x + jitterX, startY, text, {
+      fontSize: `${Math.round(baseSize)}px`,
+      fontFamily: 'Arial, sans-serif',
+      color,
+      fontStyle: crit ? 'bold' : 'normal',
+      stroke: '#000000',
+      strokeThickness: Math.max(2, Math.round(baseSize * 0.14)),
+    }).setOrigin(0.5).setDepth(20)
+
+    if (crit) {
+      label.setScale(0.4)
+      this.tweens.add({ targets: label, scale: 1, duration: 160, ease: 'Back.Out' })
+    }
+
+    this.tweens.add({
+      targets: label,
+      y: startY - this.rts * (crit ? 1.1 : 0.85),
+      alpha: 0,
+      duration: crit ? 900 : 700,
+      ease: 'Cubic.Out',
+      onComplete: () => label.destroy(),
+    })
+  }
+
+  /** スプライトを白く点滅させる（ヒット時のフラッシュ） */
+  private flashSprite(id: string) {
+    const g = this.enemyGraphics.get(id)
+    if (!g) return
+    if (g instanceof Phaser.GameObjects.Image) {
+      g.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
+      this.time.delayedCall(90, () => { if (g.active) g.clearTint() })
+    } else if (g instanceof Phaser.GameObjects.Rectangle) {
+      const orig = g.fillColor
+      g.setFillStyle(0xffffff)
+      this.time.delayedCall(90, () => { if (g.active) g.setFillStyle(orig) })
+    }
+  }
+
+  /** プレイヤースプライトを赤く点滅（被ダメ時） */
+  private flashPlayer() {
+    const g = this.playerGraphic
+    if (!g) return
+    if (g instanceof Phaser.GameObjects.Sprite) {
+      g.setTint(0xff3333).setTintMode(Phaser.TintModes.FILL)
+      this.time.delayedCall(110, () => { if (g.active) g.clearTint() })
+    } else if (g instanceof Phaser.GameObjects.Rectangle) {
+      const orig = g.fillColor
+      g.setFillStyle(0xff3333)
+      this.time.delayedCall(110, () => { if (g.active) g.setFillStyle(orig) })
+    }
+  }
+
   /** 床タイルのバリアント（floor1/2/3）をフロア生成時にランダム決定・固定 */
   // ── プレイヤー画像の背景色を透過（ロード済み PNG から実行） ──
   private makeTransparent(key: string) {
@@ -1710,6 +1863,10 @@ export class GameScene extends Phaser.Scene {
 
     const offsetX = Math.max(0, Math.min(player.position.x * rts - W / 2, MAP_WIDTH * rts - W))
     const offsetY = Math.max(0, Math.min(player.position.y * rts - H / 2, MAP_HEIGHT * rts - H))
+    // エフェクト用に保持（ダメージ数字などのスポーン座標計算に使う）
+    this.rts = rts
+    this.camOffsetX = offsetX
+    this.camOffsetY = offsetY
 
     // ── タイルスプライト更新 ──
     for (let y = 0; y < MAP_HEIGHT; y++) {
