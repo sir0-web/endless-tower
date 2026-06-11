@@ -13,6 +13,7 @@ import { RefineModal, ShadowEquipModal, SpellbookModal } from './components/Even
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { GameToast } from './components/GameToast'
 import { EventMsgBar } from './components/EventMsgBar'
+import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
 const BASE_H = 880   // 全体の縦サイズ：少し伸ばし
@@ -85,6 +86,7 @@ function App() {
       }
 
   return (
+    <>
     <div style={wrapperStyle}>
       <div className="app-layout">
         <div className="game-pane">
@@ -106,6 +108,8 @@ function App() {
         <GameToast />
       </div>
     </div>
+    <Analytics />
+    </>
   )
 }
 
