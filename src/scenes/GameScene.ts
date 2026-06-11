@@ -6,7 +6,9 @@ import { floorLabel } from '../game/utils'
 import { playAttack, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 
-const VISION_RADIUS = 5
+const VISION_RADIUS    = 5   // エンティティ可視半径
+const VISION_FOG_INNER = 4   // 霧グラデーション開始距離
+const VISION_FOG_OUTER = 7   // 霧グラデーション終了距離（以遠は真っ暗）
 
 // 敵名 → テクスチャキー のマッピング（/assets/enemy/<key>.png を想定）
 // 全ボスは画像なし → 色付きRectangleにフォールバック
@@ -56,6 +58,7 @@ const ENEMY_TEXTURE_MAP: Record<string, string> = {
 export class GameScene extends Phaser.Scene {
   private state!: GameState
   private graphics!: Phaser.GameObjects.Graphics
+  private fogGraphics!: Phaser.GameObjects.Graphics
   private playerGraphic: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite | null = null
   private playerDir: 'down' | 'up' | 'right' | 'left' | 'down-right' | 'down-left' | 'up-right' | 'up-left' = 'down'
   private isPlayerAttacking = false
@@ -191,7 +194,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    this.graphics = this.add.graphics().setDepth(1)
+    this.graphics    = this.add.graphics().setDepth(1)
+    this.fogGraphics = this.add.graphics().setDepth(7)
     this.initGame()
     document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.input.keyboard!.on('keydown', this.handleInput, this)
@@ -1440,6 +1444,14 @@ export class GameScene extends Phaser.Scene {
     return dx * dx + dy * dy <= VISION_RADIUS * VISION_RADIUS
   }
 
+  private isTileVisible(tx: number, ty: number): boolean {
+    if (this.state.floorType === 'lucky' || this.isEventFloor) return true
+    const { player } = this.state
+    const dx = tx - player.position.x
+    const dy = ty - player.position.y
+    return dx * dx + dy * dy <= VISION_FOG_OUTER * VISION_FOG_OUTER
+  }
+
   /** 床タイルのバリアント（floor1/2/3）をフロア生成時にランダム決定・固定 */
   // ── プレイヤー画像の背景色を透過（ロード済み PNG から実行） ──
   private makeTransparent(key: string) {
@@ -1704,7 +1716,7 @@ export class GameScene extends Phaser.Scene {
         const px = x * rts - offsetX
         const py = y * rts - offsetY
         const inView = px > -rts && px < W && py > -rts && py < H
-        const vis    = this.isVisible(x, y)
+        const vis    = this.isTileVisible(x, y)
         sprite.setVisible(inView && vis)
         if (inView && vis) sprite.setPosition(px + rts / 2, py + rts / 2)
       }
@@ -1717,7 +1729,7 @@ export class GameScene extends Phaser.Scene {
         const px = x * rts - offsetX
         const py = y * rts - offsetY
         if (px < -rts || px > W || py < -rts || py > H) continue
-        if (!this.isVisible(x, y)) continue
+        if (!this.isTileVisible(x, y)) continue
         if      (tile === 'wall')    this.graphics.fillStyle(0x333333)
         else if (tile === 'floor')   this.graphics.fillStyle(0x888866)
         else if (tile === 'stairs')  this.graphics.fillStyle(0x4444ff)
@@ -1875,6 +1887,27 @@ export class GameScene extends Phaser.Scene {
     const ppx = player.position.x * rts - offsetX
     const ppy = player.position.y * rts - offsetY
     this.playerGraphic.setPosition(ppx + rts / 2, ppy + rts / 2)
+
+    // ── 霧グラデーション（distance 4→7 にかけて円形スモッグ）──
+    this.fogGraphics.clear()
+    if (this.state.floorType !== 'lucky' && !this.isEventFloor) {
+      for (let fy = 0; fy < MAP_HEIGHT; fy++) {
+        for (let fx = 0; fx < MAP_WIDTH; fx++) {
+          const dx   = fx - player.position.x
+          const dy   = fy - player.position.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist > VISION_FOG_OUTER) continue
+          const t = Math.max(0, (dist - VISION_FOG_INNER) / (VISION_FOG_OUTER - VISION_FOG_INNER))
+          const alpha = t * t  // 二次曲線で自然な霧立ち上がり
+          if (alpha <= 0) continue
+          const fpx = fx * rts - offsetX
+          const fpy = fy * rts - offsetY
+          if (fpx < -rts || fpx > W || fpy < -rts || fpy > H) continue
+          this.fogGraphics.fillStyle(0x000000, Math.min(1, alpha))
+          this.fogGraphics.fillRect(fpx, fpy, rts, rts)
+        }
+      }
+    }
   }
 
   private createPauseOverlay() {
