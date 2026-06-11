@@ -102,10 +102,15 @@ export class GameScene extends Phaser.Scene {
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
-  // 描画オフセット（renderMap で毎フレーム更新。タイル座標→画面px変換に使用）
+  // 描画タイルサイズ（シーン起動時に確定。ワールド座標 = タイル座標 × rts）
   private rts = TILE_SIZE
-  private camOffsetX = 0
-  private camOffsetY = 0
+  private lastMoveAt = 0          // キーリピート抑制（移動テンポ制御）
+  private snapNextRender = false  // フロア切替直後はトゥイーンせず即時配置＋カメラスナップ
+  private stairsGlow: Phaser.GameObjects.Arc | null = null
+  private stairsGlowPos: import('../types').Position | null = null
+  private lowHpVignette: Phaser.GameObjects.Image | null = null
+  private vignetteTween: Phaser.Tweens.Tween | null = null
+  private vignetteTarget = 0
 
   constructor() {
     super({ key: 'GameScene' })
@@ -132,6 +137,14 @@ export class GameScene extends Phaser.Scene {
     this.isAnimating        = false
     this.isEventFloor       = false
     this.eventFacilities    = []
+    this.rts                = window.innerWidth < 768 ? Math.round(TILE_SIZE * 1.5) : TILE_SIZE
+    this.lastMoveAt         = 0
+    this.snapNextRender     = false
+    this.stairsGlow         = null
+    this.stairsGlowPos      = null
+    this.lowHpVignette      = null
+    this.vignetteTween      = null
+    this.vignetteTarget     = 0
   }
 
   preload() {
@@ -200,9 +213,11 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.fadeIn(500, 0, 0, 0)
+    this.cameras.main.setBounds(0, 0, MAP_WIDTH * this.rts, MAP_HEIGHT * this.rts)
     this.graphics    = this.add.graphics().setDepth(1)
     this.fogGraphics = this.add.graphics().setDepth(7)
     this.initGame()
+    this.createLowHpVignette()
     document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.input.keyboard!.on('keydown', this.handleInput, this)
     window.allocateStat = (stat: AllocStat) => this.doAllocateStat(stat)
@@ -293,10 +308,10 @@ export class GameScene extends Phaser.Scene {
       },
       enemies: [...normalEnemies, ...bosses],
       items: floorType === 'lucky'
-        ? spawnItems(map, { countMult: 2, equipRate: 0.30 })
+        ? spawnItems(map, { countMult: 2, equipRate: 0.30, floor: 1 })
         : floorType === 'chaos'
-        ? spawnItems(map, { countMult: 3 })
-        : spawnItems(map),
+        ? spawnItems(map, { countMult: 3, floor: 1 })
+        : spawnItems(map, { floor: 1 }),
       map,
       turn: 0,
       spells: [],
@@ -397,6 +412,11 @@ export class GameScene extends Phaser.Scene {
     else if ((k === 'ArrowRight' && useArr) || ((k === 'd' || k === 'D') && useWASD)) dx = 1
     else return
 
+    // キーリピート抑制：移動トゥイーン（110ms）と歩調を合わせ、長押しでも滑らかに連続移動する
+    const now = performance.now()
+    if (now - this.lastMoveAt < 95) return
+    this.lastMoveAt = now
+
     // 移動方向を記録
     if      (dx === 1  && dy === 0)  this.playerDir = 'right'
     else if (dx === -1 && dy === 0)  this.playerDir = 'left'
@@ -496,9 +516,29 @@ export class GameScene extends Phaser.Scene {
 
     if (didAttack) {
       this.playAttackAnim()
+      this.lungePlayer()
     } else {
       this.playWalkAnim()
     }
+  }
+
+  /** 攻撃時、プレイヤーを向いている方向へ小さく突進させる（やられた感の演出） */
+  private lungePlayer() {
+    const g = this.playerGraphic
+    if (!g) return
+    const vec: Record<typeof this.playerDir, [number, number]> = {
+      'down': [0, 1], 'up': [0, -1], 'right': [1, 0], 'left': [-1, 0],
+      'down-right': [1, 1], 'down-left': [-1, 1], 'up-right': [1, -1], 'up-left': [-1, -1],
+    }
+    const [vx, vy] = vec[this.playerDir]
+    this.tweens.add({
+      targets: g,
+      x: g.x + vx * this.rts * 0.3,
+      y: g.y + vy * this.rts * 0.3,
+      duration: 80,
+      yoyo: true,
+      ease: 'Quad.Out',
+    })
   }
 
   private pickupItem() {
@@ -663,12 +703,20 @@ export class GameScene extends Phaser.Scene {
       const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
       enemy.hp = Math.max(0, enemy.hp - dmg)
 
-      // ヒット演出：ダメージ数字ポップ＋敵フラッシュ（連撃は少し時間差で）
+      // ヒット演出：ダメージ数字ポップ＋敵フラッシュ＋火花（連撃は少し時間差で）
       const delay = hit * 70
       this.time.delayedCall(delay, () => {
         if (this.isVisible(enemy.position.x, enemy.position.y)) {
           this.popDamageNumber(enemy.position.x, enemy.position.y, dmg, { crit: isCrit })
           this.flashSprite(enemy.id)
+          const eg = this.enemyGraphics.get(enemy.id)
+          if (eg) {
+            this.spawnBurst(eg.x, eg.y, {
+              color: isCrit ? 0xffdd33 : 0xffffff,
+              count: isCrit ? 9 : 4,
+              speed: this.rts * (isCrit ? 1.1 : 0.6),
+            })
+          }
         }
       })
 
@@ -682,13 +730,68 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (enemy.hp <= 0) {
-      this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
-      const expGain = enemy.isBoss ? (50 + enemy.maxHp) : (5 + enemy.maxHp)
-      player.exp += expGain
-      this.addMessage(`${enemy.name}を倒した！経験値+${expGain}`)
-      this.checkLevelUp()
-      window.onEnemyKilled?.()
+    if (enemy.hp <= 0) this.killEnemy(enemy)
+  }
+
+  /** 敵を撃破：状態から除去し、撃破演出（縮小フェード＋破片）・経験値・レベルアップ処理を行う */
+  private killEnemy(enemy: import('../types').Enemy) {
+    const { player } = this.state
+    this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
+    const expGain = enemy.isBoss ? (50 + enemy.maxHp) : (5 + enemy.maxHp)
+    player.exp += expGain
+    this.addMessage(`${enemy.name}を倒した！経験値+${expGain}`)
+
+    const g   = this.enemyGraphics.get(enemy.id)
+    const bar = this.enemyHpBars.get(enemy.id)
+    this.enemyGraphics.delete(enemy.id)
+    this.enemyHpBars.delete(enemy.id)
+    if (bar) { bar.bg.destroy(); bar.fg.destroy() }
+    if (g) {
+      this.tweens.killTweensOf(g)
+      if (g.visible) {
+        this.spawnBurst(g.x, g.y, {
+          color: enemy.isBoss ? 0xffcc44 : 0xff8866,
+          count: enemy.isBoss ? 14 : 7,
+          speed: this.rts * (enemy.isBoss ? 1.4 : 0.9),
+        })
+        if (enemy.isBoss) this.cameras.main.shake(220, 0.008)
+        this.tweens.add({
+          targets: g,
+          alpha: 0,
+          scaleX: g.scaleX * 0.2,
+          scaleY: g.scaleY * 0.2,
+          angle: 90,
+          duration: 240,
+          ease: 'Quad.In',
+          onComplete: () => g.destroy(),
+        })
+      } else {
+        g.destroy()
+      }
+    }
+
+    this.checkLevelUp()
+    window.onEnemyKilled?.()
+  }
+
+  /** 小さな破片を放射状に飛ばす汎用パーティクル（ヒット火花・撃破演出） */
+  private spawnBurst(wx: number, wy: number, opts: { color?: number; count?: number; speed?: number } = {}) {
+    const { color = 0xffeeaa, count = 6, speed = this.rts * 0.9 } = opts
+    const size = Math.max(2, Math.round(this.rts * 0.09))
+    for (let i = 0; i < count; i++) {
+      const ang  = Math.random() * Math.PI * 2
+      const dist = speed * (0.5 + Math.random() * 0.7)
+      const p = this.add.rectangle(wx, wy, size, size, color).setDepth(19)
+      this.tweens.add({
+        targets: p,
+        x: wx + Math.cos(ang) * dist,
+        y: wy + Math.sin(ang) * dist,
+        alpha: 0,
+        scale: 0.3,
+        duration: 260 + Math.random() * 160,
+        ease: 'Cubic.Out',
+        onComplete: () => p.destroy(),
+      })
     }
   }
 
@@ -720,7 +823,7 @@ export class GameScene extends Phaser.Scene {
   /** レベルアップ演出：金色の閃光＋プレイヤー足元からの拡散リング＋「LEVEL UP」上昇テキスト */
   private playLevelUpEffect() {
     const { player } = this.state
-    const { x, y } = this.tileToScreen(player.position.x, player.position.y)
+    const { x, y } = this.tileToWorld(player.position.x, player.position.y)
 
     // 画面全体に淡い金フラッシュ
     this.cameras.main.flash(260, 255, 220, 80)
@@ -813,6 +916,18 @@ export class GameScene extends Phaser.Scene {
         const dmg = isCrit ? Math.floor(raw * 1.5) : raw
         player.hp = Math.max(0, player.hp - dmg)
         playDamage()
+        // 敵がプレイヤーへ小さく突進（誰に殴られたかが分かる）
+        const eg = this.enemyGraphics.get(enemy.id)
+        if (eg && eg.visible) {
+          this.tweens.add({
+            targets: eg,
+            x: eg.x + Math.sign(edx) * this.rts * 0.28,
+            y: eg.y + Math.sign(edy) * this.rts * 0.28,
+            duration: 80,
+            yoyo: true,
+            ease: 'Quad.Out',
+          })
+        }
         // 被ダメ演出：赤いダメージ数字＋プレイヤーフラッシュ＋画面シェイク
         this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true, crit: isCrit })
         this.flashPlayer()
@@ -965,14 +1080,13 @@ export class GameScene extends Phaser.Scene {
         const dmg = player.int * 3 + 10
         target.hp = Math.max(0, target.hp - dmg)
         this.addMessage(`ファイアボルト！${target.name}に${dmg}ダメージ！`)
-        if (target.hp <= 0) {
-          this.state.enemies = this.state.enemies.filter(e => e.id !== target.id)
-          const exp = target.isBoss ? (50 + target.maxHp) : (5 + target.maxHp)
-          player.exp += exp
-          this.addMessage(`${target.name}を倒した！経験値+${exp}`)
-          this.checkLevelUp()
-          window.onEnemyKilled?.()
+        if (this.isVisible(target.position.x, target.position.y)) {
+          this.popDamageNumber(target.position.x, target.position.y, dmg)
+          const eg = this.enemyGraphics.get(target.id)
+          if (eg) this.spawnBurst(eg.x, eg.y, { color: 0xff6622, count: 8 })
+          this.flashSprite(target.id)
         }
+        if (target.hp <= 0) this.killEnemy(target)
         break
       }
 
@@ -1007,21 +1121,18 @@ export class GameScene extends Phaser.Scene {
       case 'meteostorm': {
         if (enemies.length === 0) { this.addMessage('メテオストーム！しかし敵がいない！'); return }
         const dmg = player.int * 2 + 5
-        const deadIds: string[] = []
-        for (const enemy of enemies) {
-          enemy.hp = Math.max(0, enemy.hp - dmg)
-          if (enemy.hp <= 0) deadIds.push(enemy.id)
-        }
+        this.cameras.main.shake(280, 0.008)
+        this.cameras.main.flash(220, 255, 140, 60)
         this.addMessage(`メテオストーム！全敵に${dmg}ダメージ！`)
-        for (const id of deadIds) {
-          const dead = this.state.enemies.find(e => e.id === id)
-          if (!dead) continue
-          this.state.enemies = this.state.enemies.filter(e => e.id !== id)
-          const exp = dead.isBoss ? (50 + dead.maxHp) : (5 + dead.maxHp)
-          player.exp += exp
-          this.addMessage(`${dead.name}を倒した！経験値+${exp}`)
-          this.checkLevelUp()
-          window.onEnemyKilled?.()
+        const targets = [...enemies]
+        for (const enemy of targets) {
+          enemy.hp = Math.max(0, enemy.hp - dmg)
+          if (this.isVisible(enemy.position.x, enemy.position.y)) {
+            this.popDamageNumber(enemy.position.x, enemy.position.y, dmg)
+            const eg = this.enemyGraphics.get(enemy.id)
+            if (eg) this.spawnBurst(eg.x, eg.y, { color: 0xff6622, count: 6 })
+          }
+          if (enemy.hp <= 0) this.killEnemy(enemy)
         }
         break
       }
@@ -1106,14 +1217,15 @@ export class GameScene extends Phaser.Scene {
 
     this.state.enemies = [...normalEnemies, ...bosses]
     this.state.items = floorType === 'lucky'
-      ? spawnItems(map, { countMult: 2, equipRate: 0.30 })
+      ? spawnItems(map, { countMult: 2, equipRate: 0.30, floor })
       : floorType === 'chaos'
-      ? spawnItems(map, { countMult: 3 })
-      : spawnItems(map)
+      ? spawnItems(map, { countMult: 3, floor })
+      : spawnItems(map, { floor })
     this.state.floorType = floorType
     this.buildFloorVariants(map)
     this.createTileSprites(map)
     playStairs()
+    this.snapNextRender = true
     this.renderMap()
     this.updateWindowGameState()
     this.showTelopIfNeeded()
@@ -1140,6 +1252,7 @@ export class GameScene extends Phaser.Scene {
     this.buildFloorVariants(map)
     this.createTileSprites(map)
     this.addMessage('ベースキャンプ「あるかなひろば」に到着した...')
+    this.snapNextRender = true
     this.renderMap()
     this.updateWindowGameState()
     this.updateBGM()
@@ -1367,6 +1480,7 @@ export class GameScene extends Phaser.Scene {
       floorType: this.state.floorType,
     }
     window.dispatchEvent(new Event('gamestate-update'))
+    this.updateLowHpVignette()
   }
 
   // ── スロットマシーン効果処理 ──
@@ -1390,7 +1504,7 @@ export class GameScene extends Phaser.Scene {
       case 'triple': {
         player.hp = player.maxHp; player.stamina = player.maxStamina
         for (let i = 0; i < 3; i++) {
-          const pool  = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0 })
+          const pool  = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0, floor: this.state.player.floor })
           const equip = pool.find(it => it.type === 'equip')
           if (equip) {
             this.state.bag.push({ ...equip, position: { x: 0, y: 0 } })
@@ -1456,7 +1570,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private slotSpawnEquip() {
-    const pool = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0 })
+    const pool = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0, floor: this.state.player.floor })
     const equip = pool.find(i => i.type === 'equip')
     if (equip) {
       this.state.bag.push({ ...equip, position: { x: 0, y: 0 } })
@@ -1501,7 +1615,7 @@ export class GameScene extends Phaser.Scene {
   private showMonsterHouseEffect() {
     const W = this.scale.width
     const H = this.scale.height
-    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0xff2200, 0).setDepth(90)
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0xff2200, 0).setDepth(90).setScrollFactor(0)
     this.tweens.add({
       targets: overlay,
       alpha: 0.45,
@@ -1531,11 +1645,11 @@ export class GameScene extends Phaser.Scene {
 
   // ── 戦闘エフェクト（game feel） ──
 
-  /** タイル座標 → 画面中心px（直近 renderMap のオフセットを使用） */
-  private tileToScreen(tx: number, ty: number): { x: number; y: number } {
+  /** タイル座標 → ワールド座標（タイル中心px。カメラがスクロールを担当する） */
+  private tileToWorld(tx: number, ty: number): { x: number; y: number } {
     return {
-      x: tx * this.rts - this.camOffsetX + this.rts / 2,
-      y: ty * this.rts - this.camOffsetY + this.rts / 2,
+      x: tx * this.rts + this.rts / 2,
+      y: ty * this.rts + this.rts / 2,
     }
   }
 
@@ -1547,7 +1661,7 @@ export class GameScene extends Phaser.Scene {
     tx: number, ty: number, value: number | string,
     opts: { crit?: boolean; heal?: boolean; miss?: boolean; toPlayer?: boolean } = {}
   ) {
-    const { x, y } = this.tileToScreen(tx, ty)
+    const { x, y } = this.tileToWorld(tx, ty)
     const { crit, heal, miss, toPlayer } = opts
 
     const color = miss ? '#cccccc'
@@ -1802,9 +1916,9 @@ export class GameScene extends Phaser.Scene {
     )
   }
 
-  /** タイルスプライトを生成（フロア切り替え時に呼び出し） */
+  /** タイルスプライトを生成（フロア切り替え時に呼び出し）。位置はワールド座標で固定 */
   private createTileSprites(map: import('../types').TileType[][]) {
-    const rts = window.innerWidth < 768 ? Math.round(TILE_SIZE * 1.5) : TILE_SIZE
+    const rts = this.rts
     this.tileSprites.forEach(row => row.forEach(s => s?.destroy()))
     this.tileSprites = map.map((row, y) =>
       row.map((tile, x) => {
@@ -1820,12 +1934,45 @@ export class GameScene extends Phaser.Scene {
 
         if (this.failedTextures.has(key) || !this.textures.exists(key)) return null
 
-        return this.add.image(0, 0, key)
+        return this.add.image(x * rts + rts / 2, y * rts + rts / 2, key)
           .setDisplaySize(rts + 6, rts + 6)
           .setDepth(-1)
           .setVisible(false)
       })
     )
+    this.createStairsGlow(map)
+  }
+
+  /** 階段タイルに脈動する光輪マーカーを置く（出口の視認性向上） */
+  private createStairsGlow(map: import('../types').TileType[][]) {
+    if (this.stairsGlow) {
+      this.tweens.killTweensOf(this.stairsGlow)
+      this.stairsGlow.destroy()
+      this.stairsGlow = null
+    }
+    this.stairsGlowPos = null
+    for (let y = 0; y < map.length && !this.stairsGlowPos; y++) {
+      for (let x = 0; x < map[y].length; x++) {
+        if (map[y][x] === 'stairs') { this.stairsGlowPos = { x, y }; break }
+      }
+    }
+    if (!this.stairsGlowPos) return
+    const { x: wx, y: wy } = this.tileToWorld(this.stairsGlowPos.x, this.stairsGlowPos.y)
+    const glow = this.add.circle(wx, wy, this.rts * 0.46, 0x88bbff, 0.14)
+      .setStrokeStyle(2, 0xaaddff, 0.9)
+      .setDepth(2)
+      .setAlpha(0.55)
+      .setVisible(false)
+    this.stairsGlow = glow
+    this.tweens.add({
+      targets: glow,
+      alpha: 1,
+      scale: 1.22,
+      duration: 850,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    })
   }
 
   /** テクスチャの不透明ピクセル領域割合を返す（透過パディング補正用）。結果はキャッシュ。 */
@@ -1862,40 +2009,20 @@ export class GameScene extends Phaser.Scene {
   private renderMap() {
     this.graphics.clear()
     const { map, player, enemies, items } = this.state
-    const W = this.scale.width
-    const H = this.scale.height
-    // モバイルでは描画タイルサイズを縮小して引きのカメラ表示
-    const rts = window.innerWidth < 768 ? Math.round(TILE_SIZE * 1.5) : TILE_SIZE
+    const rts = this.rts
 
-    const offsetX = Math.max(0, Math.min(player.position.x * rts - W / 2, MAP_WIDTH * rts - W))
-    const offsetY = Math.max(0, Math.min(player.position.y * rts - H / 2, MAP_HEIGHT * rts - H))
-    // エフェクト用に保持（ダメージ数字などのスポーン座標計算に使う）
-    this.rts = rts
-    this.camOffsetX = offsetX
-    this.camOffsetY = offsetY
-
-    // ── タイルスプライト更新 ──
+    // ── タイルスプライト：可視状態のみ更新（位置は生成時に固定済み）──
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
-        const sprite = this.tileSprites[y]?.[x]
-        if (!sprite) continue
-        const px = x * rts - offsetX
-        const py = y * rts - offsetY
-        const inView = px > -rts && px < W && py > -rts && py < H
-        const vis    = this.isTileVisible(x, y)
-        sprite.setVisible(inView && vis)
-        if (inView && vis) sprite.setPosition(px + rts / 2, py + rts / 2)
+        this.tileSprites[y]?.[x]?.setVisible(this.isTileVisible(x, y))
       }
     }
-    // ── フォールバック描画 ──
+    // ── フォールバック描画（テクスチャ未ロードのタイルのみ）──
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
         if (this.tileSprites[y]?.[x]) continue
-        const tile = map[y][x]
-        const px = x * rts - offsetX
-        const py = y * rts - offsetY
-        if (px < -rts || px > W || py < -rts || py > H) continue
         if (!this.isTileVisible(x, y)) continue
+        const tile = map[y][x]
         if      (tile === 'wall')    this.graphics.fillStyle(0x333333)
         else if (tile === 'floor')   this.graphics.fillStyle(0x888866)
         else if (tile === 'stairs')  this.graphics.fillStyle(0x4444ff)
@@ -1904,34 +2031,45 @@ export class GameScene extends Phaser.Scene {
         else if (tile === 'spring')  this.graphics.fillStyle(0x00ccaa)
         else if (tile === 'pitfall') this.graphics.fillStyle(0x111111)
         else continue
-        this.graphics.fillRect(px, py, rts, rts)
+        this.graphics.fillRect(x * rts, y * rts, rts, rts)
       }
     }
 
-    // ── アイテム描画 ──
+    // ── 階段グロー可視更新 ──
+    if (this.stairsGlow && this.stairsGlowPos) {
+      this.stairsGlow.setVisible(this.isTileVisible(this.stairsGlowPos.x, this.stairsGlowPos.y))
+    }
+
+    // ── アイテム描画（ワールド座標固定＋ふわふわ浮遊）──
     const boxReady = !this.failedTextures.has('tile-box') && this.textures.exists('tile-box')
     const liveItemIds = new Set(items.map(i => i.id))
     for (const [id, g] of this.itemGraphics) {
-      if (!liveItemIds.has(id)) { g.destroy(); this.itemGraphics.delete(id) }
+      if (!liveItemIds.has(id)) { this.tweens.killTweensOf(g); g.destroy(); this.itemGraphics.delete(id) }
     }
     for (const item of items) {
-      const ipx = item.position.x * rts - offsetX
-      const ipy = item.position.y * rts - offsetY
-      const inView = ipx > -rts * 2 && ipx < W + rts && ipy > -rts * 2 && ipy < H + rts
-      const vis = inView && this.isVisible(item.position.x, item.position.y)
       let g = this.itemGraphics.get(item.id)
       if (!g) {
+        const { x: wx, y: wy } = this.tileToWorld(item.position.x, item.position.y)
         if (boxReady) {
-          g = this.add.image(0, 0, 'tile-box')
+          g = this.add.image(wx, wy, 'tile-box')
             .setDisplaySize(rts - 2, rts - 2).setDepth(3)
         } else {
           const icon = item.type === 'heal' ? '💊' : item.type === 'spell' ? '📖' : '⚔️'
-          g = this.add.text(0, 0, icon, { fontSize: `${Math.round(rts * 0.6)}px` }).setOrigin(0.5).setDepth(3)
+          g = this.add.text(wx, wy, icon, { fontSize: `${Math.round(rts * 0.6)}px` }).setOrigin(0.5).setDepth(3)
         }
+        // ゆっくり上下に浮遊させて「拾える物」感を出す
+        this.tweens.add({
+          targets: g,
+          y: wy - rts * 0.08,
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.InOut',
+          delay: Math.random() * 500,
+        })
         this.itemGraphics.set(item.id, g)
       }
-      (g as Phaser.GameObjects.Image).setVisible(vis)
-      if (vis) (g as Phaser.GameObjects.Image).setPosition(ipx + rts / 2, ipy + rts / 2)
+      (g as Phaser.GameObjects.Image).setVisible(this.isVisible(item.position.x, item.position.y))
     }
 
     // ── イベントフロアNPC描画 ──
@@ -1941,27 +2079,24 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.isEventFloor) {
       for (const facility of this.eventFacilities) {
-        const fpx = facility.position.x * rts - offsetX
-        const fpy = facility.position.y * rts - offsetY
-        const inViewF = fpx > -rts * 2 && fpx < W + rts && fpy > -rts * 2 && fpy < H + rts
         let g = this.facilityGraphics.get(facility.id)
         if (!g) {
+          const { x: wx, y: wy } = this.tileToWorld(facility.position.x, facility.position.y)
           const tex = facility.texture
           if (tex && !this.failedTextures.has(tex) && this.textures.exists(tex)) {
             // 可視領域でプレイヤーと同サイズになるよう透過パディング分を補正
             const { wFrac, hFrac } = this.getVisibleFraction(tex)
             const targetW = rts * 1.25
             const targetH = rts * 1.38
-            g = this.add.image(0, 0, tex)
+            g = this.add.image(wx, wy, tex)
               .setDisplaySize(targetW / wFrac, targetH / hFrac).setOrigin(0.5).setDepth(4)
           } else {
-            g = this.add.text(0, 0, facility.icon, { fontSize: `${Math.round(rts * 0.7)}px` })
+            g = this.add.text(wx, wy, facility.icon, { fontSize: `${Math.round(rts * 0.7)}px` })
               .setOrigin(0.5).setDepth(4)
           }
           this.facilityGraphics.set(facility.id, g)
         }
-        g.setVisible(inViewF)
-        if (inViewF) g.setPosition(fpx + rts / 2, fpy + rts / 2)
+        g.setVisible(true)
       }
     }
 
@@ -1969,6 +2104,7 @@ export class GameScene extends Phaser.Scene {
     const liveEnemyIds = new Set(enemies.map(e => e.id))
     for (const [id, g] of this.enemyGraphics) {
       if (!liveEnemyIds.has(id)) {
+        this.tweens.killTweensOf(g)
         g.destroy()
         this.enemyGraphics.delete(id)
         const bar = this.enemyHpBars.get(id)
@@ -1976,10 +2112,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
     for (const enemy of enemies) {
-      const epx = enemy.position.x * rts - offsetX
-      const epy = enemy.position.y * rts - offsetY
-      const inViewE = epx > -rts * 2 && epx < W + rts && epy > -rts * 2 && epy < H + rts
-      const vis = inViewE && this.isVisible(enemy.position.x, enemy.position.y)
+      const { x: ex, y: ey } = this.tileToWorld(enemy.position.x, enemy.position.y)
+      const vis = this.isVisible(enemy.position.x, enemy.position.y)
       const barW = rts - 2
       const barH = enemy.isBoss ? Math.max(4, Math.round(8 * rts / TILE_SIZE)) : Math.max(2, Math.round(4 * rts / TILE_SIZE))
 
@@ -1991,14 +2125,14 @@ export class GameScene extends Phaser.Scene {
           if (['deviling', 'masterring'].includes(textureKey)) {
             const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
             const target = rts * 1.25
-            g = this.add.image(0, 0, textureKey)
+            g = this.add.image(ex, ey, textureKey)
               .setDisplaySize(target / wFrac, target / hFrac).setDepth(5)
           } else {
             const eSize = ['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3
               : ['eclipse', 'angeling', 'goldenbug'].includes(textureKey) ? rts * 1.5
               : textureKey === 'furioni' ? rts * 2.0
               : rts - 2
-            g = this.add.image(0, 0, textureKey)
+            g = this.add.image(ex, ey, textureKey)
               .setDisplaySize(eSize, eSize).setDepth(5)
           }
         } else {
@@ -2007,14 +2141,12 @@ export class GameScene extends Phaser.Scene {
               : enemy.name.startsWith('【エリア】') ? 0xffff00
               : 0xff00ff)
             : 0xff4444
-          g = this.add.rectangle(0, 0, rts - 2, rts - 2, color).setDepth(5)
+          g = this.add.rectangle(ex, ey, rts - 2, rts - 2, color).setDepth(5)
         }
         this.enemyGraphics.set(enemy.id, g)
       }
-      g.setVisible(vis)
-      if (vis) g.setPosition(epx + rts / 2, epy + rts / 2)
 
-      // HPバー（敵の真下）
+      // HPバー（敵の真下。ノーマル敵は負傷時のみ表示してノイズを減らす）
       let bar = this.enemyHpBars.get(enemy.id)
       if (!bar) {
         const bg = this.add.rectangle(0, 0, barW, barH, 0x660000).setDepth(5)
@@ -2022,39 +2154,68 @@ export class GameScene extends Phaser.Scene {
         bar = { bg, fg }
         this.enemyHpBars.set(enemy.id, bar)
       }
-      bar.bg.setVisible(vis)
-      bar.fg.setVisible(vis)
-      if (vis) {
-        const barX = epx + rts / 2
-        const barY = epy + rts - 2 + 1 + barH / 2
-        bar.bg.setPosition(barX, barY).setSize(barW, barH)
-        const ratio   = enemy.maxHp > 0 ? Math.max(0, enemy.hp / enemy.maxHp) : 0
-        const fgWidth = Math.max(1, ratio * barW)
-        const fgColor = ratio > 0.5 ? 0x00ff00 : ratio > 0.25 ? 0xffff00 : 0xff0000
-        bar.fg.setPosition(epx + 1 + fgWidth / 2, barY)
-          .setSize(fgWidth, barH)
-          .setFillStyle(fgColor)
+      const ratio   = enemy.maxHp > 0 ? Math.max(0, enemy.hp / enemy.maxHp) : 0
+      const fgWidth = Math.max(1, ratio * barW)
+      const fgColor = ratio > 0.5 ? 0x00ff00 : ratio > 0.25 ? 0xffff00 : 0xff0000
+      bar.fg.setSize(fgWidth, barH).setFillStyle(fgColor)
+      bar.bg.setSize(barW, barH)
+      const showBar = vis && (enemy.isBoss || enemy.hp < enemy.maxHp)
+
+      // 位置が変わっていたらトゥイーン移動（視界内のみ。遠距離テレポートは即時配置）
+      const fixedBar = bar
+      if (g.x !== ex || g.y !== ey) {
+        this.tweens.killTweensOf(g)
+        const near = Math.abs(g.x - ex) <= rts * 1.6 && Math.abs(g.y - ey) <= rts * 1.6
+        if (vis && g.visible && near) {
+          this.tweens.add({
+            targets: g,
+            x: ex, y: ey,
+            duration: 110,
+            ease: 'Quad.Out',
+            onUpdate: () => this.positionEnemyBar(g!, fixedBar, barW, barH, fgWidth),
+          })
+        } else {
+          g.setPosition(ex, ey)
+        }
       }
+      g.setVisible(vis)
+      bar.bg.setVisible(showBar)
+      bar.fg.setVisible(showBar)
+      this.positionEnemyBar(g, bar, barW, barH, fgWidth)
     }
 
     // ── プレイヤー描画 ──
+    const { x: px, y: py } = this.tileToWorld(player.position.x, player.position.y)
     if (!this.playerGraphic) {
       if (this.hasPlayerAnims) {
         const { idleKey, flipX } = this.getAnimBaseDir()
-        const sprite = this.add.sprite(0, 0, idleKey)
+        const sprite = this.add.sprite(px, py, idleKey)
           .setDisplaySize(rts * 1.25, rts * 1.38)
           .setDepth(6)
         if (flipX) sprite.setFlipX(true)
         this.playerGraphic = sprite
       } else {
-        this.playerGraphic = this.add.rectangle(0, 0, rts - 2, rts - 2, 0x44ff44).setDepth(6)
+        this.playerGraphic = this.add.rectangle(px, py, rts - 2, rts - 2, 0x44ff44).setDepth(6)
+      }
+      // カメラはプレイヤーを滑らかに追従（lerp）
+      this.cameras.main.startFollow(this.playerGraphic, true, 0.12, 0.12)
+      this.cameras.main.centerOn(px, py)
+    } else {
+      const g = this.playerGraphic
+      if (this.snapNextRender) {
+        // フロア切替：トゥイーンせず即時配置＋カメラスナップ
+        this.tweens.killTweensOf(g)
+        g.setAngle(0)
+        g.setPosition(px, py)
+        this.cameras.main.centerOn(px, py)
+      } else if (g.x !== px || g.y !== py) {
+        this.tweens.killTweensOf(g)
+        this.tweens.add({ targets: g, x: px, y: py, duration: 110, ease: 'Quad.Out' })
       }
     }
-    const ppx = player.position.x * rts - offsetX
-    const ppy = player.position.y * rts - offsetY
-    this.playerGraphic.setPosition(ppx + rts / 2, ppy + rts / 2)
+    this.snapNextRender = false
 
-    // ── 霧グラデーション（distance 4→7 にかけて円形スモッグ）──
+    // ── 霧グラデーション（distance 2→5 にかけて円形スモッグ）──
     this.fogGraphics.clear()
     if (this.state.floorType !== 'lucky' && !this.isEventFloor) {
       for (let fy = 0; fy < MAP_HEIGHT; fy++) {
@@ -2066,13 +2227,68 @@ export class GameScene extends Phaser.Scene {
           const t = Math.max(0, (dist - VISION_FOG_INNER) / (VISION_FOG_OUTER - VISION_FOG_INNER))
           const alpha = t * t  // 二次曲線で自然な霧立ち上がり
           if (alpha <= 0) continue
-          const fpx = fx * rts - offsetX
-          const fpy = fy * rts - offsetY
-          if (fpx < -rts || fpx > W || fpy < -rts || fpy > H) continue
           this.fogGraphics.fillStyle(0x000000, Math.min(1, alpha))
-          this.fogGraphics.fillRect(fpx, fpy, rts, rts)
+          this.fogGraphics.fillRect(fx * rts, fy * rts, rts, rts)
         }
       }
+    }
+  }
+
+  /** 敵HPバーを敵グラフィックの現在位置に追従させる（移動トゥイーン中も毎フレーム呼ばれる） */
+  private positionEnemyBar(
+    g: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image,
+    bar: { bg: Phaser.GameObjects.Rectangle; fg: Phaser.GameObjects.Rectangle },
+    barW: number, barH: number, fgWidth: number,
+  ) {
+    if (!bar.bg.active || !bar.fg.active) return
+    const barY = g.y + this.rts / 2 - 1 + barH / 2
+    bar.bg.setPosition(g.x, barY)
+    bar.fg.setPosition(g.x - barW / 2 + fgWidth / 2, barY)
+  }
+
+  // ── 低HPビネット（画面端が赤く脈動して危機を知らせる）──
+  private createLowHpVignette() {
+    const key = 'vignette-red'
+    if (!this.textures.exists(key)) {
+      const size = 512
+      const c = document.createElement('canvas')
+      c.width = size; c.height = size
+      const ctx = c.getContext('2d')!
+      const grad = ctx.createRadialGradient(size / 2, size / 2, size * 0.30, size / 2, size / 2, size * 0.72)
+      grad.addColorStop(0, 'rgba(255,0,0,0)')
+      grad.addColorStop(1, 'rgba(190,0,0,0.85)')
+      ctx.fillStyle = grad
+      ctx.fillRect(0, 0, size, size)
+      this.textures.addCanvas(key, c)
+    }
+    this.lowHpVignette = this.add.image(this.scale.width / 2, this.scale.height / 2, key)
+      .setDisplaySize(this.scale.width, this.scale.height)
+      .setScrollFactor(0)
+      .setDepth(85)
+      .setAlpha(0)
+  }
+
+  private updateLowHpVignette() {
+    if (!this.lowHpVignette) return
+    const { hp, maxHp } = this.state.player
+    const ratio  = maxHp > 0 ? hp / maxHp : 1
+    const target = hp > 0 && ratio <= 0.25 ? 0.85 : hp > 0 && ratio <= 0.4 ? 0.4 : 0
+    if (target === this.vignetteTarget) return
+    this.vignetteTarget = target
+    if (this.vignetteTween) { this.vignetteTween.stop(); this.vignetteTween = null }
+    if (target <= 0) {
+      this.vignetteTween = this.tweens.add({ targets: this.lowHpVignette, alpha: 0, duration: 400 })
+    } else {
+      // 心拍のように脈動させる
+      this.lowHpVignette.setAlpha(Math.max(this.lowHpVignette.alpha, target * 0.55))
+      this.vignetteTween = this.tweens.add({
+        targets: this.lowHpVignette,
+        alpha: { from: target * 0.55, to: target },
+        duration: 650,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.InOut',
+      })
     }
   }
 
@@ -2087,11 +2303,12 @@ export class GameScene extends Phaser.Scene {
     const hint = this.add.text(W / 2, H / 2 + 35, '[Esc] で再開', {
       fontSize: '18px', color: '#aaaaaa',
     }).setOrigin(0.5)
-    this.pauseOverlay = this.add.container(0, 0, [bg, text, hint]).setDepth(100).setVisible(false)
+    this.pauseOverlay = this.add.container(0, 0, [bg, text, hint])
+      .setDepth(100).setScrollFactor(0).setVisible(false)
   }
 
   private createInventoryPanel() {
-    this.inventoryPanel = this.add.container(0, 0).setDepth(50).setVisible(false)
+    this.inventoryPanel = this.add.container(0, 0).setDepth(50).setScrollFactor(0).setVisible(false)
   }
 
   private togglePause() {
