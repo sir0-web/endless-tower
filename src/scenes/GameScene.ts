@@ -785,6 +785,9 @@ export class GameScene extends Phaser.Scene {
     this.enemyGraphics.delete(enemy.id)
     this.enemyHpBars.delete(enemy.id)
     if (bar) { bar.bg.destroy(); bar.fg.destroy() }
+    // 攻撃可能マークも撤去（撃破時にマップから即削除するため描画ループのクリーンアップでは拾えない）
+    const mk = this.attackMarkers.get(enemy.id)
+    if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(enemy.id) }
     if (g) {
       this.tweens.killTweensOf(g)
       if (g.visible) {
