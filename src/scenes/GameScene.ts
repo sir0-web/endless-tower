@@ -281,7 +281,7 @@ export class GameScene extends Phaser.Scene {
     const playerPos = getPlayerStartPosition(map)
     const areaBossFloors = generateAreaBossFloors()
 
-    const floorType = this.determineFloorType(1)  // 初期LUK=1
+    const floorType = this.determineFloorType(1, 1)  // 初期LUK=1
     const initBase = 3  // 1Fはチュートリアル的に少なめ（3〜5体）
     const initCount = initBase + Math.floor(Math.random() * 3)
     const normalEnemies = floorType === 'chaos'
@@ -1260,7 +1260,7 @@ export class GameScene extends Phaser.Scene {
     this.state.map = map
     this.state.player.position = { ...playerPos }
 
-    const floorType = this.determineFloorType(this.state.player.luk)
+    const floorType = this.determineFloorType(this.state.player.luk, floor)
     const base     = 5
     const lukBonus = Math.floor(this.state.player.luk * 0.5)
     const count    = base + Math.floor(Math.random() * (base + lukBonus))
@@ -1666,9 +1666,9 @@ export class GameScene extends Phaser.Scene {
     playBGM(hasBoss ? 'boss' : 'dungeon')
   }
 
-  private determineFloorType(luk: number): 'normal' | 'lucky' | 'chaos' {
+  private determineFloorType(luk: number, floor: number): 'normal' | 'lucky' | 'chaos' {
     const luckyChance = Math.min(0.50, 0.03 + luk * 0.005)
-    const chaosChance = Math.min(0.30, 0.01 + luk * 0.008)
+    const chaosChance = floor <= 5 ? 0 : Math.min(0.30, 0.01 + luk * 0.008)
     const r = Math.random()
     if (r < luckyChance) return 'lucky'
     if (r < luckyChance + chaosChance) return 'chaos'
