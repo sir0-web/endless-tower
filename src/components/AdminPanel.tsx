@@ -18,9 +18,6 @@ interface WorldNotif {
 
 // ── JST ヘルパ ──
 const JST = 9 * 60 * 60 * 1000
-function toJstInput(ms: number): string {
-  return new Date(ms + JST).toISOString().slice(0, 16)
-}
 function fromJstInput(s: string): number {
   return new Date(s + ':00.000Z').getTime() - JST
 }
