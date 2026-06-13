@@ -91,7 +91,8 @@ function maintenanceHtml(now: number): string {
     box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(6px);
   }
-  .logo { font-size: 52px; line-height: 1; margin-bottom: 14px; }
+  .logo { margin-bottom: 14px; }
+  .logo video { width: 100%; max-width: 320px; border-radius: 12px; display: block; margin: 0 auto; }
   h1 { font-size: 22px; margin: 0 0 10px; letter-spacing: 0.04em; }
   .lead { font-size: 14px; color: #b9b9dd; margin: 0 0 22px; line-height: 1.7; }
   .window {
@@ -113,7 +114,9 @@ function maintenanceHtml(now: number): string {
 </head>
 <body>
   <main class="card">
-    <div class="logo">🏰</div>
+    <div class="logo">
+      <video src="/assets/maintenance/maintenance.mp4" autoplay muted loop playsinline></video>
+    </div>
     <h1>ただいま準備中です</h1>
     <p class="lead">Endless Tower は下記の時間のみ公開しています。<br>時間になると自動で開きます。</p>
     <div class="window">
