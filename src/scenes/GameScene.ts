@@ -91,10 +91,21 @@ export class GameScene extends Phaser.Scene {
   private isAnimating  = false   // 落とし穴スピンなどの演出中フラグ（入力ブロック用）
   private animatingTimer: ReturnType<typeof setTimeout> | null = null  // isAnimating安全タイムアウト
   private onVisibilityChange = () => {
-    if (!document.hidden && this.isAnimating) {
-      // バックグラウンド復帰時にフラグが残っていたら強制解除
+    if (!document.hidden) {
+      // バックグラウンド復帰時：スタックした入力ロックフラグを全て強制解除
       this.isAnimating = false
       if (this.animatingTimer) { clearTimeout(this.animatingTimer); this.animatingTimer = null }
+      this.isPaused = false
+      this.pauseOverlay?.setVisible(false)
+      // 装備モーダルが解決されないままだった場合、アイテムをバッグへ退避して解放
+      if (this.isEquipModalOpen && this.pendingItem) {
+        this.state.bag.push(this.pendingItem)
+        this.addMessage(`${this.pendingItem.name}をバッグに入れた（復帰時自動処理）`)
+      }
+      this.pendingItem        = null
+      this.isEquipModalOpen   = false
+      this.awaitingEquipModal = false
+      this.updateWindowGameState()
     }
   }
   // テクスチャ/アニメーションはゲーム全体で共有（シーン再起動毎にリセットされない）ため、
@@ -320,13 +331,13 @@ export class GameScene extends Phaser.Scene {
     this.state = {
       player: {
         position: { ...playerPos },
-        hp: 30,
-        maxHp: 30,
+        hp: 50,
+        maxHp: 50,
         level: 1,
         exp: 0,
         floor: 1,
-        stamina: 200,
-        maxStamina: 200,
+        stamina: 350,
+        maxStamina: 350,
         poisoned: false,
         poisonTurns: 0,
         mudTurns: 0,
@@ -863,7 +874,7 @@ export class GameScene extends Phaser.Scene {
       player.exp -= expNeeded
       const prevLevel = player.level
       player.level++
-      player.maxHp += 3
+      player.maxHp += 5
       player.hp = player.maxHp
       player.statPoints += 5
       this.addMessage(`レベルアップ！Lv${player.level}  +5ステータスポイント！`)
@@ -1221,7 +1232,7 @@ export class GameScene extends Phaser.Scene {
 
   private hungerTick() {
     const { player } = this.state
-    if (this.state.turn % 2 === 0) player.stamina -= 1
+    if (this.state.turn % 3 === 0) player.stamina -= 1
     if (player.stamina <= 0) {
       player.stamina = 0
       player.hp = Math.max(0, player.hp - 2)
@@ -1301,10 +1312,10 @@ export class GameScene extends Phaser.Scene {
     this.state.enemies = [...normalEnemies, ...bosses]
     dedupeEnemyPositions(this.state.enemies, map, playerPos)   // 敵が重なって始まらないように
     this.state.items = floorType === 'lucky'
-      ? spawnItems(map, { countMult: 2, equipRate: 0.30, floor })
+      ? spawnItems(map, { countMult: 6, equipRate: 0.30, floor })
       : floorType === 'chaos'
-      ? spawnItems(map, { countMult: 3, floor })
-      : spawnItems(map, { floor })
+      ? spawnItems(map, { countMult: 6, floor })
+      : spawnItems(map, { countMult: 3, floor })
     this.state.floorType = floorType
     this.buildFloorVariants(map)
     this.createTileSprites(map)

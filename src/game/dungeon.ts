@@ -305,13 +305,13 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
   const available = ENEMY_TABLE.filter(e => e.minFloor <= floor && e.maxFloor >= floor)
   const enemies = []
 
-  // 1Fは全ステータスを60%に抑えて初心者がB2Fへ進みやすくする
-  const f1Mult = floor === 1 ? 0.6 : 1.0
+  // 1〜3Fは全ステータスを60%に抑えて初心者が序盤を乗り越えやすくする
+  const f1Mult = floor <= 3 ? 0.6 : 1.0
 
   for (let i = 0; i < count; i++) {
     const pos = floors[Math.floor(Math.random() * floors.length)]
     const base = available[Math.floor(Math.random() * available.length)]
-    const scale = (1 + floor * 0.12) * f1Mult
+    const scale = (1 + floor * 0.08) * f1Mult
     enemies.push({
       id: `enemy_${i}_${Date.now()}`,
       position: { ...pos },
@@ -355,7 +355,7 @@ export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playe
   }
 
   const count = Math.floor(candidates.length * 0.7)
-  const f1Mult = floor === 1 ? 0.6 : 1.0
+  const f1Mult = floor <= 3 ? 0.6 : 1.0
   const scale = (1 + floor * 0.08) * f1Mult
 
   return candidates.slice(0, count).map((pos, i) => {

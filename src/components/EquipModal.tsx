@@ -53,8 +53,8 @@ export function EquipModal() {
   }
 
   return (
-    <div className="equip-overlay">
-      <div className="equip-modal">
+    <div className="equip-overlay" onClick={() => resolve(false)}>
+      <div className="equip-modal" onClick={e => e.stopPropagation()}>
         <p className="equip-modal-title">
           {currentItem ? '装備を変更しますか？' : '装備しますか？'}
         </p>
