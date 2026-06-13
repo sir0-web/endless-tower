@@ -43,6 +43,7 @@ const ALLOC_STATS: { key: AllocStat; label: string }[] = [
 ]
 
 function getLogColor(msg: string): string {
+  if (msg.startsWith('🌐')) return '#ffce5a'   // ワールド通知（他プレイヤー含む）
   if (msg.includes('レベルアップ')) return '#5599ff'
   if (msg.includes('から') && msg.includes('ダメージ')) return '#ff5555'
   if (msg.includes('に') && msg.includes('ダメージ')) return '#44dd88'

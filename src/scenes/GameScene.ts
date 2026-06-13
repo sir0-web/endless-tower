@@ -236,6 +236,7 @@ export class GameScene extends Phaser.Scene {
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
     window.saveGame        = () => this.doSaveGame()
+    window.addWorldLogMessage = (text: string) => this.addWorldLogMessage(text)
     window.runRefineChallenge   = (slot, sacrificeId) => this.runRefineChallenge(slot, sacrificeId)
     window.runShadowChallenge   = ()                  => this.runShadowChallenge()
     window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
@@ -1475,6 +1476,13 @@ export class GameScene extends Phaser.Scene {
     this.state.messages.unshift(msg)
     if (this.state.messages.length > 50) this.state.messages.pop()
     window.showEventMessage?.(msg)
+  }
+
+  /** ワールド通知をゲーム内ログに残す（EventMsgBarは光らせない。テロップと役割分担）。 */
+  private addWorldLogMessage(text: string) {
+    this.state.messages.unshift(text)
+    if (this.state.messages.length > 50) this.state.messages.pop()
+    this.updateWindowGameState()
   }
 
   private updateWindowGameState() {

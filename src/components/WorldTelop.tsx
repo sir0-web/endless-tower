@@ -20,10 +20,14 @@ export function WorldTelop() {
   const [current, setCurrent] = useState<WorldNotif | null>(null)
   const [visible, setVisible] = useState(false)
 
-  // フィード購読 → 受信した通知はキューへ（表示中でも捨てない）
+  // フィード購読 → 受信した通知はキューへ（表示中でも捨てない）＋ゲーム内ログにも残す
   useEffect(() => {
     acquireFeed()
-    const off = onNewNotif((n) => setQueue(q => [...q, n]))
+    const off = onNewNotif((n) => {
+      setQueue(q => [...q, n])
+      // プレイ中なら、消えるテロップとは別にスクロールログへも蓄積する
+      if (window.isGameSceneActive) window.addWorldLogMessage?.(`🌐${n.title} ${n.message}`)
+    })
     return () => { off(); releaseFeed() }
   }, [])
 
