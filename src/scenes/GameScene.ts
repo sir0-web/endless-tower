@@ -233,6 +233,8 @@ export class GameScene extends Phaser.Scene {
     window.useSpell    = (itemId: string) => this.useSpellById(itemId)
     window.useHeal     = (itemId: string) => this.useHealById(itemId)
     window.isGameSceneActive = true
+    // プレイ中はステータスバー/メッセージ枠を表示する通常レイアウトへ戻す（スマホ全幅化を解除）
+    window.dispatchEvent(new Event('et-canvas-play'))
     window.resolveEquip    = (equip: boolean) => this.resolveEquipModal(equip)
     window.equipFromBag   = (itemId: string) => this.equipFromBag(itemId)
     window.discardFromBag = (itemId: string) => this.discardFromBag(itemId)

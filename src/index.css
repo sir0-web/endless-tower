@@ -400,14 +400,14 @@ html, body {
     height: calc(100% - 90px - 59px);
   }
 
-  /* タイトル画面のみ: ステータスバー/メッセージバーが無いので、その予約枠を取り払い
-     キャンバスを game-pane 全体へ拡大して左右・上の余白を埋める（比率はFITで維持）。
-     プレイへ遷移すると title-mode が外れ、上の通常レイアウトへ戻る。 */
-  .title-mode .game-canvas-area {
+  /* 非プレイ画面（タイトル/ゲームオーバー/ランキング）: ステータスバー/メッセージバーが無いので
+     その予約枠を取り払い、キャンバスを game-pane 全体へ拡大して余白を埋める（比率はFITで維持）。
+     プレイへ遷移すると canvas-full が外れ、上の通常レイアウトへ戻る。 */
+  .canvas-full .game-canvas-area {
     margin-top: 0;
     height: 100%;
   }
-  .title-mode .event-msg-bar {
+  .canvas-full .event-msg-bar {
     display: none;
   }
 

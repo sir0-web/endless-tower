@@ -26,6 +26,8 @@ export class GameOverScene extends Phaser.Scene {
 
   create() {
     playBGM('gameover')
+    // スマホ: キャンバスを全幅化して余白を無くし、文字を大きく見せる（非プレイ画面）
+    window.dispatchEvent(new Event('et-canvas-full'))
     const W  = this.scale.width
     const H  = this.scale.height
     const cx = W / 2
@@ -42,12 +44,14 @@ export class GameOverScene extends Phaser.Scene {
 
     // GAME OVER
     this.add.text(cx, H * 0.11, 'GAME OVER', {
-      fontSize: fs(64), color: '#ff4444', fontStyle: 'bold',
+      fontSize: fs(82), color: '#ff4444', fontStyle: 'bold',
     }).setOrigin(0.5)
+      .setStroke('#3a0000', Math.max(4, Math.round(8 * s)))
+      .setShadow(0, fsPx(4), '#000000', fsPx(6), true, true)
 
     // 到達フロア: BASEMENT XXXst Floor !! (階数部分だけオレンジ)
     const ord      = `${this.floor}${ordinalSuffix(this.floor)}`
-    const floorFs  = fs(36)
+    const floorFs  = fs(42)
     const floorY   = H * 0.24
     const prefixT  = this.add.text(0, floorY, 'BASEMENT ', { fontSize: floorFs, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0.5)
     const floorT   = this.add.text(0, floorY, ord,          { fontSize: floorFs, color: '#ff8800', fontStyle: 'bold' }).setOrigin(0, 0.5)
@@ -62,7 +66,7 @@ export class GameOverScene extends Phaser.Scene {
     const groupW   = Math.min(520, W * 0.80)
     const labelY   = H * 0.38
     const inputY   = H * 0.47
-    const inputH   = fsPx(24) + 24
+    const inputH   = fsPx(26) + 26
     const g1Top    = H * 0.33
     const g1Bot    = H * 0.535
     const g1H      = g1Bot - g1Top
@@ -76,7 +80,7 @@ export class GameOverScene extends Phaser.Scene {
 
     // ラベル
     this.add.text(cx, labelY, '名前を入力してランキングに登録', {
-      fontSize: fs(20), color: '#cccccc',
+      fontSize: fs(23), color: '#dddde8',
     }).setOrigin(0.5)
 
     // 入力フィールド内枠
@@ -84,7 +88,7 @@ export class GameOverScene extends Phaser.Scene {
     this.drawBox(inputBg, cx, inputY, groupW - 24, inputH, 0x1a1a44, 0x8888ff)
 
     this.nameInput = this.add.text(cx, inputY, this.PLACEHOLDER, {
-      fontSize: fs(22), color: '#555577',
+      fontSize: fs(26), color: '#555577',
       fixedWidth: groupW - 40,
       align: 'center',
     }).setOrigin(0.5)
@@ -134,7 +138,7 @@ export class GameOverScene extends Phaser.Scene {
     // 登録してランキングをみる（ホバー背景）
     const submitHover = this.add.graphics()
     const submitBtn = this.add.text(cx, submitY, '登録してランキングをみる', {
-      fontSize: fs(26), color: '#00ff88', fontStyle: 'bold',
+      fontSize: fs(30), color: '#00ff88', fontStyle: 'bold',
     }).setOrigin(0.5)
 
     submitBtn.setInteractive({ useHandCursor: true })
@@ -159,7 +163,7 @@ export class GameOverScene extends Phaser.Scene {
     // 登録せずにTOPへ戻る（ホバー背景）
     const retryHover = this.add.graphics()
     const retryBtn = this.add.text(cx, retryY, '登録せずにTOPへ戻る', {
-      fontSize: fs(26), color: '#aaaaaa', fontStyle: 'bold',
+      fontSize: fs(30), color: '#aaaaaa', fontStyle: 'bold',
     }).setOrigin(0.5)
 
     retryBtn.setInteractive({ useHandCursor: true })

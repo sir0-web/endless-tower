@@ -28,6 +28,8 @@ export class RankingScene extends Phaser.Scene {
 
   create() {
     playBGM('ranking')
+    // スマホ: キャンバスを全幅化（非プレイ画面）。ゲームオーバー⇄ランキングでサイズが揃う
+    window.dispatchEvent(new Event('et-canvas-full'))
     const W  = this.scale.width
     const H  = this.scale.height
     const cx = W / 2

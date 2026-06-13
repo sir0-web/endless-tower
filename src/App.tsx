@@ -37,8 +37,9 @@ function App() {
   const gameRef       = useRef<Phaser.Game | null>(null)
   const [appScale, setAppScale] = useState(calcScale)
   const [isMobile, setIsMobile] = useState(isMobileViewport)
-  // タイトル画面表示中フラグ（スマホでキャンバスを全幅に拡大するため）。初期はタイトルなので true。
-  const [titleMode, setTitleMode] = useState(true)
+  // キャンバス全幅化フラグ（スマホ）。ステータスバー/メッセージ枠が不要な非プレイ画面
+  // （タイトル・ゲームオーバー・ランキング）でキャンバスを画面いっぱいに拡大する。初期はタイトルなので true。
+  const [fullCanvas, setFullCanvas] = useState(true)
 
   // ウィンドウリサイズでスケール再計算 + Phaser canvas 更新
   useEffect(() => {
@@ -100,23 +101,23 @@ function App() {
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
   }, [appScale])
 
-  // タイトル表示中はキャンバス枠を全幅化する（スマホ）。Phaser シーンからの通知で切り替える。
+  // 非プレイ画面ではキャンバス枠を全幅化する（スマホ）。各 Phaser シーンの create からの通知で切り替える。
   useEffect(() => {
-    const enter = () => setTitleMode(true)
-    const leave = () => setTitleMode(false)
-    window.addEventListener('et-title-enter', enter)
-    window.addEventListener('et-title-leave', leave)
+    const full = () => setFullCanvas(true)
+    const play = () => setFullCanvas(false)
+    window.addEventListener('et-canvas-full', full)
+    window.addEventListener('et-canvas-play', play)
     return () => {
-      window.removeEventListener('et-title-enter', enter)
-      window.removeEventListener('et-title-leave', leave)
+      window.removeEventListener('et-canvas-full', full)
+      window.removeEventListener('et-canvas-play', play)
     }
   }, [])
 
-  // タイトルモード切替でキャンバス枠サイズが変わるため、Phaser の FIT スケールを再計算する。
+  // 全幅化の切替でキャンバス枠サイズが変わるため、Phaser の FIT スケールを再計算する。
   useEffect(() => {
     if (!gameRef.current) return
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
-  }, [titleMode])
+  }, [fullCanvas])
 
   // スマホ: 通常レスポンシブ / PC: 固定サイズ＋スケール縮小
   const wrapperStyle = isMobile
@@ -135,7 +136,7 @@ function App() {
   return (
     <>
     <div style={wrapperStyle}>
-      <div className={`app-layout${titleMode ? ' title-mode' : ''}`}>
+      <div className={`app-layout${fullCanvas ? ' canvas-full' : ''}`}>
         <div className="game-pane">
           <MobileStatusBar />
           <div className="game-canvas-area" ref={canvasAreaRef}>
