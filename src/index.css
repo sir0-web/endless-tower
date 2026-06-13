@@ -62,7 +62,7 @@ html, body {
 .mob-status-bar {
   display: none; /* PC: UIパネル側にすべての情報があるため非表示 */
   width: 100%;
-  padding: 4px 10px;
+  padding: 7px 10px 6px;
   background: rgba(5, 5, 20, 0.92);
   border-bottom: 1px solid #1e1e38;
   pointer-events: none;
@@ -70,53 +70,75 @@ html, body {
 
 .mob-floor-row {
   display: flex;
-  gap: 8px;
-  margin-bottom: 5px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
   flex-wrap: nowrap;
+  /* 右上の🌐ワールドログトグル(right:12 / 40px幅)と重ならないよう右側を確保 */
+  padding-right: 44px;
 }
 
 /* モバイル上部バッジは右メニューと同じスタイルを継承しつつサイズ調整 */
 .mob-badge {
-  font-size: 17px !important;
-  padding: 4px 11px !important;
+  font-size: 16px !important;
+  padding: 4px 9px !important;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 階層・レベルは短いので少しコンパクトにして名前へ幅を譲る */
+.floor-badge.mob-badge,
+.level-badge.mob-badge {
+  font-size: 15px !important;
+  padding: 4px 8px !important;
+}
+
+/* 名前は内容に合わせて表示し、残り幅を超える長い名前のみ省略（…）。
+   🔊/セーブは margin-left:auto で常に右寄せされ、余白は名前との間に入る。 */
+.name-badge.mob-badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mob-bar-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
+  gap: 7px;
+  margin-bottom: 5px;
 }
+.mob-bar-row:last-child { margin-bottom: 0; }
 
 .mob-bar-lbl {
   font-size: 14px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.75);
-  width: 26px;
+  color: rgba(255, 255, 255, 0.85);
+  width: 30px;
   flex-shrink: 0;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
 .mob-bar-track {
   flex: 1;
-  height: 10px;
+  height: 13px;
   background: rgba(0, 0, 0, 0.45);
-  border-radius: 5px;
+  border-radius: 6px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.18);
 }
 
 .mob-bar-fill {
   height: 100%;
-  border-radius: 5px;
+  border-radius: 6px;
   transition: width 0.2s ease;
 }
 
 .mob-bar-num {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
-  width: 54px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  width: 62px;
   text-align: right;
   flex-shrink: 0;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -128,10 +150,10 @@ html, body {
   margin-left: auto;
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 4px;
+  border-radius: 5px;
   color: #ffffff;
-  font-size: 20px;
-  padding: 3px 8px;
+  font-size: 19px;
+  padding: 4px 9px;
   cursor: pointer;
   line-height: 1;
   flex-shrink: 0;
@@ -142,11 +164,11 @@ html, body {
   pointer-events: auto;
   background: rgba(0, 60, 30, 0.55);
   border: 1px solid rgba(120, 255, 180, 0.4);
-  border-radius: 4px;
+  border-radius: 5px;
   color: #aaffcc;
   font-size: 15px;
   font-weight: 700;
-  padding: 4px 11px;
+  padding: 5px 12px;
   cursor: pointer;
   line-height: 1;
   flex-shrink: 0;
@@ -356,7 +378,7 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
-    height: calc(84vw + 108px);
+    height: calc(84vw + 116px);
     overflow: hidden;
   }
 
@@ -365,13 +387,14 @@ html, body {
     position: absolute;
     top: 0;
     left: 0;
+    height: 116px;        /* 予約高さと一致させ、下端に隙間（黒帯）が出ないようにする */
     z-index: 50;
   }
 
   .game-canvas-area {
     flex: none;
-    margin-top: 108px;
-    height: calc(100% - 108px - 74px);
+    margin-top: 116px;
+    height: calc(100% - 116px - 74px);
   }
 
   .ui-pane {

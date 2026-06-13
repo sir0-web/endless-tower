@@ -11,16 +11,6 @@ interface StatusSnap {
 
 const DEFAULT: StatusSnap = { hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, floor: 1, level: 1, exp: 0 }
 
-function ordSuffix(n: number): string {
-  const m100 = n % 100
-  const m10  = n % 10
-  if (m100 >= 11 && m100 <= 13) return 'th'
-  if (m10 === 1) return 'st'
-  if (m10 === 2) return 'nd'
-  if (m10 === 3) return 'rd'
-  return 'th'
-}
-
 export function MobileStatusBar() {
   const [s, setS]       = useState<StatusSnap>(DEFAULT)
   const [active, setActive] = useState(false)
@@ -86,11 +76,11 @@ export function MobileStatusBar() {
     <div className="mob-status-bar">
       <div className="mob-floor-row">
         <span className="badge floor-badge mob-badge">
-          Basement{' '}
+          B
           <span className={`floor-num${numAnim ? ' floor-num-anim' : ''}`}>
-            {displayFloor}{ordSuffix(displayFloor)}
+            {displayFloor}
           </span>
-          {' '}Floor
+          F
         </span>
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
         <span className="badge name-badge mob-badge">{name}</span>
