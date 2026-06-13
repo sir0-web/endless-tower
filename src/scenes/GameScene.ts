@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
-import { spawnItems, SPELL_ITEMS } from '../game/items'
+import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
@@ -252,7 +252,24 @@ export class GameScene extends Phaser.Scene {
         this.state.player.floor = Math.max(1, Math.floor(floor)) - 1
         this.nextFloor()
       }
+      window.giveEquip = (name?: string) => {
+        const base = name
+          ? EQUIP_ITEMS.find(e => e.name === name)
+          : EQUIP_ITEMS[Math.floor(Math.random() * EQUIP_ITEMS.length)]
+        if (!base) { console.warn('[DEV] 装備名が見つかりません:', name); return }
+        this.state.bag.push({
+          id: `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          name: base.name, type: 'equip', position: { x: 0, y: 0 },
+          equipSlot: base.equipSlot,
+          hpBonus: base.hpBonus, strBonus: base.strBonus, agiBonus: base.agiBonus,
+          dexBonus: base.dexBonus, intBonus: base.intBonus, vitBonus: base.vitBonus, lukBonus: base.lukBonus,
+        })
+        this.updateWindowGameState()
+        console.log('[DEV] バッグに追加:', base.name)
+      }
       console.log('[DEV] warpFloor(階数) で好きな階にワープできます。例: warpFloor(10)')
+      console.log('[DEV] giveEquip("装備名") でバッグに装備を追加。引数なしでランダム。')
+      console.log('[DEV] 装備一覧:', EQUIP_ITEMS.map(e => e.name).join(', '))
     }
 
     this.createPauseOverlay()

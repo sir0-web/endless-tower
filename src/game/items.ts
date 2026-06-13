@@ -17,7 +17,7 @@ const HEAL_ITEMS = [
 
 // atkBonus/defBonus を廃止し strBonus/vitBonus に統一
 // minFloor: その階以降でのみ出現する（深層ほど強力な装備が出る）
-const EQUIP_ITEMS: {
+export const EQUIP_ITEMS: {
   name: string
   equipSlot: EquipSlot
   minFloor?: number
