@@ -765,6 +765,18 @@ export class GameScene extends Phaser.Scene {
     player.exp += expGain
     this.addMessage(`${enemy.name}を倒した！経験値+${expGain}`)
 
+    // 女神のコイン：撃破時20%でその場にドロップ
+    if (Math.random() < 0.20) {
+      this.state.items.push({
+        id: `coin_${enemy.id}_${Date.now()}`,
+        name: '女神のコイン',
+        type: 'heal',
+        position: { x: enemy.position.x, y: enemy.position.y },
+        coin: true,
+      })
+      this.addMessage('女神のコインがドロップした！')
+    }
+
     const g   = this.enemyGraphics.get(enemy.id)
     const bar = this.enemyHpBars.get(enemy.id)
     this.enemyGraphics.delete(enemy.id)
@@ -2098,7 +2110,7 @@ export class GameScene extends Phaser.Scene {
           g = this.add.image(wx, wy, 'tile-box')
             .setDisplaySize(rts - 2, rts - 2).setDepth(3)
         } else {
-          const icon = item.type === 'heal' ? '💊' : item.type === 'spell' ? '📖' : '⚔️'
+          const icon = item.coin ? '🪙' : item.type === 'heal' ? '💊' : item.type === 'spell' ? '📖' : '⚔️'
           g = this.add.text(wx, wy, icon, { fontSize: `${Math.round(rts * 0.6)}px` }).setOrigin(0.5).setDepth(3)
         }
         // ゆっくり上下に浮遊させて「拾える物」感を出す

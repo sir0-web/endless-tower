@@ -115,15 +115,6 @@ export function spawnItems(
         position: { ...pos },
         spellType: base.spellType,
       })
-    } else if (r < equipRate + 0.16) {
-      // 女神のコイン：使うとスロットを1回回せる消費アイテム（約6%）
-      items.push({
-        id: `item_${i}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        name: '女神のコイン',
-        type: 'heal',
-        position: { ...pos },
-        coin: true,
-      })
     } else {
       const base = HEAL_ITEMS[Math.floor(Math.random() * HEAL_ITEMS.length)]
       items.push({
