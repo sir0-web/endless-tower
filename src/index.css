@@ -887,15 +887,15 @@ html, body {
 
 .icr-empty { font-size: 10px; color: #444466; text-align: center; margin-top: 6px; }
 
-/* ── スロット筐体（液晶下端でクロップ：y=0-975/1536 を表示） ── */
+/* ── スロット筐体（新デザイン slot-cabinet-v2.png: ヘッダー→液晶→リール→操作バー） ── */
 .slot-cabinet {
   position: relative;
   width: 100%;
-  max-width: min(460px, calc((100vh - 280px) / 0.952));
-  aspect-ratio: 1024 / 975;
+  max-width: min(460px, calc((100vh - 280px) / 1.1119));
+  aspect-ratio: 1278 / 1421;
   margin: 0 auto;
   flex-shrink: 0;
-  background: url('/assets/slot/slot-machine.png') top center / 100% auto no-repeat;
+  background: url('/assets/slot/slot-cabinet-v2.png') top center / 100% 100% no-repeat;
   transition: box-shadow 0.3s;
 }
 
@@ -906,12 +906,12 @@ html, body {
 /* ── リール3本（975px基準で再計算: y=270-495 → 27.7%-50.8%） ── */
 .sc-reels {
   position: absolute;
-  top: 27.7%;
-  left: 11.72%;
-  width: 76.17%;
-  height: 23.1%;
+  top: 56.7%;
+  left: 10.6%;
+  width: 78.5%;
+  height: 24.7%;
   display: flex;
-  gap: 7.69%;
+  gap: 4%;
 }
 
 .slot-reel {
@@ -952,10 +952,10 @@ html, body {
 /* ── LCD（元サイズでフレームを完全に覆い、overflow:hidden + 黒背景でマスク） ── */
 .sc-lcd {
   position: absolute;
-  top: 57.4%;
-  left: 6.84%;
-  width: 86.43%;
-  height: 39.0%;
+  top: 23.1%;
+  left: 11%;
+  width: 77.5%;
+  height: 31.6%;
   overflow: hidden;
   background: #000;
 }
@@ -979,12 +979,12 @@ html, body {
 /* ── ストップボタン row（リール直下の隙間） ── */
 .sc-stop-row {
   position: absolute;
-  top: 51.5%;
-  left: 11.72%;
-  width: 76.17%;
-  height: 5%;
+  top: 84%;
+  left: 10.6%;
+  width: 78.5%;
+  height: 3.2%;
   display: flex;
-  gap: 7.69%;
+  gap: 4%;
   align-items: center;
 }
 
