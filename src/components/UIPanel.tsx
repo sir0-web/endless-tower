@@ -179,10 +179,10 @@ export function UIPanel() {
         >
           <span className="se-title">ステータス / 装備</span>
           {!statsOpen && gs.statPoints > 0 && (
-            <span className="se-badge se-badge-pt">pt +{gs.statPoints}</span>
+            <span className="se-pt-alert">⚡ 未付与ポイントあり</span>
           )}
           {!statsOpen && gs.bag.length > 0 && (
-            <span className="se-badge se-badge-bag">装備 {gs.bag.length}</span>
+            <span className="se-badge se-badge-bag">📦 {gs.bag.length}</span>
           )}
           <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
         </button>
