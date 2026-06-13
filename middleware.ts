@@ -28,8 +28,8 @@ const isOpenAt = (now: number) => OPEN_WINDOWS.some(w => now >= w.from && now < 
 const upcomingWindow = (now: number) => OPEN_WINDOWS.find(w => now < w.to) ?? null
 
 export const config = {
-  // Vercel 内部パス(_vercel/*)は素通し。それ以外の全リクエストを判定対象にする
-  matcher: ['/((?!_vercel).*)'],
+  // 静的アセット(assets/*)とVercel内部パス(_vercel/*)は素通し
+  matcher: ['/((?!_vercel|assets/).*)'],
 }
 
 export default function middleware(request: Request): Response {
