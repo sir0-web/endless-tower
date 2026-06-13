@@ -43,6 +43,12 @@ const ALLOC_STATS: { key: AllocStat; label: string }[] = [
   { key: 'int', label: 'INT' }, { key: 'luk', label: 'LUK' },
 ]
 
+function getHealInfo(item: Item): { icon: string; desc: string; effect: string } {
+  if (item.coin) return { icon: '🪙', desc: 'スロットを1回スピンさせる特殊コイン', effect: '女神の加護（敵撃破時20%でドロップ）' }
+  if ((item.staminaPercent ?? 0) > 0) return { icon: '💊', desc: 'スタミナを回復するポーション', effect: `スタミナ +${item.staminaPercent}%` }
+  return { icon: '💊', desc: 'HPを回復するポーション', effect: `HP +${item.healAmount ?? 0}` }
+}
+
 function getLogColor(msg: string): string {
   if (msg.startsWith('🌐')) return '#ffce5a'   // ワールド通知（他プレイヤー含む）
   if (msg.includes('レベルアップ')) return '#5599ff'
@@ -80,6 +86,7 @@ export function UIPanel() {
   const [selId, setSelId] = useState<string | null>(null)
   const [openTab, setOpenTab] = useState<AccordionTab | null>(null)
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
+  const [healDetail, setHealDetail] = useState<string | null>(null)
   const [statsOpen, setStatsOpen] = useState(true)
   const [name, setName] = useState(getDisplayName)
   const [mute, setMute] = useState(isMuted())
@@ -113,7 +120,7 @@ export function UIPanel() {
   const spellGroups = group(gs.spells)
 
   // アイテム行クリック
-  const selectItem = (id: string) => { setSpellDetail(null); setSelId(s => s === id ? null : id) }
+  const selectItem = (id: string) => { setSpellDetail(null); setHealDetail(null); setSelId(s => s === id ? null : id) }
 
   // 選択中の装備アイテムとステータス差分
   const selEquip = selId ? gs.bag.find(x => x.id === selId && x.type === 'equip') : null
@@ -278,18 +285,45 @@ export function UIPanel() {
           <div className="ip-accordion-body">
             {openTab === 'item' && (
               <div className="ip-scroll">
-                {Object.entries(healGroups).map(([name, items]) => (
-                  <div key={name}>
-                    <div className={`icr icr-heal ${selId === items[0].id ? 'icr-sel' : ''}`}
-                      onClick={() => selectItem(items[0].id)}>
-                      <span>{items[0].coin ? '🪙' : '💊'}</span>
-                      <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                {Object.entries(healGroups).map(([name, items]) => {
+                  const isSelected = selId === items[0].id
+                  const showDetail = isSelected && healDetail === name
+                  const info = getHealInfo(items[0])
+                  return (
+                    <div key={name}>
+                      <div className={`icr icr-heal ${isSelected ? 'icr-sel' : ''}`}
+                        onClick={() => selectItem(items[0].id)}>
+                        <span>{info.icon}</span>
+                        <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                      </div>
+                      {isSelected && (
+                        <>
+                          <div className="icr-act-row">
+                            <button className="icr-act"
+                              onClick={() => { window.useHeal?.(items[0].id); setSelId(null); setHealDetail(null) }}>
+                              使う
+                            </button>
+                            <button className="icr-act icr-act-detail"
+                              onClick={() => setHealDetail(s => s === name ? null : name)}>
+                              詳細
+                            </button>
+                            <button className="icr-act icr-act-cancel"
+                              onClick={() => { setSelId(null); setHealDetail(null) }}>
+                              キャンセル
+                            </button>
+                          </div>
+                          {showDetail && (
+                            <div className="spell-detail-panel">
+                              <div className="spell-detail-title">{info.icon} {name}</div>
+                              <div className="spell-detail-desc">{info.desc}</div>
+                              <div className="spell-detail-effect">{info.effect}</div>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
-                    {selId === items[0].id && (
-                      <button className="icr-act" onClick={() => { window.useHeal?.(items[0].id); setSelId(null) }}>使う</button>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
                 {gs.heals.length === 0 && <p className="icr-empty">なし</p>}
               </div>
             )}
