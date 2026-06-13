@@ -90,6 +90,14 @@ function App() {
     return () => { obs.disconnect(); gameRef.current?.destroy(true); gameRef.current = null }
   }, [])
 
+  // appScale 変更後（React re-render → CSS transform 適用後）に Phaser の入力座標を再同期する。
+  // CSS transform は layout size を変えないため Phaser の内部ループでは検知されず canvasBounds が
+  // 古いままになる。ブラウザのズーム変更などで appScale が変わるたびに RAF で更新する。
+  useEffect(() => {
+    if (!gameRef.current) return
+    requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
+  }, [appScale])
+
   // スマホ: 通常レスポンシブ / PC: 固定サイズ＋スケール縮小
   const wrapperStyle = isMobile
     ? { width: '100%', height: '100%' } as const
