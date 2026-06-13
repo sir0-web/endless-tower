@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Equipment, Item, MinimapData, AllocStat } from '../types'
 import { SlotMachine } from './SlotMachine'
 import { BonusVideo } from './BonusVideo'
+import { getDisplayName } from '../game/playerName'
 
 interface GameStateSnapshot {
   hp: number; maxHp: number
@@ -77,12 +78,18 @@ export function UIPanel() {
   const [selId, setSelId] = useState<string | null>(null)
   const [openTab, setOpenTab] = useState<AccordionTab | null>(null)
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
+  const [name, setName] = useState(getDisplayName)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const update = () => { if (window.gameState) setGs({ ...window.gameState }) }
+    const onName = () => setName(getDisplayName())
     window.addEventListener('gamestate-update', update)
-    return () => window.removeEventListener('gamestate-update', update)
+    window.addEventListener('displayname-changed', onName)
+    return () => {
+      window.removeEventListener('gamestate-update', update)
+      window.removeEventListener('displayname-changed', onName)
+    }
   }, [])
 
   useEffect(() => {
@@ -128,6 +135,7 @@ export function UIPanel() {
         <div className="pc-status-badges">
           <span className="badge floor-badge">B{gs.floor}F</span>
           <span className="badge level-badge">Lv {gs.level}</span>
+          <span className="badge name-badge">{name}</span>
           {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
         </div>
         <div className="bar-il-row">

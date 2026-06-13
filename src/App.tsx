@@ -13,6 +13,8 @@ import { RefineModal, ShadowEquipModal, SpellbookModal } from './components/Even
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { GameToast } from './components/GameToast'
 import { EventMsgBar } from './components/EventMsgBar'
+import { WorldTelop } from './components/WorldTelop'
+import { WorldLog } from './components/WorldLog'
 import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
@@ -108,6 +110,8 @@ function App() {
         <GameToast />
       </div>
     </div>
+    <WorldTelop />
+    <WorldLog />
     <Analytics />
     </>
   )

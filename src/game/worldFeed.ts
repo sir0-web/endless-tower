@@ -1,0 +1,83 @@
+import { supabase } from './supabase'
+import type { WorldNotifType } from './worldNotify'
+
+export interface WorldNotif {
+  id: number
+  type: WorldNotifType
+  title: string
+  message: string
+  player_name: string | null
+  player_id: string | null
+  created_at: string
+}
+
+type NewListener = (n: WorldNotif) => void
+type LogListener = (log: WorldNotif[]) => void
+
+const MAX_LOG = 100
+
+// ── 単一の Realtime チャンネルを Telop / Log で共有する。参照カウントで購読を1本に保つ ──
+let log: WorldNotif[] = []
+const newListeners = new Set<NewListener>()
+const logListeners = new Set<LogListener>()
+let channel: ReturnType<typeof supabase.channel> | null = null
+let refCount = 0
+
+function emitNew(n: WorldNotif) { newListeners.forEach(l => l(n)) }
+function emitLog() { logListeners.forEach(l => l(log)) }
+
+async function fetchInitial() {
+  const { data, error } = await supabase
+    .from('world_notifications')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(MAX_LOG)
+  if (error) { console.warn('world_log取得失敗:', error.message); return }
+  if (data) { log = data as WorldNotif[]; emitLog() }
+}
+
+function start() {
+  void fetchInitial()
+  channel = supabase
+    .channel('world_notif')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'world_notifications' },
+      (p) => {
+        const n = p.new as WorldNotif
+        log = [n, ...log].slice(0, MAX_LOG) // 新しい順で保持
+        emitNew(n)
+        emitLog()
+      },
+    )
+    .subscribe()
+}
+
+function stop() {
+  if (channel) { supabase.removeChannel(channel); channel = null }
+}
+
+/** フィードの利用開始（参照カウント+1。最初の1人で購読を張る）。 */
+export function acquireFeed(): void {
+  refCount++
+  if (refCount === 1) start()
+}
+
+/** フィードの利用終了（参照カウント-1。最後の1人で購読を解除）。 */
+export function releaseFeed(): void {
+  refCount = Math.max(0, refCount - 1)
+  if (refCount === 0) stop()
+}
+
+/** 新着通知（テロップ用）。購読解除関数を返す。 */
+export function onNewNotif(l: NewListener): () => void {
+  newListeners.add(l)
+  return () => { newListeners.delete(l) }
+}
+
+/** ログ更新（ワールドログ用）。登録時に現在のログを即時に渡す。購読解除関数を返す。 */
+export function onLogUpdate(l: LogListener): () => void {
+  logListeners.add(l)
+  l(log)
+  return () => { logListeners.delete(l) }
+}

@@ -6,6 +6,8 @@ import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { logEvent } from '../game/supabase'
+import { fireWorldNotification, resetWorldNotifyDedup } from '../game/worldNotify'
+import { getDisplayName } from '../game/playerName'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
@@ -265,6 +267,9 @@ export class GameScene extends Phaser.Scene {
       this.initGameFromSave(saved)
       return
     }
+
+    // 新規ゲーム：マイルストーン通知の重複防止をリセット（ロード再開時は呼ばない）
+    resetWorldNotifyDedup()
 
     const map = generateDungeon()
     const playerPos = getPlayerStartPosition(map)
@@ -746,6 +751,14 @@ export class GameScene extends Phaser.Scene {
   private killEnemy(enemy: import('../types').Enemy) {
     const { player } = this.state
     this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
+    if (enemy.isBoss) {
+      const m = enemy.name.match(/^【(MINI|MVP|エリア)】(.+)$/)
+      if (m) {
+        const [, kind, bossName] = m
+        const title = kind === 'MVP' ? '【MVP討伐】' : kind === 'エリア' ? '【エリアボス討伐】' : '【討伐速報】'
+        fireWorldNotification('boss', title, `${getDisplayName()}さんが${bossName}を討伐しました！`)
+      }
+    }
     const expGain = enemy.isBoss ? (50 + enemy.maxHp) : (5 + enemy.maxHp)
     player.exp += expGain
     this.addMessage(`${enemy.name}を倒した！経験値+${expGain}`)
@@ -818,6 +831,9 @@ export class GameScene extends Phaser.Scene {
       playLevelUp()
       this.playLevelUpEffect()
       this.showLevelUpNotif(prevLevel, player.level)
+      if (player.level % 10 === 0) {
+        fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがLv${player.level}に到達しました！`, `lv:${player.level}`)
+      }
       this.updateWindowGameState()
     }
   }
@@ -1198,6 +1214,9 @@ export class GameScene extends Phaser.Scene {
     this.state.player.floor++
     const floor = this.state.player.floor
     logEvent('floor_reached', { floor, level: this.state.player.level })
+    if (floor % 5 === 0) {
+      fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがB${floor}階に到達しました！`, `floor:${floor}`)
+    }
     const map = generateDungeon()
     const playerPos = getPlayerStartPosition(map)
     this.state.map = map
@@ -1240,7 +1259,10 @@ export class GameScene extends Phaser.Scene {
     this.showTelopIfNeeded()
     this.updateBGM()
     this.cameras.main.fadeIn(300, 0, 0, 0)   // フロア切替の入場フェード
-    if (floorType === 'chaos') this.showMonsterHouseEffect()
+    if (floorType === 'chaos') {
+      this.showMonsterHouseEffect()
+      fireWorldNotification('world', '【緊急速報】', `${getDisplayName()}さんがモンスターハウスに遭遇しました！`, `mhouse:${floor}`)
+    }
   }
 
   // ── イベントフロア（ベースキャンプ「あるかなひろば」）──
@@ -1363,6 +1385,9 @@ export class GameScene extends Phaser.Scene {
       level = (target.refineLevel ?? 0) + 1
       target.refineLevel = level
       this.addMessage(`${target.name}の精錬に成功した！ +${level}`)
+      if (level >= 5) {
+        fireWorldNotification('achievement', '【精錬成功】', `${getDisplayName()}さんが+${level}精錬に成功しました！`)
+      }
     } else {
       if (level > 0 && Math.random() < 0.5) {
         this.adjustItemBonuses(target, 1 / 1.1)
@@ -1389,6 +1414,7 @@ export class GameScene extends Phaser.Scene {
       player.str += 3; player.agi += 3; player.dex += 3
       player.int += 3; player.vit += 3; player.luk += 3
       this.addMessage('影装チャレンジに成功した！全ステータス+3！')
+      fireWorldNotification('achievement', '【影装強化】', `${getDisplayName()}さんが影装強化に成功しました！`)
     } else {
       this.addMessage('影装チャレンジに失敗し、ボーナスポイントを失った...')
     }
@@ -1566,6 +1592,7 @@ export class GameScene extends Phaser.Scene {
       // 当選/ハズレアナウンス（最長3000ms＋フェード500ms）が消えるのを待ってから演出開始
       this.time.delayedCall(3500, () => {
         this.addMessage('🌌 アルカナチャンス発動！')
+        fireWorldNotification('achievement', '【女神の祝福】', `${getDisplayName()}さんがアルカナチャンスに当選しました！`)
         window.showSlotAnnouncement?.('kakuhen_start')
         this.time.delayedCall(3000, () => {
           window.playBonusVideo?.(kakuhenVideo)

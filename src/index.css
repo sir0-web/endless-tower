@@ -1508,6 +1508,17 @@ html, body {
   border: 1px solid #54206e;
 }
 
+/* 表示名バッジ（ワールド通知の冒険者名） */
+.name-badge {
+  background: linear-gradient(to bottom, #4a3a12, #271e08);
+  color: #ffe699;
+  border: 1px solid #7a5e20;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stat-label {
   font-size: 14px;
   color: #6868a0;
@@ -2426,4 +2437,174 @@ html, body {
 
 .floor-num-anim {
   animation: floor-num-zoom 0.50s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ══════════════════════════════════════════════════════════
+   ワールド通知テロップ（画面上部中央・全クライアント共有）
+   ══════════════════════════════════════════════════════════ */
+.world-telop {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  /* transform / opacity / border-color は React 側のインラインで制御（フェード） */
+  z-index: 9000;
+  pointer-events: none;
+  min-width: 240px;
+  max-width: min(92vw, 560px);
+  box-sizing: border-box;
+  padding: 10px 22px 11px;
+  background: rgba(12, 12, 26, 0.94);
+  border: 1.5px solid #5aa6ff;
+  border-radius: 10px;
+  text-align: center;
+  transition: opacity 0.34s ease, transform 0.34s ease;
+}
+
+.world-telop-rule {
+  height: 2px;
+  width: 100%;
+  margin: 2px auto;
+  opacity: 0.55;
+  border-radius: 2px;
+}
+
+.world-telop-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin: 5px 0 3px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.world-telop-msg {
+  font-size: 14px;
+  color: #f0f0fa;
+  line-height: 1.55;
+  margin-bottom: 5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  word-break: break-word;
+}
+
+@media (max-width: 500px) {
+  .world-telop { padding: 8px 16px 9px; min-width: 200px; }
+  .world-telop-title { font-size: 13px; }
+  .world-telop-msg   { font-size: 12px; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   ワールドログ（🌐トグル + スクロールパネル）
+   ══════════════════════════════════════════════════════════ */
+.world-log-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 8000;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(160, 160, 255, 0.45);
+  background: rgba(16, 16, 34, 0.86);
+  color: #cfd3ff;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  transition: filter 0.15s, transform 0.15s;
+}
+.world-log-toggle:hover { filter: brightness(1.25); transform: scale(1.05); }
+.world-log-toggle:active { transform: scale(0.95); }
+
+.world-log-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 60px 16px 24px;
+  box-sizing: border-box;
+}
+
+.world-log-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(14, 14, 32, 0.98);
+  border: 1px solid rgba(160, 160, 255, 0.45);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+.world-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #cfd3ff;
+  border-bottom: 1px solid rgba(160, 160, 255, 0.25);
+}
+
+.world-log-close {
+  background: none;
+  border: none;
+  color: #aaaacc;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+.world-log-close:hover { color: #ffffff; }
+
+.world-log-list {
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+}
+
+.world-log-empty {
+  text-align: center;
+  color: #7a7a9a;
+  font-size: 13px;
+  padding: 28px 0;
+}
+
+.world-log-item {
+  border-left: 3px solid #5aa6ff;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0 6px 6px 0;
+  padding: 7px 11px;
+  margin-bottom: 7px;
+}
+
+.world-log-item-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.world-log-item-title {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.world-log-item-time {
+  font-size: 11px;
+  color: #7a7a9a;
+  flex-shrink: 0;
+}
+
+.world-log-item-msg {
+  font-size: 13px;
+  color: #e0e0f0;
+  line-height: 1.5;
+  margin-top: 3px;
+  word-break: break-word;
 }

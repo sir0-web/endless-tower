@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { submitRanking, fetchRanking } from '../game/supabase'
 import { ordinalSuffix } from '../game/utils'
 import { playBGM } from '../game/sound'
+import { getDisplayName, setDisplayName } from '../game/playerName'
 
 export class GameOverScene extends Phaser.Scene {
   private floor: number = 1
@@ -19,7 +20,7 @@ export class GameOverScene extends Phaser.Scene {
   init(data: { floor: number; level: number }) {
     this.floor = data.floor
     this.level = data.level
-    this.playerName = ''
+    this.playerName = getDisplayName()   // 保存中の表示名を初期値に
     this.submitted = false
   }
 
@@ -87,6 +88,7 @@ export class GameOverScene extends Phaser.Scene {
       fixedWidth: groupW - 40,
       align: 'center',
     }).setOrigin(0.5)
+    this.refreshNameInput()   // 初期値（表示名）を反映
 
     // キーボード入力（PC）
     this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
@@ -197,6 +199,7 @@ export class GameOverScene extends Phaser.Scene {
     this.submitted = true
     this.nameInput.setText('登録中...')
     this.nameInput.setColor('#aaaaaa')
+    setDisplayName(this.playerName)   // 次回以降の表示名としても保存
     const errMsg = await submitRanking(this.playerName, this.floor, this.level)
     if (errMsg) {
       this.submitted = false

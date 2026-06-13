@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
+import { getDisplayName } from '../game/playerName'
 
 interface StatusSnap {
   hp: number; maxHp: number
@@ -24,6 +25,7 @@ export function MobileStatusBar() {
   const [s, setS]       = useState<StatusSnap>(DEFAULT)
   const [active, setActive] = useState(false)
   const [mute, setMute] = useState(isMuted())
+  const [name, setName] = useState(getDisplayName)
   const [displayFloor, setDisplayFloor] = useState(1)
   const [numAnim, setNumAnim]           = useState(false)
   const prevFloorRef = useRef(-1)
@@ -56,11 +58,15 @@ export function MobileStatusBar() {
       if (animTimerRef.current) { clearTimeout(animTimerRef.current); animTimerRef.current = null }
     }
 
+    const onName = () => setName(getDisplayName())
+
     window.addEventListener('gamestate-update', update)
     window.addEventListener('game-scene-changed', hide)
+    window.addEventListener('displayname-changed', onName)
     return () => {
       window.removeEventListener('gamestate-update', update)
       window.removeEventListener('game-scene-changed', hide)
+      window.removeEventListener('displayname-changed', onName)
       if (animTimerRef.current) clearTimeout(animTimerRef.current)
     }
   }, [])
@@ -87,6 +93,7 @@ export function MobileStatusBar() {
           {' '}Floor
         </span>
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
+        <span className="badge name-badge mob-badge">{name}</span>
         <button className="mob-mute-btn" data-priority-tap onClick={toggleMute}>{mute ? '🔇' : '🔊'}</button>
         <button className="mob-save-btn" data-priority-tap onClick={handleSave}>セーブ</button>
       </div>

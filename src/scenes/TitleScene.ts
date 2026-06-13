@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { playBGM, isMuted, toggleMute } from '../game/sound'
 import { fetchRanking } from '../game/supabase'
 import { hasSave, clearSave } from '../game/save'
+import { getDisplayName, setDisplayName } from '../game/playerName'
 
 const PIXEL_FONT  = '"Press Start 2P", monospace'
 const BTN_WIDTH   = 300   // 全ボタン共通の固定幅
@@ -50,6 +51,9 @@ export class TitleScene extends Phaser.Scene {
     const btnFont = W < 500 ? 15 : 22
     const gap     = H * 0.09
     const top     = H * 0.60
+
+    // ── 表示名（GAME START の上）。タップで変更可 ──
+    this.makeNameBadge(cx, top - gap * 0.62, W)
 
     // ①〜④ すべて同じ固定幅 BTN_WIDTH で生成
     const startBtn = this.makeBtn(cx, top,          'GAME START',  btnFont, () => {
@@ -102,6 +106,30 @@ export class TitleScene extends Phaser.Scene {
     } else {
       this.fadeToScene('GameScene')
     }
+  }
+
+  // ── 表示名バッジ（タップで prompt 変更。ワールド通知に使う名前）──
+  private makeNameBadge(cx: number, y: number, W: number) {
+    const fontSize = W < 500 ? 13 : 16
+    const badge = this.add.text(cx, y, '', {
+      fontFamily: PIXEL_FONT,
+      fontSize:   `${fontSize}px`,
+      color:      '#ffe699',
+      backgroundColor: '#00000099',
+      padding:    { x: 16, y: 9 },
+      align:      'center',
+    }).setOrigin(0.5).setDepth(10)
+
+    const render = () => badge.setText(`名前: ${getDisplayName()}  ✎`)
+    render()
+
+    badge.setInteractive({ useHandCursor: true })
+    badge.on('pointerover', () => badge.setColor('#ffffff'))
+    badge.on('pointerout',  () => badge.setColor('#ffe699'))
+    badge.on('pointerdown', () => {
+      const input = prompt('冒険者の名前を入力（12文字以内・任意）', getDisplayName())
+      if (input !== null) { setDisplayName(input); render() }
+    })
   }
 
   // ── 全ボタン共通生成（fixedWidth で横幅統一・中央揃え）──
