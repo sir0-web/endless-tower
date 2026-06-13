@@ -657,26 +657,36 @@ html, body {
 .stats-equip-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 4px 10px;
-  background: none;
+  padding: 7px 12px;
+  background: linear-gradient(to right, #000000 0%, #c8c8e8 100%);
   border: none;
-  border-bottom: 1px solid transparent;
-  color: #44447a;
-  font-size: 10px;
+  border-bottom: 1px solid #1e1e38;
+  color: #ffffff;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 1.4px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s;
+  transition: opacity 0.15s;
   flex-shrink: 0;
 }
-.stats-equip-toggle:hover { background: rgba(255,255,255,0.03); }
-.stats-equip-toggle.se-open { border-bottom-color: #1e1e38; }
-.stats-equip-toggle .se-title { flex: 1; }
-.stats-equip-toggle .se-arrow { font-size: 9px; opacity: 0.7; }
+.stats-equip-toggle:hover { opacity: 0.88; }
+.stats-equip-toggle .se-title { flex: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+.stats-equip-toggle .se-arrow {
+  font-size: 13px;
+  font-weight: 900;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  padding: 2px 9px;
+  line-height: 1.4;
+  flex-shrink: 0;
+  text-shadow: none;
+}
 
 /* 折りたたみ時の通知バッジ */
 .se-badge {
@@ -700,10 +710,10 @@ html, body {
 /* 折りたたみ時は inner を非表示 */
 .stats-equip-row.se-collapsed .stats-equip-inner { display: none; }
 
-/* スマホ：トグル不要（縦スクロールで見られる）・inner は常に表示 */
+/* スマホ：トグルのフォントを少し大きくする（タップしやすいよう）*/
 @media (max-width: 767px) {
-  .stats-equip-toggle { display: none; }
-  .stats-equip-row.se-collapsed .stats-equip-inner { display: flex; }
+  .stats-equip-toggle { font-size: 13px; padding: 9px 12px; }
+  .stats-equip-toggle .se-arrow { font-size: 15px; padding: 3px 12px; }
 }
 
 /* 左 50%：ステータス */
