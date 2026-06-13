@@ -149,7 +149,7 @@ export class TitleScene extends Phaser.Scene {
 
     const btn = this.add.container(x, y, [frame, txt]).setSize(w, h).setDepth(10)
     btn.setInteractive({
-      hitArea: new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h),
+      hitArea: new Phaser.Geom.Rectangle(0, 0, w, h),
       hitAreaCallback: Phaser.Geom.Rectangle.Contains,
       useHandCursor: true,
     })
