@@ -467,6 +467,25 @@ html, body {
   align-items: center;
 }
 
+/* セーブボタン（PC・スマホ版のセーブボタンと同じ緑系デザイン。右端に配置） */
+.pc-save-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: rgba(0, 60, 30, 0.55);
+  border: 1px solid rgba(120, 255, 180, 0.4);
+  border-radius: 6px;
+  color: #aaffcc;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 4px 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pc-save-btn:hover { background: rgba(0, 90, 45, 0.7); color: #ffffff; }
+.pc-save-btn:active { transform: translateY(1px); }
+
 /* ── フロア・レベルバッジを圧縮 ── */
 .status-section .floor-badge,
 .status-section .level-badge {

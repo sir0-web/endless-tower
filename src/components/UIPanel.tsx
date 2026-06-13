@@ -138,6 +138,7 @@ export function UIPanel() {
           <span className="badge level-badge">Lv {gs.level}</span>
           <span className="badge name-badge">{name}</span>
           {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
+          <button className="pc-save-btn" onClick={() => window.saveGame?.()}>セーブ</button>
         </div>
         <div className="bar-il-row">
           <span className="bar-il-lbl">HP</span>
