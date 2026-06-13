@@ -9,12 +9,13 @@ import { next } from '@vercel/edge'
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
-// フォールバック（Supabase 接続失敗時）：過去の日付 = 常時メンテ扱いにしない。
-// "開く" 方向に倒すため空配列ではなく、遠い未来を入れておく。
-// 実際の公開管理は admin パネルの Supabase 設定で行う。
-const FALLBACK_OPEN: { from: number; to: number }[] = [
-  // Supabase 障害時は "開いたまま" にするため from=0, to=遠い未来
-  { from: 0, to: Date.UTC(2099, 0, 1) },
+// フォールバック（Supabase 接続失敗時）：Supabase が応答しない場合のみ使う。
+// 常時メンテにならないよう直近の公開ウィンドウを入れておく。
+// Supabase が正常に返した場合（空配列含む）はこの値は使われない。
+const jst = (y: number, mo: number, d: number, h: number, mi: number) =>
+  Date.UTC(y, mo - 1, d, h, mi, 0) - JST_OFFSET_MS
+const FALLBACK_WINDOWS: { from: number; to: number }[] = [
+  { from: jst(2026, 6, 14, 18, 0), to: jst(2026, 6, 14, 23, 0) },
 ]
 
 export const config = {
@@ -24,10 +25,11 @@ export const config = {
 
 type Window = { from: number; to: number }
 
-async function fetchWindows(): Promise<Window[]> {
+// null = Supabase 障害（フォールバック使用）、[] = メンテ中（開放ウィンドウなし）
+async function fetchWindows(): Promise<Window[] | null> {
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_ANON_KEY
-  if (!url || !key) return FALLBACK_OPEN
+  if (!url || !key) return null  // env 未設定 → フォールバック
 
   try {
     const res = await fetch(
@@ -37,18 +39,19 @@ async function fetchWindows(): Promise<Window[]> {
         signal: AbortSignal.timeout(2500),
       }
     )
-    if (!res.ok) return FALLBACK_OPEN
+    if (!res.ok) return null  // Supabase エラー → フォールバック
     const data = (await res.json()) as Array<{ value: Window[] }>
-    const wins = data[0]?.value
-    return Array.isArray(wins) && wins.length > 0 ? wins : FALLBACK_OPEN
+    if (!data[0]) return null  // テーブル未作成 → フォールバック
+    return Array.isArray(data[0].value) ? data[0].value : []
   } catch {
-    return FALLBACK_OPEN
+    return null  // タイムアウト等 → フォールバック
   }
 }
 
 export default async function middleware(request: Request): Promise<Response> {
   const now = Date.now()
-  const windows = await fetchWindows()
+  // null なら Supabase 障害 → フォールバック定数を使用
+  const windows = (await fetchWindows()) ?? FALLBACK_WINDOWS
 
   const isOpen     = windows.some(w => now >= w.from && now < w.to)
   const upcoming   = windows.find(w => now < w.to) ?? null
