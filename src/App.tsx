@@ -21,6 +21,7 @@ const BASE_W = 1280
 const BASE_H = 880   // 全体の縦サイズ：少し伸ばし
 const GAME_H = BASE_H   // ゲーム画面も全体に合わせて伸ばす
 const GAME_W = Math.floor(BASE_W * 0.65)  // 832
+const PC_GAME_ZOOM = 0.8   // PC: マップcanvasの表示倍率（下部のEventMsgウィンドウと被らないよう縮小）
 
 function calcScale() {
   return Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H)
@@ -39,9 +40,18 @@ function App() {
   // ウィンドウリサイズでスケール再計算 + Phaser canvas 更新
   useEffect(() => {
     const onResize = () => {
-      setIsMobile(isMobileViewport())
+      const mobile = isMobileViewport()
+      setIsMobile(mobile)
       setAppScale(calcScale())
-      gameRef.current?.scale.resize(GAME_W, GAME_H)
+      const sm = gameRef.current?.scale
+      if (sm) {
+        // PC=NONE（等倍／外側transformで拡縮） / スマホ=FIT（実DOMに合わせる）
+        sm.scaleMode  = mobile ? Phaser.Scale.FIT : Phaser.Scale.NONE
+        sm.autoCenter = mobile ? Phaser.Scale.CENTER_BOTH : Phaser.Scale.CENTER_HORIZONTALLY
+        sm.setZoom(mobile ? 1 : PC_GAME_ZOOM)
+        sm.setGameSize(GAME_W, GAME_H)
+        sm.refresh()
+      }
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -49,14 +59,20 @@ function App() {
 
   // Phaser 初期化
   useEffect(() => {
+    const mobile = isMobileViewport()
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
       parent: canvasAreaRef.current!,
       backgroundColor: '#000000',
       scene: [TitleScene, GameScene, GameOverScene, RankingScene],
       scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
+        // PC: 外側ラッパーの transform:scale が全体を拡縮するため、Phaserは等倍(NONE)の
+        //     固定サイズで描画する。FITだと transform後に縮んだ親サイズを測って二重スケールし、
+        //     大画面でマップだけ肥大化してEventMsgBarと被り、ブラウザズームで反転する不具合になる。
+        // スマホ: transformを掛けないので、実DOMサイズへ合わせるFITが正しい。
+        mode: mobile ? Phaser.Scale.FIT : Phaser.Scale.NONE,
+        autoCenter: mobile ? Phaser.Scale.CENTER_BOTH : Phaser.Scale.CENTER_HORIZONTALLY,
+        zoom: mobile ? 1 : PC_GAME_ZOOM,   // PCは縮小して上寄せ（下部にEMBの余白を確保）
         width: GAME_W,
         height: GAME_H,
       },
