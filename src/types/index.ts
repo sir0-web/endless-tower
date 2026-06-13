@@ -44,6 +44,8 @@ export interface Item {
   spellType?: SpellType
   // 精錬値（装備品のみ。精錬チャレンジで増減する）
   refineLevel?: number
+  // 女神のコイン：使うとスロットを1回回す消費アイテム
+  coin?: boolean
 }
 
 export type FacilityKind = 'refine' | 'shadow' | 'spellbook'
@@ -157,6 +159,7 @@ declare global {
     onEnemyKilled?: () => void
     applySlotEffect?: (result: string) => void
     playBonusVideo?: (result: string) => void
+    spinSlotOnce?: () => void
     showSlotAnnouncement?: (result: string, sub?: string) => void
     onSlotEffectApplied?: () => void
     gameMove?: (key: string) => void

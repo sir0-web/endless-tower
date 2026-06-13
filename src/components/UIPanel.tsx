@@ -256,7 +256,7 @@ export function UIPanel() {
                   <div key={name}>
                     <div className={`icr icr-heal ${selId === items[0].id ? 'icr-sel' : ''}`}
                       onClick={() => selectItem(items[0].id)}>
-                      <span>💊</span>
+                      <span>{items[0].coin ? '🪙' : '💊'}</span>
                       <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
                     </div>
                     {selId === items[0].id && (

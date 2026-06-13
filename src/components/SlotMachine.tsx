@@ -184,6 +184,12 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     return () => { window.onEnemyKilled = undefined }
   }, [gainCoin])
 
+  // 女神のコイン使用 → スロットを1回回す（実行中はストックに積まれる＝通常スピンと同じ挙動）
+  useEffect(() => {
+    window.spinSlotOnce = triggerSpin
+    return () => { window.spinSlotOnce = undefined }
+  }, [triggerSpin])
+
   useEffect(() => {
     const reset = () => {
       clearAllTimers()

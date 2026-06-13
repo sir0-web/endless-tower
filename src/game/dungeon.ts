@@ -91,6 +91,51 @@ export function generateDungeon(): TileType[][] {
   return map
 }
 
+/**
+ * 敵同士・プレイヤーとの位置重複を解消する（フロア開始時に敵が重なって始まらないように）。
+ * 重複・非歩行タイルに居る敵だけを、空いている床タイルへ移動する。
+ */
+export function dedupeEnemyPositions(
+  enemies: { position: Position }[],
+  map: TileType[][],
+  playerPos: Position,
+): void {
+  const isWalk = (x: number, y: number): boolean => {
+    const t = map[y]?.[x]
+    return t === 'floor' || t === 'trap' || t === 'mud' || t === 'spring' || t === 'pitfall'
+  }
+  const occupied = new Set<string>([`${playerPos.x},${playerPos.y}`])
+
+  // 空き床タイル（プレイヤー位置を除く）をシャッフルして用意
+  const freeTiles: Position[] = []
+  for (let y = 0; y < map.length; y++) {
+    for (let x = 0; x < map[y].length; x++) {
+      if (map[y][x] === 'floor' && !(x === playerPos.x && y === playerPos.y)) freeTiles.push({ x, y })
+    }
+  }
+  for (let i = freeTiles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [freeTiles[i], freeTiles[j]] = [freeTiles[j], freeTiles[i]]
+  }
+
+  let fi = 0
+  for (const e of enemies) {
+    const key = `${e.position.x},${e.position.y}`
+    if (!occupied.has(key) && isWalk(e.position.x, e.position.y)) {
+      occupied.add(key)
+      continue
+    }
+    // 重複 or 不正位置 → 空きタイルへ退避
+    while (fi < freeTiles.length && occupied.has(`${freeTiles[fi].x},${freeTiles[fi].y}`)) fi++
+    if (fi < freeTiles.length) {
+      const t = freeTiles[fi++]
+      e.position = { x: t.x, y: t.y }
+      occupied.add(`${t.x},${t.y}`)
+    }
+    // 空きが尽きた極端なケースはそのまま（実質発生しない）
+  }
+}
+
 export function getPlayerStartPosition(map: TileType[][]): Position {
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {

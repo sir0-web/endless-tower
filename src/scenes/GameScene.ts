@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
-import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, generateAreaBossFloors, getFloorTelopMessage, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
+import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
@@ -332,6 +332,7 @@ export class GameScene extends Phaser.Scene {
       floorType,
       driedSprings: [],
     }
+    dedupeEnemyPositions(this.state.enemies, map, this.state.player.position)   // 敵が重なって始まらないように
     this.buildFloorVariants(map)
     this.createTileSprites(map)
   }
@@ -931,8 +932,14 @@ export class GameScene extends Phaser.Scene {
       const chebDist = Math.max(Math.abs(edx), Math.abs(edy))
       const manhDist = Math.abs(edx) + Math.abs(edy)
 
-      if (chebDist === 1) {
-        // 隣接（斜め含む）→攻撃
+      // 斜め攻撃のコーナーカット防止：壁の角越しには斜め攻撃できない（プレイヤーと同条件）
+      const diagAttackBlocked =
+        edx !== 0 && edy !== 0 &&
+        (this.state.map[enemy.position.y]?.[player.position.x] === 'wall' ||
+         this.state.map[player.position.y]?.[enemy.position.x] === 'wall')
+
+      if (chebDist === 1 && !diagAttackBlocked) {
+        // 隣接（斜め含む。ただし壁角越しの斜めは不可）→攻撃
         const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
         const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
         const effectiveDef = player.vit + Math.floor(player.level / 2)
@@ -1075,6 +1082,16 @@ export class GameScene extends Phaser.Scene {
     const { player } = this.state
     const item = this.state.heals.find(h => h.id === itemId)
     if (!item) return
+
+    // 女神のコイン：回復せずスロットを1回回す
+    if (item.coin) {
+      this.state.heals = this.state.heals.filter(h => h.id !== itemId)
+      this.addMessage('女神のコインを使った！スロットが回る！')
+      window.spinSlotOnce?.()
+      this.renderMap()
+      this.updateWindowGameState()
+      return
+    }
 
     playPotion()
     if (item.staminaPercent) {
@@ -1245,6 +1262,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.state.enemies = [...normalEnemies, ...bosses]
+    dedupeEnemyPositions(this.state.enemies, map, playerPos)   // 敵が重なって始まらないように
     this.state.items = floorType === 'lucky'
       ? spawnItems(map, { countMult: 2, equipRate: 0.30, floor })
       : floorType === 'chaos'
