@@ -117,7 +117,7 @@ function maintenanceHtml(now: number): string {
     <div class="logo">
       <video src="/assets/maintenance/maintenance.mp4" autoplay muted loop playsinline></video>
     </div>
-    <h1>ただいま準備中です</h1>
+    <h1>より良いゲームをお届けするために<br>スタッフが鋭意準備中です</h1>
     <p class="lead">Endless Tower は下記の時間のみ公開しています。<br>時間になると自動で開きます。</p>
     <div class="window">
       <span class="label">OPEN HOURS</span>
