@@ -2,67 +2,83 @@ import { next } from '@vercel/edge'
 
 // ──────────────────────────────────────────────────────────────
 // 時間限定公開ゲート（Vercel Edge Middleware・本番サイトのみ動作）
-//   ・指定時間内 … 通常表示（next() で素通し）
-//   ・指定時間外 … メンテナンス画面（503）を返す（終了後は自動で閉じる）
-//   ・JST(UTC+9) 基準で判定。日時はここで定数化。
-//   ※ ローカルの vite dev では middleware は動かないため常に通常表示。
-//   ※ 既存ゲームロジックには一切変更なし（このファイルの追加のみ）。
+//   ・Supabase の system_config テーブルから公開ウィンドウを動的に取得
+//   ・Supabase が応答しない場合はフォールバック定数で判定（サイトは「開く」方向に倒す）
+//   ・/admin パスはメンテ中でも常に素通し
 // ──────────────────────────────────────────────────────────────
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
-// JST の壁時計を実UTC時刻(ms)に変換するヘルパ
-// Date.UTC(年, 月-1, 日, 時, 分) で JST の壁時計を書き、-9h して実UTC時刻にする
-const jst = (y: number, mo: number, d: number, h: number, mi: number) =>
-  Date.UTC(y, mo - 1, d, h, mi, 0) - JST_OFFSET_MS
-
-// 公開ウィンドウ（JST基準・[from, to) の半開区間）。複数枠OK・昇順で並べる。
-// この配列内のどこかに該当すれば公開、それ以外はメンテ画面。
-const OPEN_WINDOWS: { from: number; to: number }[] = [
-  { from: jst(2026, 6, 13, 15, 0), to: jst(2026, 6, 13, 23, 0) }, // 2026-06-13 15:00〜23:00 JST
-  { from: jst(2026, 6, 14, 18, 0), to: jst(2026, 6, 14, 23, 0) }, // 2026-06-14 18:00〜23:00 JST（次回）
+// フォールバック（Supabase 接続失敗時）：過去の日付 = 常時メンテ扱いにしない。
+// "開く" 方向に倒すため空配列ではなく、遠い未来を入れておく。
+// 実際の公開管理は admin パネルの Supabase 設定で行う。
+const FALLBACK_OPEN: { from: number; to: number }[] = [
+  // Supabase 障害時は "開いたまま" にするため from=0, to=遠い未来
+  { from: 0, to: Date.UTC(2099, 0, 1) },
 ]
 
-const isOpenAt = (now: number) => OPEN_WINDOWS.some(w => now >= w.from && now < w.to)
-// まだ終了していない最初のウィンドウ（＝現在公開中 or 次回公開）を返す
-const upcomingWindow = (now: number) => OPEN_WINDOWS.find(w => now < w.to) ?? null
-
 export const config = {
-  // 静的アセット(assets/*)とVercel内部パス(_vercel/*)は素通し
-  matcher: ['/((?!_vercel|assets/).*)'],
+  // 静的アセット・Vercel内部パス・管理画面は素通し
+  matcher: ['/((?!_vercel|assets/|admin).*)'],
 }
 
-export default function middleware(request: Request): Response {
-  const now = Date.now()
-  if (isOpenAt(now)) return next()
+type Window = { from: number; to: number }
 
-  return new Response(maintenanceHtml(now), {
+async function fetchWindows(): Promise<Window[]> {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_ANON_KEY
+  if (!url || !key) return FALLBACK_OPEN
+
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/system_config?key=eq.maintenance_windows&select=value`,
+      {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(2500),
+      }
+    )
+    if (!res.ok) return FALLBACK_OPEN
+    const data = (await res.json()) as Array<{ value: Window[] }>
+    const wins = data[0]?.value
+    return Array.isArray(wins) && wins.length > 0 ? wins : FALLBACK_OPEN
+  } catch {
+    return FALLBACK_OPEN
+  }
+}
+
+export default async function middleware(request: Request): Promise<Response> {
+  const now = Date.now()
+  const windows = await fetchWindows()
+
+  const isOpen     = windows.some(w => now >= w.from && now < w.to)
+  const upcoming   = windows.find(w => now < w.to) ?? null
+
+  if (isOpen) return next()
+
+  return new Response(maintenanceHtml(now, windows, upcoming), {
     status: 503,
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      // 公開開始時刻をまたいでも古いメンテ画面がキャッシュされないようにする
       'cache-control': 'no-store, max-age=0',
       'retry-after': '3600',
     },
   })
 }
 
-// 公開ウィンドウを JST の「YYYY/MM/DD HH:MM 〜 HH:MM」表記に整形する
-function formatWindowJst(w: { from: number; to: number }): string {
+function formatWindowJst(w: Window): string {
   const p = (n: number) => String(n).padStart(2, '0')
-  const f = new Date(w.from + JST_OFFSET_MS) // +9h して UTC 各成分＝JST 壁時計にする
-  const t = new Date(w.to + JST_OFFSET_MS)
+  const f = new Date(w.from + JST_OFFSET_MS)
+  const t = new Date(w.to   + JST_OFFSET_MS)
   const date = `${f.getUTCFullYear()}/${p(f.getUTCMonth() + 1)}/${p(f.getUTCDate())}`
   return `${date} ${p(f.getUTCHours())}:${p(f.getUTCMinutes())} 〜 ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`
 }
 
-function maintenanceHtml(now: number): string {
-  // 次回（まだ終了していない最初の）公開ウィンドウ。無ければ最後の枠を表示に使う。
-  const nextWin = upcomingWindow(now) ?? OPEN_WINDOWS[OPEN_WINDOWS.length - 1]
-  const openLabel = formatWindowJst(nextWin)
-  // カウントダウン用。次回が存在すればその from/to、全終了済みなら 0 を渡し「終了」表示にする
-  const FROM = upcomingWindow(now) ? nextWin.from : 0
-  const TO   = upcomingWindow(now) ? nextWin.to   : 0
+function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | null): string {
+  const realUpcoming = upcoming && upcoming.from > now ? upcoming : null
+  const openLabel    = realUpcoming ? formatWindowJst(realUpcoming) : '未定'
+  const FROM = realUpcoming ? realUpcoming.from : 0
+  const TO   = realUpcoming ? realUpcoming.to   : 0
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -132,14 +148,14 @@ function maintenanceHtml(now: number): string {
     function fmt(ms){
       var s = Math.floor(ms / 1000);
       var h = Math.floor(s / 3600); s -= h * 3600;
-      var m = Math.floor(s / 60); s -= m * 60;
+      var m = Math.floor(s / 60);   s -= m * 60;
       return h + '時間' + pad(m) + '分' + pad(s) + '秒';
     }
     function tick(){
       var now = Date.now();
       var el = document.getElementById('status');
-      if (now >= FROM && now < TO) { location.reload(); return; }
-      if (now < FROM) { el.textContent = '公開まで あと ' + fmt(FROM - now); }
+      if (FROM && now >= FROM && now < TO) { location.reload(); return; }
+      if (FROM && now < FROM) { el.textContent = '公開まで あと ' + fmt(FROM - now); }
       else { el.textContent = '本日の公開は終了しました。'; }
     }
     tick();
