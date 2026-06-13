@@ -3,6 +3,7 @@ import type { Equipment, Item, MinimapData, AllocStat } from '../types'
 import { SlotMachine } from './SlotMachine'
 import { BonusVideo } from './BonusVideo'
 import { getDisplayName } from '../game/playerName'
+import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
 
 interface GameStateSnapshot {
   hp: number; maxHp: number
@@ -80,7 +81,10 @@ export function UIPanel() {
   const [openTab, setOpenTab] = useState<AccordionTab | null>(null)
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
   const [name, setName] = useState(getDisplayName)
+  const [mute, setMute] = useState(isMuted())
   const logRef = useRef<HTMLDivElement>(null)
+
+  const toggleMute = () => { soundToggleMute(); setMute(m => !m) }
 
   useEffect(() => {
     const update = () => { if (window.gameState) setGs({ ...window.gameState }) }
@@ -138,6 +142,7 @@ export function UIPanel() {
           <span className="badge level-badge">Lv {gs.level}</span>
           <span className="badge name-badge">{name}</span>
           {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
+          <button className="pc-mute-btn" onClick={toggleMute} title={mute ? 'ミュート中' : 'サウンドON'}>{mute ? '🔇' : '🔊'}</button>
           <button className="pc-save-btn" onClick={() => window.saveGame?.()}>セーブ</button>
         </div>
         <div className="bar-il-row">
