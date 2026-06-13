@@ -71,6 +71,8 @@ export class GameScene extends Phaser.Scene {
   private enemyHpBars:  Map<string, { bg: Phaser.GameObjects.Rectangle; fg: Phaser.GameObjects.Rectangle }> = new Map()
   // アイテム描画: Text（回復/魔法）または Image（装備品＝宝箱スプライト）
   private itemGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
+  // 攻撃可能誘導マーク（今殴れる敵の頭上に⚔️）
+  private attackMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // イベントフロアNPC（施設の話しかけ役）描画
   private facilityGraphics: Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Text> = new Map()
   // 施設NPC画像の可視領域割合キャッシュ（透過除き可視部分 / 画像全体）
@@ -125,6 +127,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyGraphics      = new Map()
     this.enemyHpBars        = new Map()
     this.itemGraphics       = new Map()
+    this.attackMarkers      = new Map()
     this.facilityGraphics   = new Map()
     this.tileSprites        = []
     this.floorVariantMap    = []
@@ -1701,6 +1704,24 @@ export class GameScene extends Phaser.Scene {
   // ── 戦闘エフェクト（game feel） ──
 
   /** タイル座標 → ワールド座標（タイル中心px。カメラがスクロールを担当する） */
+  /**
+   * プレイヤーが現在位置から (ex,ey) の敵を攻撃できるか。
+   * チェビシェフ距離1、かつ斜めの場合は壁角越し不可（移動時のコーナーカット防止 L466-468 と同条件）。
+   * 攻撃可能マークの表示判定に使う（実攻撃ルールと一致させ、嘘UIにしない）。
+   */
+  private canPlayerReachAttack(ex: number, ey: number): boolean {
+    const px = this.state.player.position.x
+    const py = this.state.player.position.y
+    const dx = ex - px
+    const dy = ey - py
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== 1) return false
+    if (dx !== 0 && dy !== 0) {
+      if (this.state.map[py]?.[ex] === 'wall') return false
+      if (this.state.map[ey]?.[px] === 'wall') return false
+    }
+    return true
+  }
+
   private tileToWorld(tx: number, ty: number): { x: number; y: number } {
     return {
       x: tx * this.rts + this.rts / 2,
@@ -2165,6 +2186,8 @@ export class GameScene extends Phaser.Scene {
         this.enemyGraphics.delete(id)
         const bar = this.enemyHpBars.get(id)
         if (bar) { bar.bg.destroy(); bar.fg.destroy(); this.enemyHpBars.delete(id) }
+        const mk = this.attackMarkers.get(id)
+        if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(id) }
       }
     }
     for (const enemy of enemies) {
@@ -2246,6 +2269,22 @@ export class GameScene extends Phaser.Scene {
       bar.bg.setVisible(showBar)
       bar.fg.setVisible(showBar)
       this.positionEnemyBar(g, bar, barW, barH, fgWidth)
+
+      // 攻撃可能誘導マーク：今このプレイヤー位置から殴れる敵だけ頭上に⚔️
+      const canAttack = vis && this.canPlayerReachAttack(enemy.position.x, enemy.position.y)
+      let mark = this.attackMarkers.get(enemy.id)
+      if (canAttack) {
+        if (!mark) {
+          mark = this.add.text(ex, ey, '⚔️', { fontSize: `${Math.round(rts * 0.5)}px` })
+            .setOrigin(0.5).setDepth(7)
+          this.tweens.add({ targets: mark, scale: 1.2, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+          this.attackMarkers.set(enemy.id, mark)
+        }
+        mark.setPosition(ex, ey - rts * 0.62)
+        mark.setVisible(true)
+      } else if (mark) {
+        mark.setVisible(false)
+      }
     }
 
     // ── プレイヤー描画 ──
