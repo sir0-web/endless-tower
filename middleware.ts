@@ -11,10 +11,21 @@ import { next } from '@vercel/edge'
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
-// 公開期間（JST基準・[FROM, TO) の半開区間）
+// JST の壁時計を実UTC時刻(ms)に変換するヘルパ
 // Date.UTC(年, 月-1, 日, 時, 分) で JST の壁時計を書き、-9h して実UTC時刻にする
-const OPEN_FROM = Date.UTC(2026, 5, 13, 15, 0, 0) - JST_OFFSET_MS // 2026-06-13 15:00 JST
-const OPEN_TO   = Date.UTC(2026, 5, 13, 23, 0, 0) - JST_OFFSET_MS // 2026-06-13 23:00 JST
+const jst = (y: number, mo: number, d: number, h: number, mi: number) =>
+  Date.UTC(y, mo - 1, d, h, mi, 0) - JST_OFFSET_MS
+
+// 公開ウィンドウ（JST基準・[from, to) の半開区間）。複数枠OK・昇順で並べる。
+// この配列内のどこかに該当すれば公開、それ以外はメンテ画面。
+const OPEN_WINDOWS: { from: number; to: number }[] = [
+  { from: jst(2026, 6, 13, 15, 0), to: jst(2026, 6, 13, 23, 0) }, // 2026-06-13 15:00〜23:00 JST
+  { from: jst(2026, 6, 14, 18, 0), to: jst(2026, 6, 14, 23, 0) }, // 2026-06-14 18:00〜23:00 JST（次回）
+]
+
+const isOpenAt = (now: number) => OPEN_WINDOWS.some(w => now >= w.from && now < w.to)
+// まだ終了していない最初のウィンドウ（＝現在公開中 or 次回公開）を返す
+const upcomingWindow = (now: number) => OPEN_WINDOWS.find(w => now < w.to) ?? null
 
 export const config = {
   // Vercel 内部パス(_vercel/*)は素通し。それ以外の全リクエストを判定対象にする
@@ -23,10 +34,9 @@ export const config = {
 
 export default function middleware(request: Request): Response {
   const now = Date.now()
-  const isOpen = now >= OPEN_FROM && now < OPEN_TO
-  if (isOpen) return next()
+  if (isOpenAt(now)) return next()
 
-  return new Response(maintenanceHtml(), {
+  return new Response(maintenanceHtml(now), {
     status: 503,
     headers: {
       'content-type': 'text/html; charset=utf-8',
@@ -37,7 +47,22 @@ export default function middleware(request: Request): Response {
   })
 }
 
-function maintenanceHtml(): string {
+// 公開ウィンドウを JST の「YYYY/MM/DD HH:MM 〜 HH:MM」表記に整形する
+function formatWindowJst(w: { from: number; to: number }): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  const f = new Date(w.from + JST_OFFSET_MS) // +9h して UTC 各成分＝JST 壁時計にする
+  const t = new Date(w.to + JST_OFFSET_MS)
+  const date = `${f.getUTCFullYear()}/${p(f.getUTCMonth() + 1)}/${p(f.getUTCDate())}`
+  return `${date} ${p(f.getUTCHours())}:${p(f.getUTCMinutes())} 〜 ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`
+}
+
+function maintenanceHtml(now: number): string {
+  // 次回（まだ終了していない最初の）公開ウィンドウ。無ければ最後の枠を表示に使う。
+  const nextWin = upcomingWindow(now) ?? OPEN_WINDOWS[OPEN_WINDOWS.length - 1]
+  const openLabel = formatWindowJst(nextWin)
+  // カウントダウン用。次回が存在すればその from/to、全終了済みなら 0 を渡し「終了」表示にする
+  const FROM = upcomingWindow(now) ? nextWin.from : 0
+  const TO   = upcomingWindow(now) ? nextWin.to   : 0
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -93,13 +118,13 @@ function maintenanceHtml(): string {
     <p class="lead">Endless Tower は下記の時間のみ公開しています。<br>時間になると自動で開きます。</p>
     <div class="window">
       <span class="label">OPEN HOURS</span>
-      <time>2026/06/13 15:00 〜 23:00 <small>(JST)</small></time>
+      <time>${openLabel} <small>(JST)</small></time>
     </div>
     <p id="status" class="status">読み込み中…</p>
     <p class="note">このページは開いたままお待ちください。<br>自動で更新されます。</p>
   </main>
   <script>
-    var FROM = ${OPEN_FROM}, TO = ${OPEN_TO};
+    var FROM = ${FROM}, TO = ${TO};
     function pad(n){ return (n < 10 ? '0' : '') + n; }
     function fmt(ms){
       var s = Math.floor(ms / 1000);
