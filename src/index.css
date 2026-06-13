@@ -62,7 +62,7 @@ html, body {
 .mob-status-bar {
   display: none; /* PC: UIパネル側にすべての情報があるため非表示 */
   width: 100%;
-  padding: 7px 10px 6px;
+  padding: 6px 9px 5px;
   background: rgba(5, 5, 20, 0.92);
   border-bottom: 1px solid #1e1e38;
   pointer-events: none;
@@ -71,17 +71,18 @@ html, body {
 .mob-floor-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 7px;
+  gap: 5px;
+  /* 🌐トグルの下端より HP行を確実に下げ、HP数値との被りを防ぐ */
+  margin-bottom: 9px;
   flex-wrap: nowrap;
-  /* 右上の🌐ワールドログトグル(right:12 / 40px幅)と重ならないよう右側を確保 */
-  padding-right: 44px;
+  /* 右上の🌐ワールドログトグルと重ならないよう右側を確保 */
+  padding-right: 40px;
 }
 
 /* モバイル上部バッジは右メニューと同じスタイルを継承しつつサイズ調整 */
 .mob-badge {
-  font-size: 16px !important;
-  padding: 4px 9px !important;
+  font-size: 14px !important;
+  padding: 4px 8px !important;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -89,8 +90,8 @@ html, body {
 /* 階層・レベルは短いので少しコンパクトにして名前へ幅を譲る */
 .floor-badge.mob-badge,
 .level-badge.mob-badge {
-  font-size: 15px !important;
-  padding: 4px 8px !important;
+  font-size: 13px !important;
+  padding: 3px 7px !important;
 }
 
 /* 名前は内容に合わせて表示し、残り幅を超える長い名前のみ省略（…）。
@@ -105,23 +106,23 @@ html, body {
 .mob-bar-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-bottom: 5px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 .mob-bar-row:last-child { margin-bottom: 0; }
 
 .mob-bar-lbl {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.85);
-  width: 30px;
+  width: 27px;
   flex-shrink: 0;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
 .mob-bar-track {
   flex: 1;
-  height: 13px;
+  height: 11px;
   background: rgba(0, 0, 0, 0.45);
   border-radius: 6px;
   overflow: hidden;
@@ -135,10 +136,10 @@ html, body {
 }
 
 .mob-bar-num {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.85);
-  width: 62px;
+  width: 56px;
   text-align: right;
   flex-shrink: 0;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -152,8 +153,8 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 5px;
   color: #ffffff;
-  font-size: 19px;
-  padding: 4px 9px;
+  font-size: 17px;
+  padding: 3px 8px;
   cursor: pointer;
   line-height: 1;
   flex-shrink: 0;
@@ -166,9 +167,9 @@ html, body {
   border: 1px solid rgba(120, 255, 180, 0.4);
   border-radius: 5px;
   color: #aaffcc;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 5px 12px;
+  padding: 4px 10px;
   cursor: pointer;
   line-height: 1;
   flex-shrink: 0;
@@ -378,7 +379,7 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
-    height: calc(84vw + 116px);
+    height: calc(84vw + 104px);
     overflow: hidden;
   }
 
@@ -387,14 +388,15 @@ html, body {
     position: absolute;
     top: 0;
     left: 0;
-    height: 116px;        /* 予約高さと一致させ、下端に隙間（黒帯）が出ないようにする */
+    height: 104px;        /* 予約高さと一致させ、下端に隙間（黒帯）が出ないようにする */
     z-index: 50;
   }
 
   .game-canvas-area {
     flex: none;
-    margin-top: 116px;
-    height: calc(100% - 116px - 74px);
+    margin-top: 104px;
+    /* 下部のイベントメッセージバー(59px)を除いた残り全てをプレイ枠に充てる */
+    height: calc(100% - 104px - 59px);
   }
 
   .ui-pane {
@@ -2418,17 +2420,20 @@ html, body {
 }
 
 @media (max-width: 767px) {
-  /* スマホ: 固定高さに収めて画像を引き伸ばし */
+  /* スマホ: 固定高さに収めて画像を引き伸ばし（約8割サイズ・空いた分はプレイ枠へ） */
   .event-msg-bar {
-    height: 74px;
+    height: 59px;
   }
   .emb-bg {
     width: 100%;
     height: 100%;
     object-fit: fill;
   }
+  .emb-content {
+    padding: 0 16px;
+  }
   .emb-msg {
-    font-size: clamp(18px, 4.9vw, 24px);
+    font-size: clamp(14px, 3.9vw, 19px);
   }
   /* PC専用ステータス上部バーはスマホでは非表示 */
   .pc-status-top {
@@ -2539,6 +2544,18 @@ html, body {
 }
 .world-log-toggle:hover { filter: brightness(1.25); transform: scale(1.05); }
 .world-log-toggle:active { transform: scale(0.95); }
+
+/* スマホ: 上段ボタン(🔊/セーブ)の高さ帯に収め、縦位置を揃える（HP数値への被りを解消）。
+   ※ base 定義より後に置くことで、メディアクエリでも確実に上書きされるようにする。 */
+@media (max-width: 767px) {
+  .world-log-toggle {
+    top: 6px;
+    right: 9px;
+    width: 28px;
+    height: 28px;
+    font-size: 15px;
+  }
+}
 
 .world-log-backdrop {
   position: fixed;
