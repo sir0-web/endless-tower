@@ -165,6 +165,7 @@ declare global {
     gameMove?: (key: string) => void
     saveGame?: () => void
     warpFloor?: (floor: number) => void
+    giveEquip?: (name?: string) => void
     // ── グローバルUI ──
     showHowToPlay?: () => void
     showGameToast?: (message: string) => void
