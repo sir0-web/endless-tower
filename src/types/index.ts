@@ -166,6 +166,7 @@ declare global {
     saveGame?: () => void
     warpFloor?: (floor: number) => void
     // ── グローバルUI ──
+    showHowToPlay?: () => void
     showGameToast?: (message: string) => void
     addWorldLogMessage?: (text: string) => void
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void

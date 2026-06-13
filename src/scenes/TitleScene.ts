@@ -214,35 +214,9 @@ export class TitleScene extends Phaser.Scene {
   }
 
 
-  // ── 遊び方モーダル ──
-  private openHowTo(W: number, H: number) {
-    if (this.overlay) return
-    const cx = W / 2, cy = H / 2
-    const panel = this.add.rectangle(cx, cy, Math.min(500, W * 0.88), 400, 0x0a0a22, 0.96)
-      .setStrokeStyle(2, 0x4455aa)
-    const title = this.add.text(cx, cy - 170, 'HOW TO PLAY', {
-      fontFamily: PIXEL_FONT, fontSize: '14px', color: '#aaaaff',
-    }).setOrigin(0.5)
-    const body = this.add.text(cx, cy - 40, [
-      'ARROW / WASD : Move & Attack',
-      '[I] Key  : Inventory',
-      '[Esc]    : Pause',
-      '',
-      'BLUE tile  = Stairs (next floor)',
-      'PURPLE tile = Venom Dust (poison)',
-      '',
-      'Step on items to pick up',
-      'Defeat enemies to gain EXP',
-    ].join('\n'), {
-      fontFamily: PIXEL_FONT, fontSize: '9px', color: '#ccccdd', lineSpacing: 12, align: 'left',
-    }).setOrigin(0.5)
-    const closeBtn = this.add.text(cx, cy + 160, 'CLOSE', {
-      fontFamily: PIXEL_FONT, fontSize: '13px', color: '#ffffff',
-      backgroundColor: '#330000', padding: { x: 16, y: 10 },
-      fixedWidth: 140, align: 'center',
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
-    closeBtn.on('pointerdown', () => this.closeOverlay())
-    this.overlay = this.add.container(0, 0, [panel, title, body, closeBtn]).setDepth(50)
+  // ── 遊び方モーダル（React側の HowToPlay コンポーネントに委譲）──
+  private openHowTo(_W: number, _H: number) {
+    window.showHowToPlay?.()
   }
 
   // ── ランキング画面へ遷移（from: 'title'）──

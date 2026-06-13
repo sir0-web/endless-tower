@@ -15,6 +15,7 @@ import { GameToast } from './components/GameToast'
 import { EventMsgBar } from './components/EventMsgBar'
 import { WorldTelop } from './components/WorldTelop'
 import { WorldLog } from './components/WorldLog'
+import { HowToPlay } from './components/HowToPlay'
 import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
@@ -128,6 +129,7 @@ function App() {
     </div>
     <WorldTelop />
     <WorldLog />
+    <HowToPlay />
     <Analytics />
     </>
   )
