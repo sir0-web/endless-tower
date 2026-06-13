@@ -62,7 +62,7 @@ html, body {
 .mob-status-bar {
   display: none; /* PC: UIパネル側にすべての情報があるため非表示 */
   width: 100%;
-  padding: 6px 9px 5px;
+  padding: 6px 9px 4px;
   background: rgba(5, 5, 20, 0.92);
   border-bottom: 1px solid #1e1e38;
   pointer-events: none;
@@ -106,40 +106,40 @@ html, body {
 .mob-bar-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: 5px;
+  margin-bottom: 3px;
 }
 .mob-bar-row:last-child { margin-bottom: 0; }
 
 .mob-bar-lbl {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.85);
-  width: 27px;
+  width: 24px;
   flex-shrink: 0;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
 .mob-bar-track {
   flex: 1;
-  height: 11px;
+  height: 10px;
   background: rgba(0, 0, 0, 0.45);
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.18);
 }
 
 .mob-bar-fill {
   height: 100%;
-  border-radius: 6px;
+  border-radius: 5px;
   transition: width 0.2s ease;
 }
 
 .mob-bar-num {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.85);
-  width: 56px;
+  width: 50px;
   text-align: right;
   flex-shrink: 0;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -379,6 +379,7 @@ html, body {
   .game-pane {
     flex: none;
     width: 100%;
+    /* 総高さは据え置き(84vw+104)。内訳のステータスバーを縮めた分プレイ枠が広がる */
     height: calc(84vw + 104px);
     overflow: hidden;
   }
@@ -388,15 +389,26 @@ html, body {
     position: absolute;
     top: 0;
     left: 0;
-    height: 104px;        /* 予約高さと一致させ、下端に隙間（黒帯）が出ないようにする */
+    height: 90px;         /* バー類を約9割に縮小・上詰めして圧縮（予約高さと一致） */
     z-index: 50;
   }
 
   .game-canvas-area {
     flex: none;
-    margin-top: 104px;
-    /* 下部のイベントメッセージバー(59px)を除いた残り全てをプレイ枠に充てる */
-    height: calc(100% - 104px - 59px);
+    margin-top: 90px;
+    /* ステータスバー(90px)とイベントメッセージバー(59px)を除いた残り全てをプレイ枠に充てる */
+    height: calc(100% - 90px - 59px);
+  }
+
+  /* タイトル画面のみ: ステータスバー/メッセージバーが無いので、その予約枠を取り払い
+     キャンバスを game-pane 全体へ拡大して左右・上の余白を埋める（比率はFITで維持）。
+     プレイへ遷移すると title-mode が外れ、上の通常レイアウトへ戻る。 */
+  .title-mode .game-canvas-area {
+    margin-top: 0;
+    height: 100%;
+  }
+  .title-mode .event-msg-bar {
+    display: none;
   }
 
   .ui-pane {

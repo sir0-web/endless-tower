@@ -37,6 +37,8 @@ function App() {
   const gameRef       = useRef<Phaser.Game | null>(null)
   const [appScale, setAppScale] = useState(calcScale)
   const [isMobile, setIsMobile] = useState(isMobileViewport)
+  // タイトル画面表示中フラグ（スマホでキャンバスを全幅に拡大するため）。初期はタイトルなので true。
+  const [titleMode, setTitleMode] = useState(true)
 
   // ウィンドウリサイズでスケール再計算 + Phaser canvas 更新
   useEffect(() => {
@@ -98,6 +100,24 @@ function App() {
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
   }, [appScale])
 
+  // タイトル表示中はキャンバス枠を全幅化する（スマホ）。Phaser シーンからの通知で切り替える。
+  useEffect(() => {
+    const enter = () => setTitleMode(true)
+    const leave = () => setTitleMode(false)
+    window.addEventListener('et-title-enter', enter)
+    window.addEventListener('et-title-leave', leave)
+    return () => {
+      window.removeEventListener('et-title-enter', enter)
+      window.removeEventListener('et-title-leave', leave)
+    }
+  }, [])
+
+  // タイトルモード切替でキャンバス枠サイズが変わるため、Phaser の FIT スケールを再計算する。
+  useEffect(() => {
+    if (!gameRef.current) return
+    requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
+  }, [titleMode])
+
   // スマホ: 通常レスポンシブ / PC: 固定サイズ＋スケール縮小
   const wrapperStyle = isMobile
     ? { width: '100%', height: '100%' } as const
@@ -115,7 +135,7 @@ function App() {
   return (
     <>
     <div style={wrapperStyle}>
-      <div className="app-layout">
+      <div className={`app-layout${titleMode ? ' title-mode' : ''}`}>
         <div className="game-pane">
           <MobileStatusBar />
           <div className="game-canvas-area" ref={canvasAreaRef}>

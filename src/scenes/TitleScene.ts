@@ -89,6 +89,11 @@ export class TitleScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     })
+
+    // React 側レイアウトへ「タイトル表示中」を通知。
+    // スマホではタイトルのみキャンバスを全幅表示にして余白を埋める（プレイ遷移で元に戻す）。
+    window.dispatchEvent(new Event('et-title-enter'))
+    this.events.once('shutdown', () => window.dispatchEvent(new Event('et-title-leave')))
   }
 
   /** フェードアウトしてからシーン遷移する共通ヘルパー */
