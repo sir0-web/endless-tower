@@ -5,7 +5,6 @@ import { hasSave, clearSave } from '../game/save'
 import { getDisplayName, setDisplayName } from '../game/playerName'
 
 const PIXEL_FONT  = '"Press Start 2P", monospace'
-const BTN_WIDTH   = 300   // 全ボタン共通の固定幅
 const KEY_STORAGE = 'keyMode'
 
 type KeyMode = 'arrows' | 'wasd' | 'both'
@@ -18,6 +17,7 @@ export class TitleScene extends Phaser.Scene {
 
   preload() {
     this.load.image('title-bg', '/assets/title/title.png')
+    this.load.image('btn-frame', '/assets/ui/button-frame.png')
   }
 
   create() {
@@ -53,7 +53,7 @@ export class TitleScene extends Phaser.Scene {
     const top     = H * 0.60
 
     // ── 表示名（GAME START の上）。タップで変更可 ──
-    this.makeNameBadge(cx, top - gap * 0.62, W)
+    this.makeNameBadge(cx, top - gap * 0.95, W)
 
     // ①〜④ すべて同じ固定幅 BTN_WIDTH で生成
     const startBtn = this.makeBtn(cx, top,          'GAME START',  btnFont, () => {
@@ -110,13 +110,13 @@ export class TitleScene extends Phaser.Scene {
 
   // ── 表示名バッジ（タップで prompt 変更。ワールド通知に使う名前）──
   private makeNameBadge(cx: number, y: number, W: number) {
-    const fontSize = W < 500 ? 13 : 16
+    const fontSize = W < 500 ? 14 : 19
     const badge = this.add.text(cx, y, '', {
       fontFamily: PIXEL_FONT,
       fontSize:   `${fontSize}px`,
       color:      '#ffe699',
       backgroundColor: '#00000099',
-      padding:    { x: 16, y: 9 },
+      padding:    { x: 22, y: 12 },
       align:      'center',
     }).setOrigin(0.5).setDepth(10)
 
@@ -132,22 +132,30 @@ export class TitleScene extends Phaser.Scene {
     })
   }
 
-  // ── 全ボタン共通生成（fixedWidth で横幅統一・中央揃え）──
+  // ── 全ボタン共通生成（金縁＋宝石のリッチフレーム＋中央テキスト） ──
   private makeBtn(x: number, y: number, label: string, size: number, cb: () => void) {
-    const btn = this.add.text(x, y, label, {
+    const small = this.scale.width < 500
+    const w = small ? 268 : 332
+    const h = small ? 54 : 66
+
+    const frame = this.add.image(0, 0, 'btn-frame').setDisplaySize(w, h)
+    const txt = this.add.text(0, 0, label, {
       fontFamily: PIXEL_FONT,
       fontSize:   `${size}px`,
-      color:      '#d8d8ff',
-      backgroundColor: '#00000099',
-      padding:    { x: 20, y: 14 },
-      fixedWidth: BTN_WIDTH,
+      color:      '#f4e3a8',
       align:      'center',
-    }).setOrigin(0.5).setDepth(10)
+    }).setOrigin(0.5)
+    txt.setShadow(2, 2, '#160a02', 4, true, true)
 
-    btn.setInteractive({ useHandCursor: true })
-    btn.on('pointerover',  () => { btn.setColor('#ffdd00').setBackgroundColor('#000000cc') })
-    btn.on('pointerout',   () => { btn.setColor('#d8d8ff').setBackgroundColor('#00000099') })
-    btn.on('pointerdown',  cb)
+    const btn = this.add.container(x, y, [frame, txt]).setSize(w, h).setDepth(10)
+    btn.setInteractive({
+      hitArea: new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h),
+      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+      useHandCursor: true,
+    })
+    btn.on('pointerover', () => { frame.setTint(0xfff2cc); txt.setColor('#fffbe6') })
+    btn.on('pointerout',  () => { frame.clearTint();       txt.setColor('#f4e3a8') })
+    btn.on('pointerdown', cb)
     return btn
   }
 
