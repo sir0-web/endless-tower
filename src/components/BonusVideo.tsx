@@ -12,6 +12,9 @@ const RESULT_SRCS: Record<string, string> = {
   'kakuhen_miss': '/assets/slot/magicianlady.mp4',
 }
 
+// アルカナチャンス（2パターン）。この結果のときだけ画面中央に大きく＋周囲を暗転して魅せる
+const ARCANA_RESULTS = new Set(['kakuhen', 'kakuhen_miss'])
+
 export function BonusVideo() {
   const idleRef         = useRef<HTMLVideoElement>(null)
   const resultVideoRefs = useRef<Record<string, HTMLVideoElement | null>>({})
@@ -87,8 +90,13 @@ export function BonusVideo() {
     }
   }, [startBonus])
 
+  const isArcana = ARCANA_RESULTS.has(mode)
+
   return (
     <>
+      {/* アルカナチャンス中は周囲を暗転して中央の動画に注目させる */}
+      {isArcana && <div className="bv-arcana-backdrop" />}
+
       <video
         ref={idleRef}
         src="/assets/slot/idle.mp4"
@@ -103,7 +111,7 @@ export function BonusVideo() {
           muted
           playsInline
           onEnded={handleVideoEnded}
-          className={`bv-video ${mode === result ? 'bv-active' : ''}`}
+          className={`bv-video ${mode === result ? 'bv-active' : ''}${ARCANA_RESULTS.has(result) ? ' bv-arcana' : ''}`}
         />
       ))}
     </>

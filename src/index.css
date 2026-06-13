@@ -1047,6 +1047,46 @@ html, body {
   opacity: 1;
 }
 
+/* ── アルカナチャンス専用：中央に大きく表示＋周囲を暗転（スポットライト演出） ── */
+.bv-arcana-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  background: radial-gradient(circle at 50% 45%, rgba(20, 10, 40, 0.55) 0%, rgba(0, 0, 0, 0.88) 70%);
+  pointer-events: none;
+  animation: bv-arcana-fade 0.3s ease both;
+}
+
+.bv-video.bv-arcana.bv-active {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(88vw, 720px);
+  height: auto;
+  max-height: min(78vh, 640px);
+  z-index: 9101;
+  opacity: 1;
+  object-fit: contain;
+  /* 動画の上下5%を切り取り、縦のみ拡大して埋める（横幅・表示枠サイズは維持）。
+     clip-path で角丸も指定（box clipするため border-radius 単体では効かない）。 */
+  clip-path: inset(10% 0 10% 0 round 12px);
+  /* clip-path はグロー(box-shadow)も切ってしまうため drop-shadow で表現する */
+  filter: drop-shadow(0 0 30px rgba(255, 205, 80, 0.5)) drop-shadow(0 16px 38px rgba(0, 0, 0, 0.7));
+  pointer-events: none;
+  animation: bv-arcana-pop 0.45s cubic-bezier(0.18, 0.9, 0.3, 1.25) both;
+}
+
+@keyframes bv-arcana-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 静止状態は scale(1, 1.1112)：上下5%クロップ分(90%→100%)を縦に拡大して枠を埋める */
+@keyframes bv-arcana-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.7, 0.875); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1, 1.25); }
+}
+
 /* ── ストップボタン row（リール直下の隙間） ── */
 .sc-stop-row {
   position: absolute;
