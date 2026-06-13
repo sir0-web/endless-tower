@@ -80,6 +80,7 @@ export function UIPanel() {
   const [selId, setSelId] = useState<string | null>(null)
   const [openTab, setOpenTab] = useState<AccordionTab | null>(null)
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
+  const [statsOpen, setStatsOpen] = useState(true)
   const [name, setName] = useState(getDisplayName)
   const [mute, setMute] = useState(isMuted())
   const logRef = useRef<HTMLDivElement>(null)
@@ -168,7 +169,25 @@ export function UIPanel() {
       </SlotMachine>
 
       {/* ── 中段：ステータス（左50%）＋装備（右50%） ── */}
-      <div className="stats-equip-row">
+      <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
+
+        {/* PC版：折りたたみトグル */}
+        <button
+          type="button"
+          className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
+          onClick={() => setStatsOpen(o => !o)}
+        >
+          <span className="se-title">ステータス / 装備</span>
+          {!statsOpen && gs.statPoints > 0 && (
+            <span className="se-badge se-badge-pt">pt +{gs.statPoints}</span>
+          )}
+          {!statsOpen && gs.bag.length > 0 && (
+            <span className="se-badge se-badge-bag">装備 {gs.bag.length}</span>
+          )}
+          <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
+        </button>
+
+        <div className="stats-equip-inner">
 
         {/* 左：STR/AGI/DEX/VIT/INT/LUK + EXP */}
         <div className="stat-panel">
@@ -218,6 +237,7 @@ export function UIPanel() {
           })}
         </div>
 
+        </div>{/* /.stats-equip-inner */}
       </div>
 
       {/* ── 下段：バトルログ（左2/3）＋アイテム（右1/3） ── */}

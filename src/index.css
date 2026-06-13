@@ -648,8 +648,62 @@ html, body {
 /* ── stats-equip-row（中段：ステータス左＋装備右） ── */
 .stats-equip-row {
   display: flex;
+  flex-direction: column;
   flex-shrink: 0;
   border-bottom: 1px solid #1e1e38;
+}
+
+/* PC版：折りたたみトグルボタン */
+.stats-equip-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: #44447a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.stats-equip-toggle:hover { background: rgba(255,255,255,0.03); }
+.stats-equip-toggle.se-open { border-bottom-color: #1e1e38; }
+.stats-equip-toggle .se-title { flex: 1; }
+.stats-equip-toggle .se-arrow { font-size: 9px; opacity: 0.7; }
+
+/* 折りたたみ時の通知バッジ */
+.se-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.4;
+}
+.se-badge-pt  { background: rgba(255, 200, 0, 0.18); color: #ffcc00; border: 1px solid rgba(255,200,0,0.4); }
+.se-badge-bag { background: rgba(100, 255, 150, 0.14); color: #66ffaa; border: 1px solid rgba(80,220,120,0.35); }
+
+/* 内側の横並び（従来の stats-equip-row レイアウト） */
+.stats-equip-inner {
+  display: flex;
+}
+
+/* 折りたたみ時は inner を非表示 */
+.stats-equip-row.se-collapsed .stats-equip-inner { display: none; }
+
+/* スマホ：トグル不要（縦スクロールで見られる）・inner は常に表示 */
+@media (max-width: 767px) {
+  .stats-equip-toggle { display: none; }
+  .stats-equip-row.se-collapsed .stats-equip-inner { display: flex; }
 }
 
 /* 左 50%：ステータス */
@@ -962,7 +1016,7 @@ html, body {
 .slot-cabinet {
   position: relative;
   width: 100%;
-  max-width: min(460px, calc((100vh - 280px) / 1.1119));
+  max-width: min(300px, calc((100vh - 520px) / 1.1119));
   aspect-ratio: 1278 / 1421;
   margin: 0 auto;
   flex-shrink: 0;
