@@ -92,7 +92,7 @@ function maintenanceHtml(now: number): string {
     backdrop-filter: blur(6px);
   }
   .logo { margin-bottom: 14px; }
-  .logo video { width: 100%; max-width: 320px; border-radius: 12px; display: block; margin: 0 auto; }
+  .logo video { width: 100%; max-width: 320px; display: block; margin: 0 auto; clip-path: inset(15% 0 0 0 round 12px); }
   h1 { font-size: 22px; margin: 0 0 10px; letter-spacing: 0.04em; }
   .lead { font-size: 14px; color: #b9b9dd; margin: 0 0 22px; line-height: 1.7; }
   .window {
