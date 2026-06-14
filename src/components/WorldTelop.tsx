@@ -38,13 +38,14 @@ export function WorldTelop() {
     setQueue(q => q.slice(1))
   }, [queue, current])
 
-  // current の表示ライフサイクル：フェードイン → 4秒表示 → フェードアウト → 消去（次へ）
+  // current の表示ライフサイクル：フェードイン → 表示 → フェードアウト → 消去（次へ）
   useEffect(() => {
     if (!current) return
+    const showMs = current.display_ms ?? SHOW_MS
     setVisible(false)
     const t0 = setTimeout(() => setVisible(true), 20)
-    const t1 = setTimeout(() => setVisible(false), 20 + SHOW_MS)
-    const t2 = setTimeout(() => setCurrent(null), 20 + SHOW_MS + FADE_MS)
+    const t1 = setTimeout(() => setVisible(false), 20 + showMs)
+    const t2 = setTimeout(() => setCurrent(null), 20 + showMs + FADE_MS)
     return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(t2) }
   }, [current])
 

@@ -40,9 +40,10 @@ export function AdminPanel() {
   const [newTo, setNewTo]       = useState('')
 
   // Message
-  const [msgType, setMsgType]   = useState('system')
-  const [msgTitle, setMsgTitle] = useState('')
-  const [msgBody, setMsgBody]   = useState('')
+  const [msgType, setMsgType]     = useState('system')
+  const [msgTitle, setMsgTitle]   = useState('')
+  const [msgBody, setMsgBody]     = useState('')
+  const [msgDisplaySec, setMsgDisplaySec] = useState('4')
   const [msgSending, setMsgSending] = useState(false)
   const [msgResult, setMsgResult]   = useState('')
 
@@ -119,9 +120,11 @@ export function AdminPanel() {
   const sendMessage = async () => {
     if (!msgTitle || !msgBody) return
     setMsgSending(true)
+    const displayMs = Math.max(1, parseFloat(msgDisplaySec) || 4) * 1000
     const { error } = await supabase.from('world_notifications').insert({
       type: msgType, title: msgTitle, message: msgBody,
       player_name: 'ADMIN', player_id: 'admin-broadcast',
+      display_ms: displayMs,
     })
     setMsgResult(error ? `エラー: ${error.message}` : '送信しました ✓')
     if (!error) { setMsgTitle(''); setMsgBody('') }
@@ -301,6 +304,16 @@ export function AdminPanel() {
               <textarea value={msgBody} onChange={e => setMsgBody(e.target.value)}
                 style={{ ...S.input, height: 90, resize: 'vertical' }}
                 placeholder="例：本日18:00よりアップデートを行います。" />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>表示時間（秒）</label>
+              <input
+                type="number" min="1" max="60" step="0.5"
+                value={msgDisplaySec}
+                onChange={e => setMsgDisplaySec(e.target.value)}
+                style={{ ...S.input, width: 100 }}
+              />
+              <span style={{ fontSize: 11, color: '#8888cc', marginTop: 4, display: 'block' }}>デフォルト 4 秒。長いお知らせは 8〜15 秒推奨。</span>
             </div>
             <div style={S.row}>
               <button onClick={sendMessage} disabled={msgSending || !msgTitle || !msgBody} style={S.btnPrimary}>

@@ -8,6 +8,7 @@ export interface WorldNotif {
   message: string
   player_name: string | null
   player_id: string | null
+  display_ms: number | null
   created_at: string
 }
 
