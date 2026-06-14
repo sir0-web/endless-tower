@@ -39,6 +39,13 @@ export function AdminPanel() {
   const [newFrom, setNewFrom]   = useState('')
   const [newTo, setNewTo]       = useState('')
 
+  // Maintenance message
+  const [mHeading, setMHeading]       = useState('より良いゲームをお届けするために\nスタッフが鋭意準備中です')
+  const [mLead, setMLead]             = useState('⏰次回のオープンβテスト期間⏰')
+  const [mNote, setMNote]             = useState('このページは開いたままお待ちください。\n自動で更新されます。')
+  const [mMsgSaving, setMMsgSaving]   = useState(false)
+  const [mMsgResult, setMMsgResult]   = useState('')
+
   // Message
   const [msgType, setMsgType]     = useState('system')
   const [msgTitle, setMsgTitle]   = useState('')
@@ -71,9 +78,17 @@ export function AdminPanel() {
   // ── Maintenance ──
   const loadMaintenance = useCallback(async () => {
     setMLoading(true)
-    const { data } = await supabase
-      .from('system_config').select('value').eq('key', 'maintenance_windows').single()
-    if (data) setWindows((data.value ?? []) as MaintenanceWindow[])
+    const [{ data: winData }, { data: msgData }] = await Promise.all([
+      supabase.from('system_config').select('value').eq('key', 'maintenance_windows').single(),
+      supabase.from('system_config').select('value').eq('key', 'maintenance_message').single(),
+    ])
+    if (winData) setWindows((winData.value ?? []) as MaintenanceWindow[])
+    if (msgData?.value) {
+      const v = msgData.value as { heading?: string; lead?: string; note?: string }
+      if (v.heading != null) setMHeading(v.heading)
+      if (v.lead    != null) setMLead(v.lead)
+      if (v.note    != null) setMNote(v.note)
+    }
     setMLoading(false)
   }, [])
 
@@ -98,6 +113,17 @@ export function AdminPanel() {
   }
 
   const removeWindow = (i: number) => setWindows(ws => ws.filter((_, j) => j !== i))
+
+  const saveMaintenanceMessage = async () => {
+    setMMsgSaving(true); setMMsgResult('')
+    const { error } = await supabase.from('system_config').upsert({
+      key: 'maintenance_message',
+      value: { heading: mHeading, lead: mLead, note: mNote },
+      updated_at: new Date().toISOString(),
+    })
+    setMMsgResult(error ? `エラー: ${error.message}` : '保存しました ✓')
+    setMMsgSaving(false)
+  }
 
   const openNow = () => {
     const now = Date.now()
@@ -278,6 +304,34 @@ export function AdminPanel() {
                   {mSaving ? '保存中…' : '変更を保存（Supabase）'}
                 </button>
                 {mMsg && <span style={{ color: mMsg.includes('エラー') ? '#f87171' : '#4ade80' }}>{mMsg}</span>}
+              </div>
+
+              <div style={{ ...S.card, marginTop: 24 }}>
+                <div style={S.cardTitle}>メンテナンス画面のメッセージ編集</div>
+                <div style={S.formGroup}>
+                  <label style={S.label}>見出し（h1）</label>
+                  <textarea value={mHeading} onChange={e => setMHeading(e.target.value)}
+                    rows={2} style={{ ...S.input, resize: 'vertical' }}
+                    placeholder="例：より良いゲームをお届けするために&#10;スタッフが鋭意準備中です" />
+                </div>
+                <div style={S.formGroup}>
+                  <label style={S.label}>リード文</label>
+                  <input value={mLead} onChange={e => setMLead(e.target.value)}
+                    style={S.input} placeholder="例：⏰次回のオープンβテスト期間⏰" />
+                </div>
+                <div style={S.formGroup}>
+                  <label style={S.label}>補足文</label>
+                  <textarea value={mNote} onChange={e => setMNote(e.target.value)}
+                    rows={2} style={{ ...S.input, resize: 'vertical' }}
+                    placeholder="例：このページは開いたままお待ちください。&#10;自動で更新されます。" />
+                </div>
+                <div style={{ ...S.row, marginTop: 8 }}>
+                  <button onClick={saveMaintenanceMessage} disabled={mMsgSaving} style={S.btnPrimary}>
+                    {mMsgSaving ? '保存中…' : 'メッセージを保存'}
+                  </button>
+                  {mMsgResult && <span style={{ color: mMsgResult.includes('エラー') ? '#f87171' : '#4ade80' }}>{mMsgResult}</span>}
+                </div>
+                <p style={{ ...S.muted, marginTop: 8 }}>改行は画面上でも改行されます。</p>
               </div>
             </>}
           </div>
