@@ -67,6 +67,7 @@ export function AdminPanel() {
     floorDist: [string, number][]
     slotDist: [string, number][]
   } | null>(null)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
   // ── ログイン ──
   const login = () => {
@@ -180,11 +181,18 @@ export function AdminPanel() {
 
   // ── Stats ──
   const loadStats = useCallback(async () => {
-    setStats(null)
-    const [{ data: deaths }, { data: slots }] = await Promise.all([
-      supabase.from('game_events').select('floor').eq('event_type', 'death'),
-      supabase.from('game_events').select('slot_result').eq('event_type', 'slot_result').not('slot_result', 'is', null),
+    setStats(null); setStatsError(null)
+    const [{ data: deaths, error: e1 }, { data: slots, error: e2 }] = await Promise.all([
+      supabase.from('game_events').select('floor').eq('event_type', 'death').limit(10000),
+      supabase.from('game_events').select('slot_result').eq('event_type', 'slot_result').not('slot_result', 'is', null).limit(10000),
     ])
+
+    const err = e1 ?? e2
+    if (err) {
+      setStatsError(`Supabaseエラー: ${err.message} (code: ${err.code})`)
+      setStats({ totalDeaths: 0, floorDist: [], slotDist: [] })
+      return
+    }
 
     const floorMap: Record<string, number> = {}
     for (const d of (deaths ?? [])) {
@@ -446,6 +454,15 @@ export function AdminPanel() {
         {tab === 'stats' && (
           <div>
             <button onClick={loadStats} style={{ ...S.btnSm, marginBottom: 16 }}>🔄 更新</button>
+            {statsError && (
+              <div style={{ padding: '10px 14px', background: 'rgba(127,29,29,0.4)', border: '1px solid #dc2626', borderRadius: 8, marginBottom: 16 }}>
+                <div style={{ color: '#f87171', fontWeight: 700, marginBottom: 4 }}>エラー</div>
+                <div style={{ color: '#fca5a5', fontSize: 13 }}>{statsError}</div>
+                <div style={{ color: '#aaa', fontSize: 11, marginTop: 8 }}>
+                  考えられる原因: game_eventsテーブルが未作成 / RLSでSELECTが禁止されている
+                </div>
+              </div>
+            )}
             {!stats ? <p style={S.muted}>読み込み中…</p> : <>
               <div style={S.statCard}>
                 <div style={S.statLabel}>総死亡回数</div>
