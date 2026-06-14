@@ -42,6 +42,7 @@ export function WorldTelop() {
   useEffect(() => {
     if (!current) return
     const showMs = current.display_ms ?? SHOW_MS
+    console.log('[WorldTelop] display_ms:', current.display_ms, '→ showMs:', showMs)
     setVisible(false)
     const t0 = setTimeout(() => setVisible(true), 20)
     const t1 = setTimeout(() => setVisible(false), 20 + showMs)
