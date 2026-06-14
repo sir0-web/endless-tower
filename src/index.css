@@ -1036,7 +1036,7 @@ html, body {
 .slot-cabinet {
   position: relative;
   width: 100%;
-  max-width: min(300px, calc((100vh - 520px) / 1.1119));
+  max-width: min(460px, calc((100vh - 280px) / 1.1119));
   aspect-ratio: 1278 / 1421;
   margin: 0 auto;
   flex-shrink: 0;
