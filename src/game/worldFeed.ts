@@ -45,10 +45,19 @@ function start() {
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'world_notifications' },
       (p) => {
-        const n = p.new as WorldNotif
-        log = [n, ...log].slice(0, MAX_LOG) // 新しい順で保持
-        emitNew(n)
-        emitLog()
+        const partial = p.new as { id: number }
+        // Realtime ペイロードは display_ms 等の列を省略することがあるため、フル行を取得する
+        void supabase
+          .from('world_notifications')
+          .select('*')
+          .eq('id', partial.id)
+          .single()
+          .then(({ data }) => {
+            const n = (data ?? p.new) as WorldNotif
+            log = [n, ...log].slice(0, MAX_LOG)
+            emitNew(n)
+            emitLog()
+          })
       },
     )
     .subscribe()
