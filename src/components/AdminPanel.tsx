@@ -8,12 +8,18 @@ const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'ranking' | 'worldlog' | 'users' | 'stats'
+type Tab = 'maintenance' | 'message' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats'
 
 interface MaintenanceWindow { from: number; to: number | null }
 interface RankingEntry { id: number; player_name: string; floor: number; level: number; created_at: string }
 interface WorldNotif { id: number; type: string; title: string; message: string; player_name: string; created_at: string }
 interface EditingRanking { id: number; player_name: string; floor: number; level: number }
+
+interface Report {
+  id: number; category: string; content: string
+  player_name: string | null; image_url: string | null
+  status: 'new' | 'read' | 'done'; created_at: string
+}
 
 const JST = 9 * 60 * 60 * 1000
 function fromJstInput(s: string): number { return new Date(s + ':00.000Z').getTime() - JST }
@@ -82,6 +88,14 @@ export function AdminPanel() {
   const [uLoading, setULoading]   = useState(false)
   const [uMsg, setUMsg]           = useState('')
   const [uEditingRanking, setUEditingRanking] = useState<EditingRanking | null>(null)
+
+  // ── Reports ──
+  const [reports, setReports]         = useState<Report[]>([])
+  const [repLoading, setRepLoading]   = useState(false)
+  const [repMsg, setRepMsg]           = useState('')
+  const [repStatusF, setRepStatusF]   = useState<'' | 'new' | 'read' | 'done'>('')
+  const [repCatF, setRepCatF]         = useState('')
+  const [repDetail, setRepDetail]     = useState<Report | null>(null)
 
   // ── Stats ──
   const [stats, setStats] = useState<{ totalDeaths: number; floorDist: [string,number][]; slotDist: [string,number][] } | null>(null)
@@ -244,6 +258,39 @@ export function AdminPanel() {
     setUNotifs(ns => ns.filter(n => n.id !== id))
   }
 
+  // ── Reports ──
+  const loadReports = useCallback(async (statusF = '', catF = '') => {
+    setRepLoading(true); setRepMsg('')
+    let q = db.from('reports').select('*').order('created_at', { ascending: false }).limit(300)
+    if (statusF) q = q.eq('status', statusF)
+    if (catF) q = q.eq('category', catF)
+    const { data, error } = await q
+    if (error) setRepMsg(`エラー: ${error.message}`)
+    setReports((data ?? []) as Report[])
+    setRepLoading(false)
+  }, [db])
+
+  const updateRepStatus = async (id: number, status: Report['status']) => {
+    const { error } = await db.from('reports').update({ status }).eq('id', id)
+    if (error) { setRepMsg(`エラー: ${error.message}`); return }
+    setReports(rs => rs.map(r => r.id === id ? { ...r, status } : r))
+    if (repDetail?.id === id) setRepDetail(d => d ? { ...d, status } : d)
+  }
+
+  const deleteReport = async (id: number) => {
+    if (!confirm('この報告を削除しますか？')) return
+    const { error } = await db.from('reports').delete().eq('id', id)
+    if (error) { setRepMsg(`エラー: ${error.message}`); return }
+    setRepMsg('削除しました ✓')
+    setReports(rs => rs.filter(r => r.id !== id))
+    if (repDetail?.id === id) setRepDetail(null)
+  }
+
+  const openRepDetail = async (r: Report) => {
+    setRepDetail(r)
+    if (r.status === 'new') await updateRepStatus(r.id, 'read')
+  }
+
   // ── Stats ──
   const loadStats = useCallback(async () => {
     setStats(null); setStatsError(null)
@@ -265,8 +312,9 @@ export function AdminPanel() {
     if (tab === 'maintenance') loadMaintenance()
     if (tab === 'ranking')     loadRankings()
     if (tab === 'worldlog')    loadWorldLogs()
+    if (tab === 'reports')     loadReports()
     if (tab === 'stats')       loadStats()
-  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadStats])
+  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats])
 
   const now = Date.now()
   const isOpen = windows.some(w => winActive(w, now))
@@ -287,7 +335,14 @@ export function AdminPanel() {
   const TAB_LABELS: Record<Tab, string> = {
     maintenance: 'メンテナンス', message: 'メッセージ配信',
     ranking: 'ランキング', worldlog: 'ワールドログ',
-    users: 'ユーザー管理', stats: '統計',
+    users: 'ユーザー管理', reports: '報告BOX', stats: '統計',
+  }
+
+  const REP_STATUS_COLOR: Record<string, string> = {
+    new: '#ef4444', read: '#60a5fa', done: '#4ade80',
+  }
+  const REP_STATUS_LABEL: Record<string, string> = {
+    new: '新規', read: '確認済', done: '完了',
   }
 
   return (
@@ -684,6 +739,109 @@ export function AdminPanel() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ══ 報告BOX ══ */}
+        {tab === 'reports' && (
+          <div>
+            {/* Filter bar */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <select value={repCatF} onChange={e => setRepCatF(e.target.value)} style={{ ...S.input, width: 'auto' }}>
+                <option value="">全カテゴリ</option>
+                <option value="要望">要望</option>
+                <option value="不具合報告">不具合報告</option>
+                <option value="質問">質問</option>
+                <option value="その他">その他</option>
+              </select>
+              {(['', 'new', 'read', 'done'] as const).map(st => (
+                <button key={st} onClick={() => setRepStatusF(st)}
+                  style={{ ...S.btnSm, background: repStatusF === st ? 'rgba(79,70,229,0.35)' : 'transparent', border: `1px solid ${repStatusF === st ? '#6366f1' : '#2a2a4a'}`, color: repStatusF === st ? '#a5b4fc' : '#666' }}>
+                  {st === '' ? '全件' : REP_STATUS_LABEL[st]}
+                  {st === 'new' && reports.filter(r => r.status === 'new').length > 0 && repStatusF !== 'new' && (
+                    <span style={{ marginLeft: 4, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {reports.filter(r => r.status === 'new').length}
+                    </span>
+                  )}
+                </button>
+              ))}
+              <button onClick={() => loadReports(repStatusF, repCatF)} style={S.btnPrimary}>検索</button>
+              <button onClick={() => { setRepStatusF(''); setRepCatF(''); loadReports() }} style={S.btnSm}>リセット</button>
+            </div>
+
+            {repMsg && <div style={{ color: repMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 10 }}>{repMsg}</div>}
+
+            {/* Detail panel */}
+            {repDetail && (
+              <div style={{ ...S.card, marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontWeight: 700 }}>
+                    <span style={{ padding: '2px 8px', background: 'rgba(79,70,229,0.25)', borderRadius: 4, fontSize: 12, marginRight: 8 }}>{repDetail.category}</span>
+                    {repDetail.player_name ?? '（匿名）'}
+                    <span style={{ marginLeft: 8, fontSize: 11, color: '#666' }}>ID:{repDetail.id} — {fmtJstDate(repDetail.created_at)}</span>
+                  </span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select
+                      value={repDetail.status}
+                      onChange={e => updateRepStatus(repDetail.id, e.target.value as Report['status'])}
+                      style={{ ...S.input, width: 'auto', fontSize: 12 }}>
+                      <option value="new">新規</option>
+                      <option value="read">確認済</option>
+                      <option value="done">完了</option>
+                    </select>
+                    <button onClick={() => deleteReport(repDetail.id)} style={S.btnDanger}>削除</button>
+                    <button onClick={() => setRepDetail(null)} style={S.btnSm}>閉じる</button>
+                  </div>
+                </div>
+                <div style={{ fontSize: 14, color: '#e8e8f8', lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#080818', padding: '10px 12px', borderRadius: 6, border: '1px solid #1e1e38' }}>
+                  {repDetail.content}
+                </div>
+                {repDetail.image_url && (
+                  <div style={{ marginTop: 10 }}>
+                    <a href={repDetail.image_url} target="_blank" rel="noreferrer">
+                      <img src={repDetail.image_url} alt="添付画像"
+                        style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 6, border: '1px solid #2a2a4a' }} />
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Table */}
+            {repLoading ? <p style={S.muted}>読み込み中…</p> : (
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>ID</th><th style={S.th}>日時 (JST)</th>
+                  <th style={S.th}>カテゴリ</th><th style={S.th}>内容（抜粋）</th>
+                  <th style={S.th}>名前</th><th style={S.th}>画像</th>
+                  <th style={S.th}>ステータス</th><th style={S.th}></th>
+                </tr></thead>
+                <tbody>
+                  {reports.map(r => (
+                    <tr key={r.id}
+                      onClick={() => openRepDetail(r)}
+                      style={{ cursor: 'pointer', background: repDetail?.id === r.id ? 'rgba(79,70,229,0.08)' : r.status === 'new' ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
+                      <td style={{ ...S.td, color: '#666' }}>{r.id}</td>
+                      <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{fmtJstDate(r.created_at)}</td>
+                      <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11, whiteSpace: 'nowrap' }}>{r.category}</span></td>
+                      <td style={{ ...S.td, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.content}</td>
+                      <td style={S.td}>{r.player_name ?? <span style={{ color: '#555' }}>─</span>}</td>
+                      <td style={S.td}>{r.image_url ? <span style={{ color: '#60a5fa' }}>📎</span> : <span style={{ color: '#555' }}>─</span>}</td>
+                      <td style={S.td}>
+                        <span style={{ padding: '2px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: `${REP_STATUS_COLOR[r.status]}22`, color: REP_STATUS_COLOR[r.status], border: `1px solid ${REP_STATUS_COLOR[r.status]}55` }}>
+                          {REP_STATUS_LABEL[r.status]}
+                        </span>
+                      </td>
+                      <td style={S.td} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => deleteReport(r.id)} style={S.btnDanger}>削除</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {reports.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                </tbody>
+              </table>
+            )}
+            <p style={S.muted}>行クリックで詳細表示・既読マーク。最大300件。</p>
           </div>
         )}
 

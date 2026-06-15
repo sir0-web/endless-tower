@@ -173,6 +173,7 @@ declare global {
     showGameToast?: (message: string) => void
     addWorldLogMessage?: (text: string) => void
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
+    showReport?: () => void
     showEventMessage?: (message: string, color?: string) => void
     // ── イベントフロア施設 ──
     openFacility?: (kind: FacilityKind) => void

@@ -17,6 +17,7 @@ import { WorldTelop } from './components/WorldTelop'
 import { WorldLog } from './components/WorldLog'
 import { HowToPlay } from './components/HowToPlay'
 import { ArcanaRoulette } from './components/ArcanaRoulette'
+import { ReportModal } from './components/ReportModal'
 import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
@@ -142,6 +143,17 @@ function App() {
           <MobileStatusBar />
           <div className="game-canvas-area" ref={canvasAreaRef}>
             <ScrollLockButton />
+            {!fullCanvas && (
+              <button
+                className="report-float-btn"
+                data-priority-tap
+                onClick={e => { e.stopPropagation(); window.showReport?.() }}
+                onTouchStart={e => e.stopPropagation()}
+                title="報告・お問い合わせ"
+              >
+                📬
+              </button>
+            )}
           </div>
           <EventMsgBar />
         </div>
@@ -161,6 +173,7 @@ function App() {
     <WorldLog />
     <HowToPlay />
     <ArcanaRoulette />
+    <ReportModal />
     <Analytics />
     </>
   )

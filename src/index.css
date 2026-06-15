@@ -181,6 +181,32 @@ html, body {
   color: #ffffff;
 }
 
+/* ── 報告ボタン（プレイ中・ゲームキャンバス右下） ── */
+.report-float-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  background: rgba(0, 0, 0, 0.52);
+  border: 1px solid rgba(160, 160, 255, 0.35);
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  z-index: 310;
+  pointer-events: auto;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.report-float-btn:hover {
+  background: rgba(79, 70, 229, 0.45);
+  border-color: rgba(160, 160, 255, 0.7);
+}
+
 /* ── スクロールロックボタン（スマホ・マップ枠右上） ── */
 .scroll-lock-btn {
   display: none;

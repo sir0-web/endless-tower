@@ -49,22 +49,23 @@ export class TitleScene extends Phaser.Scene {
 
     // ── ボタン（下部中央・縦並び・全幅統一）──
     const btnFont = W < 500 ? 15 : 22
-    const gap     = H * 0.09
-    const top     = H * 0.60
+    const gap     = H * 0.088
+    const top     = H * 0.56
 
     // ── 表示名（GAME START の上）。タップで変更可 ──
     this.makeNameBadge(cx, top - gap * 0.95, W)
 
-    // ①〜④ すべて同じ固定幅 BTN_WIDTH で生成
+    // ①〜⑤ すべて同じ固定幅 BTN_WIDTH で生成
     const startBtn = this.makeBtn(cx, top,          'GAME START',  btnFont, () => {
       this.startGame()
     })
     const b2 = this.makeBtn(cx, top + gap,    'RANKING',     btnFont, () => { void this.goRanking() })
     const b3 = this.makeBtn(cx, top + gap * 2,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
     const b4 = this.makeBtn(cx, top + gap * 3,'HOW TO PLAY', btnFont, () => { this.openHowTo(W, H) })
+    const b5 = this.makeBtn(cx, top + gap * 4,'REPORT',      btnFont, () => { window.showReport?.() })
 
     // ボタンを下から段階的にフェードイン
-    const btns = [startBtn, b2, b3, b4]
+    const btns = [startBtn, b2, b3, b4, b5]
     btns.forEach((btn, i) => {
       btn.setAlpha(0)
       const baseY = btn.y
