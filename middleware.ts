@@ -30,7 +30,8 @@ export const config = {
   matcher: ['/((?!_vercel|assets/|admin).*)'],
 }
 
-type Window = { from: number; to: number }
+// to === null は「開始時刻以降ずっと公開（無期限）」を表す
+type Window = { from: number; to: number | null }
 
 // null = Supabase 障害（フォールバック使用）、[] = メンテ中（開放ウィンドウなし）
 async function fetchWindows(): Promise<Window[] | null> {
@@ -84,8 +85,8 @@ export default async function middleware(request: Request): Promise<Response> {
     fetchMaintenanceMessage().then(m => m ?? DEFAULT_MAINTENANCE_MSG),
   ])
 
-  const isOpen     = windows.some(w => now >= w.from && now < w.to)
-  const upcoming   = windows.find(w => now < w.to) ?? null
+  const isOpen     = windows.some(w => now >= w.from && (w.to === null || now < w.to))
+  const upcoming   = windows.find(w => w.to === null || now < w.to) ?? null
 
   if (isOpen) return next()
 
@@ -102,9 +103,11 @@ export default async function middleware(request: Request): Promise<Response> {
 function formatWindowJst(w: Window): string {
   const p = (n: number) => String(n).padStart(2, '0')
   const f = new Date(w.from + JST_OFFSET_MS)
-  const t = new Date(w.to   + JST_OFFSET_MS)
   const date = `${f.getUTCFullYear()}/${p(f.getUTCMonth() + 1)}/${p(f.getUTCDate())}`
-  return `${date} ${p(f.getUTCHours())}:${p(f.getUTCMinutes())} 〜 ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`
+  const start = `${date} ${p(f.getUTCHours())}:${p(f.getUTCMinutes())}`
+  if (w.to === null) return `${start} 〜`  // 無期限
+  const t = new Date(w.to + JST_OFFSET_MS)
+  return `${start} 〜 ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`
 }
 
 function esc(s: string): string {
@@ -118,7 +121,8 @@ function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | nul
   const realUpcoming = upcoming && upcoming.from > now ? upcoming : null
   const openLabel    = realUpcoming ? formatWindowJst(realUpcoming) : '未定'
   const FROM = realUpcoming ? realUpcoming.from : 0
-  const TO   = realUpcoming ? realUpcoming.to   : 0
+  // to===null（無期限）は開始後ずっと公開なので、カウントダウン用に極大値を渡す
+  const TO   = realUpcoming ? (realUpcoming.to ?? 8640000000000000) : 0
 
   return `<!DOCTYPE html>
 <html lang="ja">

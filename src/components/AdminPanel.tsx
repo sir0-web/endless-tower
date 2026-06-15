@@ -5,7 +5,8 @@ const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY as string | undefined
 
 type Tab = 'maintenance' | 'message' | 'ranking' | 'stats'
 
-interface MaintenanceWindow { from: number; to: number }
+// to === null は「無期限（開始時刻以降ずっと公開）」を表す
+interface MaintenanceWindow { from: number; to: number | null }
 
 interface RankingEntry {
   id: number; player_name: string; floor: number; level: number; created_at: string
@@ -24,6 +25,14 @@ function fromJstInput(s: string): number {
 function fmtJst(ms: number): string {
   const d = new Date(ms + JST)
   return d.toISOString().replace('T', ' ').slice(0, 16)
+}
+// 公開中か（to===null は開始以降ずっと公開）
+function winActive(w: MaintenanceWindow, now: number): boolean {
+  return now >= w.from && (w.to === null || now < w.to)
+}
+// 終了済みか（無期限ウィンドウは終了しない）
+function winPast(w: MaintenanceWindow, now: number): boolean {
+  return w.to !== null && now >= w.to
 }
 
 export function AdminPanel() {
@@ -105,9 +114,10 @@ export function AdminPanel() {
   }
 
   const addWindow = () => {
-    if (!newFrom || !newTo) return
+    // 開始は必須。終了は任意（空欄なら null = 開始以降ずっと公開）
+    if (!newFrom) return
     setWindows(ws =>
-      [...ws, { from: fromJstInput(newFrom), to: fromJstInput(newTo) }]
+      [...ws, { from: fromJstInput(newFrom), to: newTo ? fromJstInput(newTo) : null }]
         .sort((a, b) => a.from - b.from)
     )
     setNewFrom(''); setNewTo('')
@@ -129,8 +139,8 @@ export function AdminPanel() {
   const openNow = () => {
     const now = Date.now()
     setWindows(ws => {
-      const next = ws.filter(w => w.to > now)
-      if (next.some(w => now >= w.from && now < w.to)) return next
+      const next = ws.filter(w => w.to === null || w.to > now)
+      if (next.some(w => winActive(w, now))) return next
       return [...next, { from: now, to: now + 24 * 3600 * 1000 }].sort((a, b) => a.from - b.from)
     })
   }
@@ -138,8 +148,8 @@ export function AdminPanel() {
   const closeNow = () => {
     const now = Date.now()
     setWindows(ws =>
-      ws.map(w => now >= w.from && now < w.to ? { ...w, to: now } : w)
-        .filter(w => w.from < w.to)
+      ws.map(w => winActive(w, now) ? { ...w, to: now } : w)
+        .filter(w => w.to === null || w.from < w.to)
     )
   }
 
@@ -218,7 +228,7 @@ export function AdminPanel() {
   }, [authed, tab, loadMaintenance, loadRankings, loadStats])
 
   const now = Date.now()
-  const isOpen = windows.some(w => now >= w.from && now < w.to)
+  const isOpen = windows.some(w => winActive(w, now))
 
   // ── Login screen ──
   if (!authed) return (
@@ -271,12 +281,16 @@ export function AdminPanel() {
                 </tr></thead>
                 <tbody>
                   {windows.map((w, i) => {
-                    const active = now >= w.from && now < w.to
-                    const past   = now >= w.to
+                    const active = winActive(w, now)
+                    const past   = winPast(w, now)
                     return (
                       <tr key={i} style={active ? { background: 'rgba(34,197,94,0.07)' } : past ? { opacity: 0.45 } : {}}>
                         <td style={S.td}>{fmtJst(w.from)}</td>
-                        <td style={S.td}>{fmtJst(w.to)}</td>
+                        <td style={S.td}>
+                          {w.to === null
+                            ? <span style={{ color: '#60a5fa' }}>― 無期限（以降ずっと公開）</span>
+                            : fmtJst(w.to)}
+                        </td>
                         <td style={S.td}>
                           {active ? <span style={{ color: '#22c55e' }}>● 公開中</span>
                             : past ? <span style={{ color: '#666' }}>終了</span>
@@ -301,10 +315,14 @@ export function AdminPanel() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <label style={S.label}>開始</label>
                   <input type="datetime-local" value={newFrom} onChange={e => setNewFrom(e.target.value)} style={{ ...S.input, width: 'auto' }} />
-                  <label style={S.label}>終了</label>
+                  <label style={S.label}>終了（任意）</label>
                   <input type="datetime-local" value={newTo} onChange={e => setNewTo(e.target.value)} style={{ ...S.input, width: 'auto' }} />
-                  <button onClick={addWindow} style={S.btnPrimary}>追加</button>
+                  {newTo && <button onClick={() => setNewTo('')} style={S.btnSm}>終了クリア</button>}
+                  <button onClick={addWindow} disabled={!newFrom} style={S.btnPrimary}>追加</button>
                 </div>
+                <p style={{ ...S.muted, marginTop: 8, marginBottom: 0 }}>
+                  終了を空欄にすると「開始以降ずっと公開（無期限）」になります。メンテ後に恒久オープンする場合などに使用。
+                </p>
               </div>
 
               <div style={S.row}>
