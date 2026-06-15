@@ -36,6 +36,7 @@ const ENEMY_TEXTURE_MAP: Record<string, string> = {
   'ナイトメア':          'nightmare',
   '深淵の騎士':          'abyssalknight',
   '黄金蟲':              'goldenbug',
+  'オシリス':            'osiris',
   'エクリプス':          'eclipse',
   'エンジェリング':      'angeling',
   'デビルリング':        'deviling',
@@ -219,6 +220,12 @@ export class GameScene extends Phaser.Scene {
       ['furioni',         '/assets/characters/enemies/furioni.png'],
       ['ghostring',       '/assets/characters/enemies/ghostring.png'],
       ['drake',           '/assets/characters/enemies/drake.png'],
+      ['toad',            '/assets/characters/enemies/toad.png'],
+      ['oaklord',         '/assets/characters/enemies/oaklord.png'],
+      ['wanderwolf',      '/assets/characters/enemies/wanderwolf.png'],
+      ['kingdramo',       '/assets/characters/enemies/kingdramo.png'],
+      ['oakhero',         '/assets/characters/enemies/oakhero.png'],
+      ['osiris',          '/assets/characters/enemies/osiris.png'],
       ['horu',            '/assets/characters/enemies/horu.png'],
       ['master',          '/assets/characters/enemies/master.png'],
       ['maho',            '/assets/characters/enemies/maho.png'],
@@ -2250,7 +2257,7 @@ export class GameScene extends Phaser.Scene {
         // 透過パディング補正でサイズ指定するテクスチャ
         // heroSized: 可視部分が主人公（1.25×1.38タイル）と同サイズになるよう補正
         const fracSized: Record<string, number> = { deviling: 1.25, masterring: 1.25 }
-        const heroSized = ['ghostring', 'drake']
+        const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'wanderwolf', 'kingdramo']
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
           if (heroSized.includes(textureKey)) {
             const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
