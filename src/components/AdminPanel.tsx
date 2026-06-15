@@ -97,6 +97,11 @@ export function AdminPanel() {
   const [repCatF, setRepCatF]         = useState('')
   const [repDetail, setRepDetail]     = useState<Report | null>(null)
 
+  // ── Bulk selection ──
+  const [wlSelected, setWlSelected]     = useState<Set<number>>(new Set())
+  const [rankSelected, setRankSelected] = useState<Set<number>>(new Set())
+  const [repSelected, setRepSelected]   = useState<Set<number>>(new Set())
+
   // ── Stats ──
   const [stats, setStats] = useState<{ totalDeaths: number; floorDist: [string,number][]; slotDist: [string,number][] } | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
@@ -178,6 +183,7 @@ export function AdminPanel() {
     if (search) q = q.ilike('player_name', `%${search}%`)
     const { data } = await q
     setRankings((data ?? []) as RankingEntry[])
+    setRankSelected(new Set())
     setRLoading(false)
   }, [db])
 
@@ -207,6 +213,7 @@ export function AdminPanel() {
     const { data, error } = await q
     if (error) setWlMsg(`エラー: ${error.message}`)
     setWlogs((data ?? []) as WorldNotif[])
+    setWlSelected(new Set())
     setWlLoading(false)
   }, [db])
 
@@ -267,6 +274,7 @@ export function AdminPanel() {
     const { data, error } = await q
     if (error) setRepMsg(`エラー: ${error.message}`)
     setReports((data ?? []) as Report[])
+    setRepSelected(new Set())
     setRepLoading(false)
   }, [db])
 
@@ -284,6 +292,40 @@ export function AdminPanel() {
     setRepMsg('削除しました ✓')
     setReports(rs => rs.filter(r => r.id !== id))
     if (repDetail?.id === id) setRepDetail(null)
+  }
+
+  const bulkDeleteRankings = async () => {
+    const ids = [...rankSelected]
+    if (ids.length === 0) return
+    if (!confirm(`選択した ${ids.length} 件のランキングを削除しますか？`)) return
+    const { error } = await db.from('rankings').delete().in('id', ids)
+    if (error) { setRMsg(`削除エラー: ${error.message}`); return }
+    setRankings(rs => rs.filter(r => !ids.includes(r.id)))
+    setRankSelected(new Set())
+    setRMsg(`${ids.length} 件を削除しました ✓`)
+  }
+
+  const bulkDeleteWorldLogs = async () => {
+    const ids = [...wlSelected]
+    if (ids.length === 0) return
+    if (!confirm(`選択した ${ids.length} 件のログを削除しますか？`)) return
+    const { error } = await db.from('world_notifications').delete().in('id', ids)
+    if (error) { setWlMsg(`削除エラー: ${error.message}`); return }
+    setWlogs(ls => ls.filter(l => !ids.includes(l.id)))
+    setWlSelected(new Set())
+    setWlMsg(`${ids.length} 件を削除しました ✓`)
+  }
+
+  const bulkDeleteReports = async () => {
+    const ids = [...repSelected]
+    if (ids.length === 0) return
+    if (!confirm(`選択した ${ids.length} 件の報告を削除しますか？`)) return
+    const { error } = await db.from('reports').delete().in('id', ids)
+    if (error) { setRepMsg(`削除エラー: ${error.message}`); return }
+    setReports(rs => rs.filter(r => !ids.includes(r.id)))
+    if (repDetail && ids.includes(repDetail.id)) setRepDetail(null)
+    setRepSelected(new Set())
+    setRepMsg(`${ids.length} 件を削除しました ✓`)
   }
 
   const openRepDetail = async (r: Report) => {
@@ -525,6 +567,9 @@ export function AdminPanel() {
                 placeholder="プレイヤー名で検索" style={{ ...S.input, flex: 1 }} />
               <button onClick={() => loadRankings(rSearch)} style={S.btnPrimary}>検索</button>
               <button onClick={() => { setRSearch(''); loadRankings('') }} style={S.btnSm}>全件</button>
+              {rankSelected.size > 0 && (
+                <button onClick={bulkDeleteRankings} style={S.btnDanger}>選択削除 ({rankSelected.size})</button>
+              )}
             </div>
 
             {rMsg && <div style={{ color: rMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 8 }}>{rMsg}</div>}
@@ -560,6 +605,11 @@ export function AdminPanel() {
             {rLoading ? <p style={S.muted}>読み込み中…</p> : (
               <table style={S.table}>
                 <thead><tr>
+                  <th style={S.th}>
+                    <input type="checkbox"
+                      checked={rankings.length > 0 && rankSelected.size === rankings.length}
+                      onChange={e => setRankSelected(e.target.checked ? new Set(rankings.map(r => r.id)) : new Set())} />
+                  </th>
                   <th style={S.th}>#</th><th style={S.th}>ID</th>
                   <th style={S.th}>プレイヤー名</th><th style={S.th}>最深</th>
                   <th style={S.th}>Lv</th><th style={S.th}>日時 (JST)</th>
@@ -567,7 +617,11 @@ export function AdminPanel() {
                 </tr></thead>
                 <tbody>
                   {rankings.map((r, i) => (
-                    <tr key={r.id} style={editingRanking?.id === r.id ? { background: 'rgba(79,70,229,0.08)' } : {}}>
+                    <tr key={r.id} style={editingRanking?.id === r.id ? { background: 'rgba(79,70,229,0.08)' } : rankSelected.has(r.id) ? { background: 'rgba(239,68,68,0.07)' } : {}}>
+                      <td style={S.td}>
+                        <input type="checkbox" checked={rankSelected.has(r.id)}
+                          onChange={e => setRankSelected(prev => { const s = new Set(prev); e.target.checked ? s.add(r.id) : s.delete(r.id); return s })} />
+                      </td>
                       <td style={S.td}>{i + 1}</td>
                       <td style={{ ...S.td, color: '#666' }}>{r.id}</td>
                       <td style={S.td}>{r.player_name}</td>
@@ -582,7 +636,7 @@ export function AdminPanel() {
                       </td>
                     </tr>
                   ))}
-                  {rankings.length === 0 && <tr><td colSpan={7} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                  {rankings.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
                 </tbody>
               </table>
             )}
@@ -607,6 +661,9 @@ export function AdminPanel() {
               </select>
               <button onClick={() => loadWorldLogs(wlSearch, wlType)} style={S.btnPrimary}>検索</button>
               <button onClick={() => { setWlSearch(''); setWlType(''); loadWorldLogs() }} style={S.btnSm}>リセット</button>
+              {wlSelected.size > 0 && (
+                <button onClick={bulkDeleteWorldLogs} style={S.btnDanger}>選択削除 ({wlSelected.size})</button>
+              )}
             </div>
 
             {wlMsg && <div style={{ color: wlMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 8 }}>{wlMsg}</div>}
@@ -614,6 +671,11 @@ export function AdminPanel() {
             {wlLoading ? <p style={S.muted}>読み込み中…</p> : (
               <table style={S.table}>
                 <thead><tr>
+                  <th style={S.th}>
+                    <input type="checkbox"
+                      checked={wlogs.length > 0 && wlSelected.size === wlogs.length}
+                      onChange={e => setWlSelected(e.target.checked ? new Set(wlogs.map(n => n.id)) : new Set())} />
+                  </th>
                   <th style={S.th}>ID</th><th style={S.th}>日時 (JST)</th>
                   <th style={S.th}>タイプ</th><th style={S.th}>プレイヤー</th>
                   <th style={S.th}>タイトル</th><th style={S.th}>本文</th>
@@ -621,7 +683,11 @@ export function AdminPanel() {
                 </tr></thead>
                 <tbody>
                   {wlogs.map(n => (
-                    <tr key={n.id}>
+                    <tr key={n.id} style={wlSelected.has(n.id) ? { background: 'rgba(239,68,68,0.07)' } : {}}>
+                      <td style={S.td}>
+                        <input type="checkbox" checked={wlSelected.has(n.id)}
+                          onChange={e => setWlSelected(prev => { const s = new Set(prev); e.target.checked ? s.add(n.id) : s.delete(n.id); return s })} />
+                      </td>
                       <td style={{ ...S.td, color: '#666' }}>{n.id}</td>
                       <td style={S.td}>{fmtJstDate(n.created_at)}</td>
                       <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11 }}>{n.type}</span></td>
@@ -631,7 +697,7 @@ export function AdminPanel() {
                       <td style={S.td}><button onClick={() => deleteWorldLog(n.id)} style={S.btnDanger}>削除</button></td>
                     </tr>
                   ))}
-                  {wlogs.length === 0 && <tr><td colSpan={7} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                  {wlogs.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
                 </tbody>
               </table>
             )}
@@ -767,6 +833,9 @@ export function AdminPanel() {
               ))}
               <button onClick={() => loadReports(repStatusF, repCatF)} style={S.btnPrimary}>検索</button>
               <button onClick={() => { setRepStatusF(''); setRepCatF(''); loadReports() }} style={S.btnSm}>リセット</button>
+              {repSelected.size > 0 && (
+                <button onClick={bulkDeleteReports} style={S.btnDanger}>選択削除 ({repSelected.size})</button>
+              )}
             </div>
 
             {repMsg && <div style={{ color: repMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 10 }}>{repMsg}</div>}
@@ -811,6 +880,11 @@ export function AdminPanel() {
             {repLoading ? <p style={S.muted}>読み込み中…</p> : (
               <table style={S.table}>
                 <thead><tr>
+                  <th style={S.th}>
+                    <input type="checkbox"
+                      checked={reports.length > 0 && repSelected.size === reports.length}
+                      onChange={e => setRepSelected(e.target.checked ? new Set(reports.map(r => r.id)) : new Set())} />
+                  </th>
                   <th style={S.th}>ID</th><th style={S.th}>日時 (JST)</th>
                   <th style={S.th}>カテゴリ</th><th style={S.th}>内容（抜粋）</th>
                   <th style={S.th}>名前</th><th style={S.th}>画像</th>
@@ -820,7 +894,11 @@ export function AdminPanel() {
                   {reports.map(r => (
                     <tr key={r.id}
                       onClick={() => openRepDetail(r)}
-                      style={{ cursor: 'pointer', background: repDetail?.id === r.id ? 'rgba(79,70,229,0.08)' : r.status === 'new' ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
+                      style={{ cursor: 'pointer', background: repDetail?.id === r.id ? 'rgba(79,70,229,0.08)' : repSelected.has(r.id) ? 'rgba(239,68,68,0.07)' : r.status === 'new' ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
+                      <td style={S.td} onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={repSelected.has(r.id)}
+                          onChange={e => setRepSelected(prev => { const s = new Set(prev); e.target.checked ? s.add(r.id) : s.delete(r.id); return s })} />
+                      </td>
                       <td style={{ ...S.td, color: '#666' }}>{r.id}</td>
                       <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{fmtJstDate(r.created_at)}</td>
                       <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11, whiteSpace: 'nowrap' }}>{r.category}</span></td>
@@ -837,7 +915,7 @@ export function AdminPanel() {
                       </td>
                     </tr>
                   ))}
-                  {reports.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                  {reports.length === 0 && <tr><td colSpan={9} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
                 </tbody>
               </table>
             )}
