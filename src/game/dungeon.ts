@@ -268,13 +268,21 @@ export function spawnBosses(floor: number, areaBossFloors: Record<number, string
   return bosses
 }
 
-/** 混沌フロア（モンスターハウス）用：MINI/MVP/エリアボスの中からランダムに1体生成する */
+/** 混沌フロア（モンスターハウス）用：現在フロアまでに登場しうるボスの中からランダムに1体生成する */
 export function makeChaosBoss(floor: number) {
-  const pool: { name: string; hpMult: number; atkMult: number; defMult: number; prefix: string }[] = [
-    ...Object.values(MINI_BOSS_TABLE).map(b => ({ ...b, prefix: '【MINI】' })),
-    ...Object.values(MVP_BOSS_TABLE).map(b => ({ ...b, prefix: '【MVP】' })),
-    ...AREA_BOSS_TABLE.map(a => ({ name: a.name, hpMult: 3.6, atkMult: 2.1, defMult: 1.5, prefix: '【エリア】' })),
-  ]
+  const validMini = Object.entries(MINI_BOSS_TABLE)
+    .filter(([k]) => Number(k) <= Math.max(floor, 5))
+    .map(([, b]) => ({ ...b, prefix: '【MINI】' }))
+
+  const validMvp = Object.entries(MVP_BOSS_TABLE)
+    .filter(([k]) => Number(k) <= Math.max(floor, 10))
+    .map(([, b]) => ({ ...b, prefix: '【MVP】' }))
+
+  const validArea = AREA_BOSS_TABLE
+    .filter(a => a.minFloor <= floor)
+    .map(a => ({ name: a.name, hpMult: 3.6, atkMult: 2.1, defMult: 1.5, prefix: '【エリア】' }))
+
+  const pool = [...validMini, ...validMvp, ...validArea]
   const pick = pool[Math.floor(Math.random() * pool.length)]
   return makeBoss(pick.name, floor, pick.hpMult, pick.atkMult, pick.defMult, pick.prefix)
 }
