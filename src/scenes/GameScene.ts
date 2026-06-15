@@ -1345,14 +1345,49 @@ export class GameScene extends Phaser.Scene {
     this.isEventFloor = true
     const map = this.generateEventFloorMap()
     const playerPos = { x: 9, y: 16 }
+
+    // ── 施設NPC位置をランダム化（部屋上半分・横2タイル以上離す）──
+    const rx = 5, ry = 7, rw = 10
+    const shuffleArr = <T>(a: T[]): T[] => {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]]
+      }
+      return a
+    }
+    const npcPool: { x: number; y: number }[] = []
+    for (let dy = 0; dy < 4; dy++)
+      for (let dx = 0; dx < rw - 2; dx++)
+        npcPool.push({ x: rx + 1 + dx, y: ry + 2 + dy })
+    shuffleArr(npcPool)
+    const npcPositions: { x: number; y: number }[] = []
+    for (const p of npcPool) {
+      if (npcPositions.length >= 3) break
+      if (npcPositions.every(q => Math.abs(p.x - q.x) >= 2)) npcPositions.push(p)
+    }
+    while (npcPositions.length < 3) npcPositions.push({ x: 6 + npcPositions.length * 3, y: 9 })
+
+    // ── 回復の泉を部屋下半分にランダム配置（NPC・プレイヤー初期位置を除く）──
+    const npcSet = new Set(npcPositions.map(p => `${p.x},${p.y}`))
+    const springPool: { x: number; y: number }[] = []
+    for (let dy = 0; dy < 4; dy++)
+      for (let dx = 0; dx < rw - 2; dx++) {
+        const p = { x: rx + 1 + dx, y: ry + 6 + dy }
+        if (!(p.x === playerPos.x && p.y === playerPos.y) && !npcSet.has(`${p.x},${p.y}`))
+          springPool.push(p)
+      }
+    shuffleArr(springPool)
+    const sp = springPool[0] ?? { x: rx + 4, y: ry + 8 }
+    map[sp.y][sp.x] = 'spring'
+
     this.state.map = map
     this.state.player.position = { ...playerPos }
     this.state.enemies = []
     this.state.items = []
     this.eventFacilities = [
-      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', texture: 'horu',   position: { x: 6,  y: 9 } },
-      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', texture: 'master', position: { x: 9,  y: 9 } },
-      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', texture: 'maho',   position: { x: 12, y: 9 } },
+      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', texture: 'horu',   position: npcPositions[0] },
+      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', texture: 'master', position: npcPositions[1] },
+      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', texture: 'maho',   position: npcPositions[2] },
     ]
     this.state.floorType = 'normal'
     this.buildFloorVariants(map)
@@ -1362,7 +1397,7 @@ export class GameScene extends Phaser.Scene {
     this.renderMap()
     this.updateWindowGameState()
     this.updateBGM()
-    this.cameras.main.fadeIn(300, 0, 0, 0)   // フロア切替の入場フェード
+    this.cameras.main.fadeIn(300, 0, 0, 0)
     this.showMidgardTitle()
   }
 
