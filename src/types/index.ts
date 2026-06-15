@@ -162,6 +162,8 @@ declare global {
     spinSlotOnce?: () => void
     showSlotAnnouncement?: (result: string, sub?: string) => void
     onSlotEffectApplied?: () => void
+    showArcanaRoulette?: (onComplete: () => void) => void
+    applyArcanaResult?: (points: number) => void
     gameMove?: (key: string) => void
     saveGame?: () => void
     warpFloor?: (floor: number) => void

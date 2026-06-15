@@ -250,6 +250,7 @@ export class GameScene extends Phaser.Scene {
     window.equipFromBag   = (itemId: string) => this.equipFromBag(itemId)
     window.discardFromBag = (itemId: string) => this.discardFromBag(itemId)
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
+    window.applyArcanaResult = (points: number) => this.applyArcanaResult(points)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
     window.saveGame        = () => this.doSaveGame()
     window.addWorldLogMessage = (text: string) => this.addWorldLogMessage(text)
@@ -1676,6 +1677,19 @@ export class GameScene extends Phaser.Scene {
 
     if (player.hp <= 0) { player.hp = 0; this.gameOver() }
     this.renderMap()
+    this.updateWindowGameState()
+  }
+
+  // アルカナチャンス専用ルーレットの結果ポイントを付与する
+  private applyArcanaResult(points: number) {
+    const p = Math.max(0, Math.floor(points))
+    this.state.player.statPoints += p
+    this.addMessage(`🌌 アルカナチャンス！ ステータスポイント +${p} 獲得！`)
+    fireWorldNotification(
+      'achievement',
+      '【女神の祝福】',
+      `${getDisplayName()}さんがアルカナチャンスで${p}ポイント獲得しました！`,
+    )
     this.updateWindowGameState()
   }
 

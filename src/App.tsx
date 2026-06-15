@@ -16,6 +16,7 @@ import { EventMsgBar } from './components/EventMsgBar'
 import { WorldTelop } from './components/WorldTelop'
 import { WorldLog } from './components/WorldLog'
 import { HowToPlay } from './components/HowToPlay'
+import { ArcanaRoulette } from './components/ArcanaRoulette'
 import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
@@ -159,6 +160,7 @@ function App() {
     <WorldTelop />
     <WorldLog />
     <HowToPlay />
+    <ArcanaRoulette />
     <Analytics />
     </>
   )

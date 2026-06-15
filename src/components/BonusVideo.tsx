@@ -71,23 +71,36 @@ export function BonusVideo() {
   }, [])
 
   const handleVideoEnded = useCallback(() => {
-    if (currentResultRef.current) {
-      window.applySlotEffect?.(currentResultRef.current)
-      currentResultRef.current = null
-    }
-    const next = queueRef.current.shift()
-    if (next) {
-      startBonus(next)
-    } else {
-      playingRef.current = false
-      const idle = idleRef.current
-      if (idle) {
-        idle.currentTime = 0
-        setMode('idle')
-        void idle.play().catch(() => {})
+    const ended = currentResultRef.current
+    currentResultRef.current = null
+
+    // 演出後の後処理（次キュー消化／アイドル復帰／スロット再開）
+    const finish = (skipEffect: boolean) => {
+      if (ended && !skipEffect) window.applySlotEffect?.(ended)
+      const next = queueRef.current.shift()
+      if (next) {
+        startBonus(next)
+      } else {
+        playingRef.current = false
+        const idle = idleRef.current
+        if (idle) {
+          idle.currentTime = 0
+          setMode('idle')
+          void idle.play().catch(() => {})
+        }
+        window.onSlotEffectApplied?.()
       }
-      window.onSlotEffectApplied?.()
     }
+
+    // アルカナチャンスは動画終了後、+30固定ではなく専用ルーレットへ。
+    // ポイント付与はルーレット側（applyArcanaResult）が行うので applySlotEffect はスキップ。
+    if (ended && ARCANA_RESULTS.has(ended) && window.showArcanaRoulette) {
+      setMode('idle') // 背後の動画/暗転を消す（ルーレットが全画面で覆う）
+      window.showArcanaRoulette(() => finish(true))
+      return
+    }
+
+    finish(false)
   }, [startBonus])
 
   const isArcana = ARCANA_RESULTS.has(mode)

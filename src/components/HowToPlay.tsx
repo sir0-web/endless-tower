@@ -132,7 +132,7 @@ export function HowToPlay() {
               <li><b>となりそろい</b> … スタミナを半分回復</li>
               <li><b className="htp-warn">ドクロぞろ目</b> … HPが半分に（要注意）</li>
               <li><b>ハズレ</b> … まれに毒やスタミナ減少</li>
-              <li><b className="htp-accent">アルカナチャンス</b> … 激レア演出！ ステータスポイント<b>+30</b></li>
+              <li><b className="htp-accent">アルカナチャンス</b> … 激レア演出！ 専用ルーレットで<b>大量ステータスポイント</b>獲得チャンス</li>
             </ul>
             <p className="htp-note"><b>AUTO / MANUAL</b> の切替や、回転待ちの<b>ストック</b>も。コインを貯めて勝負どころで一気に回すのも作戦です。</p>
           </Section>

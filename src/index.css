@@ -1161,6 +1161,282 @@ html, body {
   to   { opacity: 1; transform: translate(-50%, -50%) scale(1, 1.25); }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   アルカナチャンス専用ルーレット（動画後に出現する豪華リール）
+   ══════════════════════════════════════════════════════════════ */
+.ar-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.ar-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(60, 24, 110, 0.55) 0%, rgba(8, 4, 22, 0.92) 62%, rgba(0, 0, 0, 0.97) 100%);
+  animation: bv-arcana-fade 0.35s ease both;
+}
+
+.ar-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(14px, 2.6vh, 30px);
+  padding: clamp(18px, 3vw, 40px);
+  animation: ar-stage-pop 0.5s cubic-bezier(0.18, 0.9, 0.3, 1.25) both;
+}
+
+@keyframes ar-stage-pop {
+  from { opacity: 0; transform: scale(0.82); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ar-title {
+  margin: 0;
+  font-size: clamp(22px, 4.5vw, 44px);
+  font-weight: 900;
+  letter-spacing: 2px;
+  background: linear-gradient(90deg, #ffd24d, #ff77ff, #7fd8ff, #ffd24d);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px rgba(255, 150, 255, 0.55));
+  animation: ar-title-shimmer 3.5s linear infinite;
+}
+
+@keyframes ar-title-shimmer {
+  to { background-position: 300% 0; }
+}
+
+.ar-reels {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.8vw, 20px);
+}
+
+.ar-reel {
+  position: relative;
+  width: clamp(76px, 16vw, 150px);
+  height: clamp(96px, 21vw, 190px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 3px solid #5a3aa0;
+  background: linear-gradient(160deg, #1c0f3e 0%, #0c0622 100%);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.7), 0 6px 18px rgba(0, 0, 0, 0.5);
+  padding: 0;
+  cursor: default;
+  transition: transform 0.15s, box-shadow 0.2s, border-color 0.2s, filter 0.2s;
+}
+
+.ar-num {
+  font-size: clamp(48px, 11vw, 110px);
+  font-weight: 900;
+  line-height: 1;
+  color: #fff4d6;
+  text-shadow: 0 0 10px rgba(255, 220, 140, 0.55);
+}
+
+/* 操作可能なアクティブリール：スポットライト＋枠を強調 */
+.ar-reel.ar-active {
+  cursor: pointer;
+  border-color: #ffcf4d;
+  background: radial-gradient(circle at 50% 40%, #3a2570 0%, #160b34 75%);
+  box-shadow:
+    inset 0 0 22px rgba(255, 210, 90, 0.45),
+    0 0 28px rgba(255, 200, 70, 0.75),
+    0 0 60px rgba(255, 170, 50, 0.45);
+  animation: ar-active-pulse 0.9s ease-in-out infinite;
+}
+.ar-reel.ar-active:active { transform: scale(0.95); }
+.ar-reel.ar-active .ar-num {
+  color: #fff;
+  filter: blur(1.5px) brightness(1.4);
+}
+
+@keyframes ar-active-pulse {
+  0%, 100% { box-shadow: inset 0 0 22px rgba(255, 210, 90, 0.45), 0 0 24px rgba(255, 200, 70, 0.7), 0 0 50px rgba(255, 170, 50, 0.4); }
+  50%      { box-shadow: inset 0 0 26px rgba(255, 220, 110, 0.6), 0 0 40px rgba(255, 210, 90, 0.95), 0 0 80px rgba(255, 180, 60, 0.6); }
+}
+
+/* まだ順番が来ていないリール：フォグ＋ブラーで「対象外」を示す */
+.ar-reel.ar-fog {
+  border-color: #2a1c4a;
+  filter: blur(2.5px) brightness(0.4) saturate(0.5);
+  opacity: 0.65;
+}
+.ar-reel.ar-fog .ar-num { color: #6a5a90; }
+
+/* 停止確定したリール：クリアに結果表示＋金枠ロック */
+.ar-reel.ar-locked {
+  border-color: #ffdf6e;
+  background: linear-gradient(160deg, #2a1a08 0%, #120a02 100%);
+  box-shadow: inset 0 0 16px rgba(255, 200, 70, 0.4), 0 0 18px rgba(255, 190, 60, 0.55);
+  animation: ar-lock-pop 0.4s ease;
+}
+.ar-reel.ar-locked .ar-num {
+  color: #ffe8a8;
+  text-shadow: 0 0 14px rgba(255, 210, 100, 0.8);
+}
+
+@keyframes ar-lock-pop {
+  0%   { transform: scale(1.18); }
+  60%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
+/* アクティブリール上の点滅矢印 */
+.ar-arrow {
+  position: absolute;
+  top: -14%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(22px, 4vw, 40px);
+  color: #ffcf4d;
+  text-shadow: 0 0 12px rgba(255, 190, 60, 0.9);
+  animation: ar-arrow-bounce 0.7s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes ar-arrow-bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%      { transform: translateX(-50%) translateY(7px); }
+}
+
+.ar-guide {
+  margin: 0;
+  font-size: clamp(15px, 2.6vw, 24px);
+  font-weight: 800;
+  color: #ffe08a;
+  text-shadow: 0 0 10px rgba(255, 180, 50, 0.6);
+  animation: ar-guide-blink 1s ease-in-out infinite;
+}
+
+@keyframes ar-guide-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+.ar-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 1.4vh, 14px);
+}
+.ar-earned {
+  margin: 0;
+  font-size: clamp(26px, 5.5vw, 52px);
+  font-weight: 900;
+  color: #fff;
+  animation: ar-earned-pop 0.5s cubic-bezier(0.18, 0.9, 0.3, 1.4) both;
+}
+.ar-earned b {
+  font-size: 1.4em;
+  background: linear-gradient(90deg, #ffd24d, #ff8a3d);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 16px rgba(255, 190, 70, 0.8));
+}
+
+@keyframes ar-earned-pop {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* 結果スパークル */
+.ar-sparkle-origin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.ar-sparkle {
+  position: absolute;
+  border-radius: 50%;
+  background: #ffd24d;
+  box-shadow: 0 0 8px rgba(255, 210, 100, 0.9);
+  animation: ar-sparkle-fly var(--ar-dur) ease-out var(--ar-delay) both;
+}
+
+@keyframes ar-sparkle-fly {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.3); }
+  20%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--ar-tx), var(--ar-ty)) scale(1); }
+}
+
+/* 開始モーダル */
+.ar-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  animation: bv-arcana-fade 0.3s ease both;
+}
+.ar-modal-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 2.4vh, 22px);
+  padding: clamp(22px, 4vw, 44px) clamp(20px, 5vw, 50px);
+  border-radius: 18px;
+  border: 3px solid #ffcf4d;
+  background: linear-gradient(165deg, #241246 0%, #0e0726 100%);
+  box-shadow: 0 0 40px rgba(255, 190, 70, 0.5), inset 0 0 30px rgba(120, 60, 200, 0.3);
+  text-align: center;
+  max-width: 90vw;
+  animation: ar-stage-pop 0.4s cubic-bezier(0.18, 0.9, 0.3, 1.25) both;
+}
+.ar-modal-title {
+  margin: 0;
+  font-size: clamp(30px, 6.4vw, 58px);
+  font-weight: 900;
+  line-height: 1.25;
+  background: linear-gradient(90deg, #ffd24d, #ff77ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px rgba(255, 150, 255, 0.55));
+}
+.ar-start-btn {
+  margin-top: 4px;
+  padding: clamp(12px, 1.8vh, 18px) clamp(36px, 8vw, 70px);
+  border-radius: 999px;
+  border: none;
+  font-size: clamp(17px, 3.2vw, 26px);
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #2a1400;
+  background: linear-gradient(180deg, #ffe486 0%, #ffb43d 100%);
+  box-shadow: 0 6px 18px rgba(255, 150, 40, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  animation: ar-start-pulse 1.2s ease-in-out infinite;
+}
+.ar-start-btn:hover { transform: translateY(-2px); }
+.ar-start-btn:active { transform: scale(0.95); }
+
+@keyframes ar-start-pulse {
+  0%, 100% { box-shadow: 0 6px 18px rgba(255, 150, 40, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.6); }
+  50%      { box-shadow: 0 6px 28px rgba(255, 190, 70, 0.85), inset 0 1px 2px rgba(255, 255, 255, 0.6); }
+}
+
 /* ── ストップボタン row（リール直下の隙間） ── */
 .sc-stop-row {
   position: absolute;
