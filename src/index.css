@@ -3072,6 +3072,8 @@ html, body {
 .world-log-close:hover { color: #ffffff; }
 
 .world-log-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px 12px 12px;
 }
