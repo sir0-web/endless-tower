@@ -169,6 +169,7 @@ declare global {
     saveGame?: () => void
     warpFloor?: (floor: number) => void
     giveEquip?: (name?: string) => void
+    debugSkulporin?: () => void
     // ── グローバルUI ──
     showHowToPlay?: () => void
     showGameToast?: (message: string) => void
