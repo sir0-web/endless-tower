@@ -218,7 +218,7 @@ export function generateAreaBossFloors(): Record<number, string> {
 }
 
 function makeBoss(name: string, floor: number, hpMult: number, atkMult: number, defMult: number, prefix: string) {
-  const scale = 1 + floor * 0.1
+  const scale = (1 + floor * 0.15) / (1 + floor * 0.015)
   const baseHp  = 30 + floor * 5
   const baseAtk = 10 + floor * 2
   const baseDef = 5  + floor
@@ -319,7 +319,7 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
   for (let i = 0; i < count; i++) {
     const pos = floors[Math.floor(Math.random() * floors.length)]
     const base = available[Math.floor(Math.random() * available.length)]
-    const scale = (1 + floor * 0.08) * f1Mult
+    const scale = ((1 + floor * 0.1) / (1 + floor * 0.02)) * f1Mult
     enemies.push({
       id: `enemy_${i}_${Date.now()}`,
       position: { ...pos },
@@ -364,7 +364,7 @@ export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playe
 
   const count = Math.floor(candidates.length * 0.7)
   const f1Mult = floor <= 3 ? 0.6 : 1.0
-  const scale = (1 + floor * 0.08) * f1Mult
+  const scale = ((1 + floor * 0.1) / (1 + floor * 0.02)) * f1Mult
 
   return candidates.slice(0, count).map((pos, i) => {
     const base = available[Math.floor(Math.random() * available.length)]
