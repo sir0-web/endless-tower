@@ -118,8 +118,19 @@ export function AdminPanel() {
   const [repSelected, setRepSelected]   = useState<Set<number>>(new Set())
 
   // ── Stats ──
-  const [stats, setStats] = useState<{ totalDeaths: number; floorDist: [string,number][]; slotDist: [string,number][] } | null>(null)
+  const [stats, setStats] = useState<{ totalDeaths: number; totalKills: number; floorDist: [string,number][]; slotDist: [string,number][]; killDist: [string,number][] } | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
+
+  // ゲームのグローバルCSSがbody/htmlにoverflow:hiddenを設定しているためAdmin画面でスクロールを許可する
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'auto'
+    document.documentElement.style.overflow = 'auto'
+    return () => {
+      document.body.style.overflow = prev
+      document.documentElement.style.overflow = ''
+    }
+  }, [])
 
   const login = () => {
     if (!ADMIN_KEY) { alert('VITE_ADMIN_KEY 環境変数が未設定です'); return }
@@ -359,17 +370,26 @@ export function AdminPanel() {
   // ── Stats ──
   const loadStats = useCallback(async () => {
     setStats(null); setStatsError(null)
-    const [{ data: deaths, error: e1 }, { data: slots, error: e2 }] = await Promise.all([
+    const [{ data: deaths, error: e1 }, { data: slots, error: e2 }, { data: kills, error: e3 }] = await Promise.all([
       db.from('game_events').select('floor').eq('event_type', 'death').limit(10000),
       db.from('game_events').select('slot_result').eq('event_type', 'slot_result').not('slot_result', 'is', null).limit(10000),
+      db.from('game_events').select('enemy_name').eq('event_type', 'kill').limit(50000),
     ])
-    const err = e1 ?? e2
-    if (err) { setStatsError(`Supabaseエラー: ${err.message} (code: ${err.code})`); setStats({ totalDeaths: 0, floorDist: [], slotDist: [] }); return }
+    const err = e1 ?? e2 ?? e3
+    if (err) { setStatsError(`Supabaseエラー: ${err.message} (code: ${err.code})`); setStats({ totalDeaths: 0, totalKills: 0, floorDist: [], slotDist: [], killDist: [] }); return }
     const floorMap: Record<string, number> = {}
     for (const d of (deaths ?? [])) { const k = `${d.floor ?? '?'}F`; floorMap[k] = (floorMap[k] ?? 0) + 1 }
     const slotMap: Record<string, number> = {}
     for (const s of (slots ?? [])) { const k = s.slot_result ?? '?'; slotMap[k] = (slotMap[k] ?? 0) + 1 }
-    setStats({ totalDeaths: (deaths ?? []).length, floorDist: Object.entries(floorMap).sort((a, b) => parseInt(b[0]) - parseInt(a[0])), slotDist: Object.entries(slotMap).sort((a, b) => b[1] - a[1]) })
+    const killMap: Record<string, number> = {}
+    for (const k of (kills ?? [])) { const n = k.enemy_name ?? '不明'; killMap[n] = (killMap[n] ?? 0) + 1 }
+    setStats({
+      totalDeaths: (deaths ?? []).length,
+      totalKills:  (kills ?? []).length,
+      floorDist: Object.entries(floorMap).sort((a, b) => parseInt(b[0]) - parseInt(a[0])),
+      slotDist:  Object.entries(slotMap).sort((a, b) => b[1] - a[1]),
+      killDist:  Object.entries(killMap).sort((a, b) => b[1] - a[1]),
+    })
   }, [db])
 
   useEffect(() => {
@@ -958,9 +978,31 @@ export function AdminPanel() {
               </div>
             )}
             {!stats ? <p style={S.muted}>読み込み中…</p> : <>
-              <div style={S.statCard}>
-                <div style={S.statLabel}>総死亡回数</div>
-                <div style={S.statValue}>{stats.totalDeaths.toLocaleString()}</div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+                <div style={S.statCard}>
+                  <div style={S.statLabel}>総死亡回数</div>
+                  <div style={S.statValue}>{stats.totalDeaths.toLocaleString()}</div>
+                </div>
+                <div style={S.statCard}>
+                  <div style={S.statLabel}>総撃破数</div>
+                  <div style={S.statValue}>{stats.totalKills.toLocaleString()}</div>
+                </div>
+              </div>
+              <div style={S.section}>
+                <div style={S.sectionTitle}>撃破数ランキング（全敵種）</div>
+                {stats.killDist.length === 0
+                  ? <p style={S.muted}>データなし（killイベントがまだ記録されていません）</p>
+                  : stats.killDist.map(([name, count]) => {
+                      const maxCount = stats.killDist[0][1]
+                      return (
+                        <div key={name} style={S.distRow}>
+                          <span style={{ ...S.distLabel, width: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                          <div style={{ ...S.distBar, width: Math.max(4, Math.round(count / maxCount * 260)) }} />
+                          <span style={S.distCount}>{count.toLocaleString()}</span>
+                        </div>
+                      )
+                    })
+                }
               </div>
               <div style={S.section}>
                 <div style={S.sectionTitle}>死亡フロア分布（上位20）</div>

@@ -29,11 +29,13 @@ export function getPlayerId(): string {
 }
 
 // ── 行動ログ（バランス調整の統計用。fire-and-forget でゲーム進行を妨げない）──
-type GameEventType = 'floor_reached' | 'slot_result' | 'death'
+type GameEventType = 'floor_reached' | 'slot_result' | 'death' | 'kill'
 interface GameEventPayload {
   floor?: number
   level?: number
   slot_result?: string
+  enemy_name?: string
+  is_boss?: boolean
 }
 
 export function logEvent(eventType: GameEventType, payload: GameEventPayload = {}): void {

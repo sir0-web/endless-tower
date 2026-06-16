@@ -852,6 +852,7 @@ export class GameScene extends Phaser.Scene {
 
     this.checkLevelUp()
     window.onEnemyKilled?.()
+    logEvent('kill', { floor: this.state.player.floor, enemy_name: enemy.name, is_boss: enemy.isBoss })
   }
 
   /** 小さな破片を放射状に飛ばす汎用パーティクル（ヒット火花・撃破演出） */
