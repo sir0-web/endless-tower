@@ -299,7 +299,8 @@ export class GameScene extends Phaser.Scene {
         this.updateWindowGameState()
         console.log('[DEV] バッグに追加:', base.name)
       }
-      window.debugSkulporin = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).debugSkulporin = () => {
         if (this.state.enemies.some(e => e.isSkulporin)) {
           console.warn('[DEV] すかるぽりんはすでにマップにいます')
           return
