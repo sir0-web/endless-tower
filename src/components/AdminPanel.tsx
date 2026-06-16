@@ -21,6 +21,21 @@ interface Report {
   status: 'new' | 'read' | 'done'; created_at: string
 }
 
+async function adminDelete(table: string, ids: number[]): Promise<{ deleted?: number; error?: string }> {
+  try {
+    const res = await fetch('/api/admin-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table, ids, adminKey: ADMIN_KEY }),
+    })
+    const json = await res.json()
+    if (!res.ok) return { error: json.error ?? `HTTP ${res.status}` }
+    return json
+  } catch (e) {
+    return { error: String(e) }
+  }
+}
+
 const JST = 9 * 60 * 60 * 1000
 function fromJstInput(s: string): number { return new Date(s + ':00.000Z').getTime() - JST }
 function fmtJst(ms: number): string { return new Date(ms + JST).toISOString().replace('T', ' ').slice(0, 16) }
@@ -189,9 +204,9 @@ export function AdminPanel() {
 
   const deleteRanking = async (id: number) => {
     if (!confirm('このランキングエントリを削除しますか？')) return
-    const { data, error } = await db.from('rankings').delete().eq('id', id).select()
-    if (error) { setRMsg(`削除エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setRMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('rankings', [id])
+    if (error) { setRMsg(`削除エラー: ${error}`); return }
+    if (!deleted) { setRMsg('削除できませんでした'); return }
     setRMsg('削除しました ✓')
     setRankings(rs => rs.filter(r => r.id !== id))
   }
@@ -220,9 +235,9 @@ export function AdminPanel() {
 
   const deleteWorldLog = async (id: number) => {
     if (!confirm('このワールドログを削除しますか？')) return
-    const { data, error } = await db.from('world_notifications').delete().eq('id', id).select()
-    if (error) { setWlMsg(`削除エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setWlMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('world_notifications', [id])
+    if (error) { setWlMsg(`削除エラー: ${error}`); return }
+    if (!deleted) { setWlMsg('削除できませんでした'); return }
     setWlMsg('削除しました ✓')
     setWlogs(ls => ls.filter(l => l.id !== id))
   }
@@ -244,9 +259,9 @@ export function AdminPanel() {
 
   const deleteURanking = async (id: number) => {
     if (!confirm('削除しますか？')) return
-    const { data, error } = await db.from('rankings').delete().eq('id', id).select()
-    if (error) { setUMsg(`エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setUMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('rankings', [id])
+    if (error) { setUMsg(`エラー: ${error}`); return }
+    if (!deleted) { setUMsg('削除できませんでした'); return }
     setUMsg('ランキング削除 ✓')
     setURankings(rs => rs.filter(r => r.id !== id))
   }
@@ -262,9 +277,9 @@ export function AdminPanel() {
 
   const deleteUNotif = async (id: number) => {
     if (!confirm('削除しますか？')) return
-    const { data, error } = await db.from('world_notifications').delete().eq('id', id).select()
-    if (error) { setUMsg(`エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setUMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('world_notifications', [id])
+    if (error) { setUMsg(`エラー: ${error}`); return }
+    if (!deleted) { setUMsg('削除できませんでした'); return }
     setUMsg('ログ削除 ✓')
     setUNotifs(ns => ns.filter(n => n.id !== id))
   }
@@ -291,9 +306,9 @@ export function AdminPanel() {
 
   const deleteReport = async (id: number) => {
     if (!confirm('この報告を削除しますか？')) return
-    const { data, error } = await db.from('reports').delete().eq('id', id).select()
-    if (error) { setRepMsg(`エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setRepMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('reports', [id])
+    if (error) { setRepMsg(`エラー: ${error}`); return }
+    if (!deleted) { setRepMsg('削除できませんでした'); return }
     setRepMsg('削除しました ✓')
     setReports(rs => rs.filter(r => r.id !== id))
     if (repDetail?.id === id) setRepDetail(null)
@@ -303,37 +318,37 @@ export function AdminPanel() {
     const ids = [...rankSelected]
     if (ids.length === 0) return
     if (!confirm(`選択した ${ids.length} 件のランキングを削除しますか？`)) return
-    const { data, error } = await db.from('rankings').delete().in('id', ids).select()
-    if (error) { setRMsg(`削除エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setRMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('rankings', ids)
+    if (error) { setRMsg(`削除エラー: ${error}`); return }
+    if (!deleted) { setRMsg('削除できませんでした'); return }
     setRankings(rs => rs.filter(r => !ids.includes(r.id)))
     setRankSelected(new Set())
-    setRMsg(`${data.length} 件を削除しました ✓`)
+    setRMsg(`${deleted} 件を削除しました ✓`)
   }
 
   const bulkDeleteWorldLogs = async () => {
     const ids = [...wlSelected]
     if (ids.length === 0) return
     if (!confirm(`選択した ${ids.length} 件のログを削除しますか？`)) return
-    const { data, error } = await db.from('world_notifications').delete().in('id', ids).select()
-    if (error) { setWlMsg(`削除エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setWlMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('world_notifications', ids)
+    if (error) { setWlMsg(`削除エラー: ${error}`); return }
+    if (!deleted) { setWlMsg('削除できませんでした'); return }
     setWlogs(ls => ls.filter(l => !ids.includes(l.id)))
     setWlSelected(new Set())
-    setWlMsg(`${data.length} 件を削除しました ✓`)
+    setWlMsg(`${deleted} 件を削除しました ✓`)
   }
 
   const bulkDeleteReports = async () => {
     const ids = [...repSelected]
     if (ids.length === 0) return
     if (!confirm(`選択した ${ids.length} 件の報告を削除しますか？`)) return
-    const { data, error } = await db.from('reports').delete().in('id', ids).select()
-    if (error) { setRepMsg(`削除エラー: ${error.message}`); return }
-    if (!data || data.length === 0) { setRepMsg('削除できませんでした（RLSブロック）。接続設定でService Role Keyを入力してください。'); return }
+    const { deleted, error } = await adminDelete('reports', ids)
+    if (error) { setRepMsg(`エラー: ${error}`); return }
+    if (!deleted) { setRepMsg('削除できませんでした'); return }
     setReports(rs => rs.filter(r => !ids.includes(r.id)))
     if (repDetail && ids.includes(repDetail.id)) setRepDetail(null)
     setRepSelected(new Set())
-    setRepMsg(`${data.length} 件を削除しました ✓`)
+    setRepMsg(`${deleted} 件を削除しました ✓`)
   }
 
   const openRepDetail = async (r: Report) => {
