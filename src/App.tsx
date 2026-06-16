@@ -42,6 +42,7 @@ function App() {
   // キャンバス全幅化フラグ（スマホ）。ステータスバー/メッセージ枠が不要な非プレイ画面
   // （タイトル・ゲームオーバー・ランキング）でキャンバスを画面いっぱいに拡大する。初期はタイトルなので true。
   const [fullCanvas, setFullCanvas] = useState(true)
+  const [scrollLock, setScrollLock] = useState(false)
 
   // ウィンドウリサイズでスケール再計算 + Phaser canvas 更新
   useEffect(() => {
@@ -121,6 +122,15 @@ function App() {
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
   }, [fullCanvas])
 
+  // スクロールロック状態の監視（報告ボタンの有効/無効切替のため）
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      setScrollLock((e as CustomEvent<{ enabled: boolean }>).detail.enabled)
+    }
+    window.addEventListener('scroll-lock-change', onChange)
+    return () => window.removeEventListener('scroll-lock-change', onChange)
+  }, [])
+
   // スマホ: 通常レスポンシブ / PC: 固定サイズ＋スケール縮小
   const wrapperStyle = isMobile
     ? { width: '100%', height: '100%' } as const
@@ -149,6 +159,8 @@ function App() {
                 data-priority-tap
                 onClick={e => { e.stopPropagation(); window.showReport?.() }}
                 onTouchStart={e => e.stopPropagation()}
+                style={scrollLock ? { opacity: 0.35, pointerEvents: 'none' } : undefined}
+                tabIndex={scrollLock ? -1 : undefined}
                 title="報告・お問い合わせ"
               >
                 📬
