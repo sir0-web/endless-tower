@@ -43,8 +43,8 @@ export function VirtualJoystick() {
       if (!window.isGameSceneActive) return
       // scrollrockOFF: 全ボタン優先 / scrollrockON: priority-tap・モーダル内は優先、その他ボタンは無効化
       const prioritySelector = scrollLock
-        ? '[data-priority-tap], a, [class*="overlay"], [class*="modal"]'
-        : 'button, a, [role="button"]'
+        ? '[data-priority-tap], a, [class*="overlay"], [class*="modal"], [class*="world-log"], [class*="htp-"]'
+        : 'button, a, [role="button"], [class*="world-log"], [class*="htp-"]'
       if ((e.target as HTMLElement).closest(prioritySelector)) return
       const t = e.touches[0]
       baseRef.current = { x: t.clientX, y: t.clientY }
