@@ -626,12 +626,20 @@ export class GameScene extends Phaser.Scene {
     if (item.type === 'heal') {
       const sameCount = this.state.heals.filter(h => h.name === item.name).length
       if (sameCount >= 10) {
-        this.addMessage(`${item.name}を手に入れたが、いっぱいのため宝箱へ戻した・・・`)
-        return
+        if (item.coin) {
+          // コインは満タンでもそのまま即消費してスロットストック＋１
+          this.addMessage('もちものがいっぱいのため、取得した女神のコインをそのまま使った！')
+          this.showPickupNotif('もちものがいっぱいのため、取得した女神のコインをそのまま使った！')
+          window.spinSlotOnce?.()
+        } else {
+          this.addMessage(`${item.name}を手に入れたが、いっぱいのため宝箱へ戻した・・・`)
+          return
+        }
+      } else {
+        this.state.heals.push({ ...item, position: { x: 0, y: 0 } })
+        this.addMessage(`${item.name}を拾った！`)
+        this.showPickupNotif(`${item.name}を拾った！`)
       }
-      this.state.heals.push({ ...item, position: { x: 0, y: 0 } })
-      this.addMessage(`${item.name}を拾った！`)
-      this.showPickupNotif(`${item.name}を拾った！`)
     } else if (item.type === 'spell' && item.spellType) {
       const sameCount = this.state.spells.filter(s => s.name === item.name).length
       if (sameCount >= 10) {
