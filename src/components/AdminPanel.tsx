@@ -121,14 +121,24 @@ export function AdminPanel() {
   const [stats, setStats] = useState<{ totalDeaths: number; totalKills: number; floorDist: [string,number][]; slotDist: [string,number][]; killDist: [string,number][] } | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
 
-  // ゲームのグローバルCSSがbody/htmlにoverflow:hiddenを設定しているためAdmin画面でスクロールを許可する
+  // ゲームのグローバルCSSがhtml/body/#rootにoverflow:hidden+height:100%を設定しているためAdmin画面でスクロールを許可する
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'auto'
+    const root = document.getElementById('root')
+    const prevBodyOv = document.body.style.overflow
+    const prevBodyH  = document.body.style.height
+    const prevRootOv = root?.style.overflow ?? ''
+    const prevRootH  = root?.style.height  ?? ''
     document.documentElement.style.overflow = 'auto'
+    document.documentElement.style.height   = 'auto'
+    document.body.style.overflow = 'auto'
+    document.body.style.height   = 'auto'
+    if (root) { root.style.overflow = 'auto'; root.style.height = 'auto' }
     return () => {
-      document.body.style.overflow = prev
       document.documentElement.style.overflow = ''
+      document.documentElement.style.height   = ''
+      document.body.style.overflow = prevBodyOv
+      document.body.style.height   = prevBodyH
+      if (root) { root.style.overflow = prevRootOv; root.style.height = prevRootH }
     }
   }, [])
 
