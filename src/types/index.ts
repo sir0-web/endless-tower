@@ -106,6 +106,7 @@ export interface Enemy {
   luk: number
   name: string
   isBoss?: boolean
+  isSkulporin?: boolean
   slowedTurns: number
 }
 
@@ -175,6 +176,11 @@ declare global {
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
     showReport?: () => void
     showEventMessage?: (message: string, color?: string) => void
+    showSkulporinReward?: (
+      equips: Item[],
+      spells: Item[],
+      onAccept: () => void,
+    ) => void
     // ── イベントフロア施設 ──
     openFacility?: (kind: FacilityKind) => void
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null

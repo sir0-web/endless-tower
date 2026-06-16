@@ -18,6 +18,7 @@ import { WorldLog } from './components/WorldLog'
 import { HowToPlay } from './components/HowToPlay'
 import { ArcanaRoulette } from './components/ArcanaRoulette'
 import { ReportModal } from './components/ReportModal'
+import { SkulporinReward } from './components/SkulporinReward'
 import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
@@ -185,6 +186,7 @@ function App() {
     <WorldLog />
     <HowToPlay />
     <ArcanaRoulette />
+    <SkulporinReward />
     <ReportModal />
     <Analytics />
     </>

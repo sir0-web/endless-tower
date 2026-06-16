@@ -5,7 +5,7 @@ import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
-import { logEvent } from '../game/supabase'
+import { logEvent, getPlayerId } from '../game/supabase'
 import { fireWorldNotification, resetWorldNotifyDedup } from '../game/worldNotify'
 import { getDisplayName } from '../game/playerName'
 
@@ -58,6 +58,7 @@ const ENEMY_TEXTURE_MAP: Record<string, string> = {
   'ダークロード':        'darklord',
   'ファラオ':            'pharaoh',
   'モロク':              'molok',
+  'すかるぽりん':        'scullporin',
 }
 
 export class GameScene extends Phaser.Scene {
@@ -128,6 +129,12 @@ export class GameScene extends Phaser.Scene {
   private lowHpVignette: Phaser.GameObjects.Image | null = null
   private vignetteTween: Phaser.Tweens.Tween | null = null
   private vignetteTarget = 0
+
+  // ── すかるぽりん ──
+  private skulporinSpawnId: number | null = null
+  private skulporinEscapeAt: number | null = null
+  private skulporinHeartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private skulporinEscapeTimer: ReturnType<typeof setInterval> | null = null
 
   constructor() {
     super({ key: 'GameScene' })
@@ -229,6 +236,7 @@ export class GameScene extends Phaser.Scene {
       ['horu',            '/assets/characters/enemies/horu.png'],
       ['master',          '/assets/characters/enemies/master.png'],
       ['maho',            '/assets/characters/enemies/maho.png'],
+      ['scullporin',      '/assets/characters/enemies/scullporin.png'],
     ]
     for (const [key, path] of enemyImages) this.load.image(key, path)
 
@@ -264,6 +272,11 @@ export class GameScene extends Phaser.Scene {
     window.runRefineChallenge   = (slot, sacrificeId) => this.runRefineChallenge(slot, sacrificeId)
     window.runShadowChallenge   = ()                  => this.runShadowChallenge()
     window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
+
+    // すかるぽりん heartbeat（30秒ごと）
+    this.skulporinHeartbeatTimer = setInterval(() => this.sendSkulporinHeartbeat(), 30_000)
+    // 逃走タイマー監視（1秒ごと）
+    this.skulporinEscapeTimer = setInterval(() => this.checkSkulporinEscape(), 1_000)
 
     // 開発サーバー限定：コンソールから warpFloor(階数) で好きな階に飛べる
     if (import.meta.env.DEV) {
@@ -740,6 +753,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private attackEnemy(enemy: typeof this.state.enemies[0]) {
+    // すかるぽりん専用戦闘（命中率10%、ヒット時は必ず1ダメージ）
+    if (enemy.isSkulporin) {
+      this.attackSkulporin(enemy)
+      return
+    }
+
     const { player } = this.state
     const effectiveAtk  = Math.floor(player.str * 1.5) + player.level
     const attackCount   = Math.min(5, Math.floor(player.agi / 50) + 1)
@@ -997,6 +1016,29 @@ export class GameScene extends Phaser.Scene {
 
       if (chebDist === 1 && !diagAttackBlocked) {
         // 隣接（斜め含む。ただし壁角越しの斜めは不可）→攻撃
+
+        // すかるぽりん専用攻撃（最大HPの10%の固定ダメージ）
+        if (enemy.isSkulporin) {
+          const dmg = Math.max(1, Math.floor(player.maxHp * 0.1))
+          player.hp = Math.max(0, player.hp - dmg)
+          playDamage()
+          const eg2 = this.enemyGraphics.get(enemy.id)
+          if (eg2 && eg2.visible) {
+            this.tweens.add({
+              targets: eg2,
+              x: eg2.x + Math.sign(edx) * this.rts * 0.28,
+              y: eg2.y + Math.sign(edy) * this.rts * 0.28,
+              duration: 80, yoyo: true, ease: 'Quad.Out',
+            })
+          }
+          this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true })
+          this.flashPlayer()
+          this.cameras.main.shake(180, 0.010)
+          this.addMessage(`すかるぽりんから${dmg}ダメージ！（最大HPの10%）`)
+          if (player.hp <= 0) { this.gameOver(); return }
+          continue
+        }
+
         const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
         const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
         const effectiveDef = player.vit + Math.floor(player.level / 2)
@@ -1339,6 +1381,9 @@ export class GameScene extends Phaser.Scene {
       this.showMonsterHouseEffect()
       fireWorldNotification('world', '【緊急速報】', `${getDisplayName()}さんがモンスターハウスに遭遇しました！`, `mhouse:${floor}`)
     }
+
+    // フロア入場時にすかるぽりんチェック（heartbeatを即時実行）
+    void this.sendSkulporinHeartbeat()
   }
 
   // ── イベントフロア（ベースキャンプ「あるかなひろば」）──
@@ -1565,7 +1610,226 @@ export class GameScene extends Phaser.Scene {
   shutdown() {
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
     if (this.animatingTimer) { clearTimeout(this.animatingTimer); this.animatingTimer = null }
+    if (this.skulporinHeartbeatTimer) { clearInterval(this.skulporinHeartbeatTimer); this.skulporinHeartbeatTimer = null }
+    if (this.skulporinEscapeTimer) { clearInterval(this.skulporinEscapeTimer); this.skulporinEscapeTimer = null }
   }
+
+  // ─────────────────────────────────────────────────────────
+  // すかるぽりん
+  // ─────────────────────────────────────────────────────────
+
+  private async sendSkulporinHeartbeat(): Promise<void> {
+    if (this.isGameOver || this.isEventFloor) return
+    const { player } = this.state
+    try {
+      const res = await fetch('/api/skulporin-heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          player_id: getPlayerId(),
+          player_name: getDisplayName(),
+          floor: player.floor,
+        }),
+      })
+      if (!res.ok) return
+      const { spawn } = await res.json()
+      this.handleSkulporinSpawnResponse(spawn)
+    } catch {
+      // fire-and-forget
+    }
+  }
+
+  private handleSkulporinSpawnResponse(spawn: {
+    id: number
+    target_floor: number
+    target_player_id: string
+    escapes_at: string
+    status: string
+  } | null): void {
+    if (!spawn || spawn.status !== 'active') return
+    if (spawn.target_player_id !== getPlayerId()) return
+    if (spawn.target_floor !== this.state.player.floor) return
+
+    // すでにマップに存在する場合はスキップ
+    if (this.state.enemies.some(e => e.isSkulporin)) return
+
+    // 逃走タイムスタンプを保存
+    this.skulporinSpawnId  = spawn.id
+    this.skulporinEscapeAt = new Date(spawn.escapes_at).getTime()
+
+    this.spawnSkulporinOnFloor()
+  }
+
+  private spawnSkulporinOnFloor(): void {
+    const { map, player } = this.state
+    // プレイヤーから離れたフロアタイルをランダム選択
+    const floors: { x: number; y: number }[] = []
+    for (let y = 0; y < map.length; y++) {
+      for (let x = 0; x < map[y].length; x++) {
+        if (map[y][x] === 'floor') {
+          const dist = Math.abs(x - player.position.x) + Math.abs(y - player.position.y)
+          if (dist >= 5) floors.push({ x, y })
+        }
+      }
+    }
+    if (floors.length === 0) return
+    const pos = floors[Math.floor(Math.random() * floors.length)]
+
+    this.state.enemies.push({
+      id: 'skulporin_active',
+      name: 'すかるぽりん',
+      position: { ...pos },
+      hp: 5,
+      maxHp: 5,
+      attack: 0,
+      defense: 0,
+      str: 0,
+      vit: 0,
+      agi: 3,
+      luk: 0,
+      slowedTurns: 0,
+      isSkulporin: true,
+    })
+
+    this.addMessage('【すかるぽりんが出現した！】命中率10%。倒せば豪華報酬！3分後に逃げてしまう！')
+    this.renderMap()
+  }
+
+  private attackSkulporin(enemy: import('../types').Enemy): void {
+    if (Math.random() >= 0.1) {
+      this.addMessage('すかるぽりんへの攻撃がはずれた！')
+      this.popDamageNumber(enemy.position.x, enemy.position.y, '', { miss: true })
+      return
+    }
+    enemy.hp = Math.max(0, enemy.hp - 1)
+    this.popDamageNumber(enemy.position.x, enemy.position.y, 1, {})
+    this.flashSprite(enemy.id)
+    const eg = this.enemyGraphics.get(enemy.id)
+    if (eg) this.spawnBurst(eg.x, eg.y, { color: 0x9966ff, count: 5, speed: this.rts * 0.7 })
+    this.addMessage(`すかるぽりんに1ダメージ！（残りHP: ${enemy.hp}/5）`)
+
+    if (enemy.hp <= 0) {
+      this.killSkulporin(enemy)
+    }
+  }
+
+  private killSkulporin(enemy: import('../types').Enemy): void {
+    this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
+
+    // API に討伐を通知（fire-and-forget）
+    const spawnId = this.skulporinSpawnId
+    if (spawnId !== null) {
+      void fetch('/api/skulporin-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'kill',
+          spawn_id: spawnId,
+          player_name: getDisplayName(),
+          player_id: getPlayerId(),
+        }),
+      }).catch(() => {})
+    }
+    this.skulporinSpawnId  = null
+    this.skulporinEscapeAt = null
+
+    // 経験値なし・コインなし（代わりに下の報酬ポップアップ）
+    this.addMessage('すかるぽりんを倒した！豪華な報酬をゲット！')
+
+    // 報酬をランダム選択
+    const equips = this.pickSkulporinEquips(3)
+    const spells = this.pickSkulporinSpells(3)
+
+    window.showSkulporinReward?.(equips, spells, () => {
+      // スペル追加
+      for (const sp of spells) {
+        const same = this.state.spells.filter(s => s.name === sp.name).length
+        if (same < 10) {
+          this.state.spells.push({ ...sp })
+        }
+      }
+      // 装備品をバッグへ
+      for (const eq of equips) {
+        this.state.bag.push({ ...eq })
+      }
+      this.addMessage(`報酬を受け取った！バッグを確認してください。`)
+      this.updateWindowGameState()
+      // アルカナチャンス
+      window.showArcanaRoulette?.(() => {})
+    })
+  }
+
+  private handleSkulporinEscape(): void {
+    const spawnId = this.skulporinSpawnId
+    this.state.enemies = this.state.enemies.filter(e => !e.isSkulporin)
+    this.skulporinSpawnId  = null
+    this.skulporinEscapeAt = null
+
+    if (spawnId !== null) {
+      void fetch('/api/skulporin-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'escape', spawn_id: spawnId, player_id: getPlayerId() }),
+      }).catch(() => {})
+    }
+    this.addMessage('すかるぽりんは闇の中に消えていった...')
+    this.renderMap()
+  }
+
+  private checkSkulporinEscape(): void {
+    if (this.skulporinEscapeAt === null) return
+    if (Date.now() < this.skulporinEscapeAt) return
+    if (!this.state.enemies.some(e => e.isSkulporin)) {
+      // すでに倒されていた場合はリセットのみ
+      this.skulporinEscapeAt = null
+      this.skulporinSpawnId  = null
+      return
+    }
+    this.handleSkulporinEscape()
+  }
+
+  private pickSkulporinEquips(count: number): import('../types').Item[] {
+    const pool = [...EQUIP_ITEMS]
+    const result: import('../types').Item[] = []
+    for (let i = 0; i < count && pool.length > 0; i++) {
+      const idx = Math.floor(Math.random() * pool.length)
+      const base = pool.splice(idx, 1)[0]
+      result.push({
+        id: `skulporin_eq_${Date.now()}_${i}`,
+        name: base.name,
+        type: 'equip',
+        position: { x: 0, y: 0 },
+        equipSlot: base.equipSlot,
+        hpBonus:  base.hpBonus,
+        strBonus: base.strBonus,
+        agiBonus: base.agiBonus,
+        dexBonus: base.dexBonus,
+        intBonus: base.intBonus,
+        vitBonus: base.vitBonus,
+        lukBonus: base.lukBonus,
+      })
+    }
+    return result
+  }
+
+  private pickSkulporinSpells(count: number): import('../types').Item[] {
+    const pool = [...SPELL_ITEMS]
+    const result: import('../types').Item[] = []
+    for (let i = 0; i < count && pool.length > 0; i++) {
+      const idx = Math.floor(Math.random() * pool.length)
+      const base = pool.splice(idx, 1)[0]
+      result.push({
+        id: `skulporin_sp_${Date.now()}_${i}`,
+        name: base.name,
+        type: 'spell',
+        position: { x: 0, y: 0 },
+        spellType: base.spellType,
+      })
+    }
+    return result
+  }
+
+  // ─────────────────────────────────────────────────────────
 
   private gameOver() {
     if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
@@ -2293,7 +2557,7 @@ export class GameScene extends Phaser.Scene {
         // 透過パディング補正でサイズ指定するテクスチャ
         // heroSized: 可視部分が主人公（1.25×1.38タイル）と同サイズになるよう補正
         const fracSized: Record<string, number> = { deviling: 1.25, masterring: 1.25 }
-        const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'wanderwolf', 'kingdramo']
+        const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'wanderwolf', 'kingdramo', 'scullporin']
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
           if (heroSized.includes(textureKey)) {
             const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
