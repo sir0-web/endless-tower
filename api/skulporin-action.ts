@@ -32,14 +32,14 @@ export default async function handler(req: any, res: any) {
 
   const notif = action === 'kill'
     ? {
-        type: 'boss',
-        title: '【すかるぽりん討伐！】',
-        message: `${player_name ?? '冒険者'}さんがすかるぽりんを討伐しました！豪華報酬ゲット！`,
+        type: 'event',
+        title: '[緊急]すかるぽりんの討伐に成功しました！',
+        message: `${player_name ?? '冒険者'}さんがすかるぽりんを討伐しました！ありがとうございます！`,
       }
     : {
         type: 'event',
-        title: '【すかるぽりん逃走...】',
-        message: 'すかるぽりんは闇の中に消えていきました...次は必ず！',
+        title: '[緊急]すかるぽりんが逃走しました・・・！',
+        message: 'すかるぽりんはどこかに逃走したようです、次に出現した際は必ず討伐しましょう！',
       }
 
   await db.from('world_notifications').insert({

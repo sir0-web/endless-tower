@@ -102,8 +102,8 @@ export default async function handler(req: any, res: any) {
   // 7. ワールド通知
   await db.from('world_notifications').insert({
     type: 'event',
-    title: '【緊急】すかるぽりん出現！',
-    message: 'どこかのフロアに「すかるぽりん」が現れました！倒せた冒険者には豪華な報酬が！急いで！',
+    title: '[緊急]すかるぽりんが出現しました！',
+    message: 'どこかのフロアに「すかるぽりん」が出現したようです！冒険者の皆さんは至急討伐に向かってください！',
     player_name: 'SYSTEM',
     player_id: 'system',
   })

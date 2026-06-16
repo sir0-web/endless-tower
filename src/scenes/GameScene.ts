@@ -299,8 +299,20 @@ export class GameScene extends Phaser.Scene {
         this.updateWindowGameState()
         console.log('[DEV] バッグに追加:', base.name)
       }
+      window.debugSkulporin = () => {
+        if (this.state.enemies.some(e => e.isSkulporin)) {
+          console.warn('[DEV] すかるぽりんはすでにマップにいます')
+          return
+        }
+        this.skulporinSpawnId  = -1
+        this.skulporinEscapeAt = Date.now() + 3 * 60 * 1000
+        this.spawnSkulporinOnFloor()
+        fireWorldNotification('event', '[緊急]すかるぽりんが出現しました！', 'どこかのフロアに「すかるぽりん」が出現したようです！冒険者の皆さんは至急討伐に向かってください！')
+        console.log('[DEV] すかるぽりんを強制スポーンしました')
+      }
       console.log('[DEV] warpFloor(階数) で好きな階にワープできます。例: warpFloor(10)')
       console.log('[DEV] giveEquip("装備名") でバッグに装備を追加。引数なしでランダム。')
+      console.log('[DEV] debugSkulporin() ですかるぽりんを強制スポーン。')
       console.log('[DEV] 装備一覧:', EQUIP_ITEMS.map(e => e.name).join(', '))
     }
 
