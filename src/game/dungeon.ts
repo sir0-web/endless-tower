@@ -356,13 +356,13 @@ export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playe
   const available = ENEMY_TABLE.filter(e => e.minFloor <= floor && e.maxFloor >= floor)
   if (available.length === 0 || candidates.length === 0) return []
 
-  // シャッフルして70%を使用
+  // シャッフルして最大30体（スマホ描画負荷対策）
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]]
   }
 
-  const count = Math.floor(candidates.length * 0.7)
+  const count = Math.min(30, Math.floor(candidates.length * 0.7))
   const f1Mult = floor <= 3 ? 0.6 : 1.0
   const scale = ((1 + floor * 0.1) / (1 + floor * 0.02)) * f1Mult
 

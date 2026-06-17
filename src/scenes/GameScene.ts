@@ -2571,7 +2571,13 @@ export class GameScene extends Phaser.Scene {
       const barW = rts - 2
       const barH = enemy.isBoss ? Math.max(4, Math.round(8 * rts / TILE_SIZE)) : Math.max(2, Math.round(4 * rts / TILE_SIZE))
 
+      // 視界外の敵はスプライト・HPバーを生成しない（描画負荷削減）
+      // ただし既に生成済みのものはそのまま位置更新する
       let g = this.enemyGraphics.get(enemy.id)
+      if (!g && !vis) {
+        // 視界外かつ未生成 → スキップ（次に視界内に入ったとき生成）
+        continue
+      }
       if (!g) {
         const baseName   = enemy.name.replace(/^【[^】]+】/, '')
         const textureKey = ENEMY_TEXTURE_MAP[baseName]
@@ -2608,8 +2614,13 @@ export class GameScene extends Phaser.Scene {
         this.enemyGraphics.set(enemy.id, g)
       }
 
-      // HPバー（敵の真下。ノーマル敵は負傷時のみ表示してノイズを減らす）
+      // HPバー（敵の真下。ノーマル敵は負傷時のみ表示。視界外は生成しない）
       let bar = this.enemyHpBars.get(enemy.id)
+      if (!bar && !vis) {
+        // 視界外かつ未生成 → バーなしで続行
+        g.setVisible(false)
+        continue
+      }
       if (!bar) {
         const bg = this.add.rectangle(0, 0, barW, barH, 0x660000).setDepth(5)
         const fg = this.add.rectangle(0, 0, barW, barH, 0x00ff00).setDepth(6)
