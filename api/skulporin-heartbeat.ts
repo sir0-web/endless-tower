@@ -81,7 +81,7 @@ export default async function handler(req: any, res: any) {
 
   if (error || !newSpawn) {
     console.error('skulporin spawn insert error:', error)
-    return res.json({ spawn: null })
+    return res.json({ spawn: null, _debug: error?.message ?? 'no data' })
   }
 
   // 6. ワールド通知

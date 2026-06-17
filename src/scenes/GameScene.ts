@@ -1653,8 +1653,9 @@ export class GameScene extends Phaser.Scene {
         }),
       })
       if (!res.ok) return
-      const { spawn } = await res.json()
-      this.handleSkulporinSpawnResponse(spawn)
+      const json = await res.json()
+      console.log('[skulporin] heartbeat:', JSON.stringify(json))
+      this.handleSkulporinSpawnResponse(json.spawn)
     } catch {
       // fire-and-forget
     }
