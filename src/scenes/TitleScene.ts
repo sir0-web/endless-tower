@@ -104,9 +104,10 @@ export class TitleScene extends Phaser.Scene {
 
   private startGame() {
     if (hasSave()) {
+      this.input.enabled = false
       window.showResumeConfirm?.(
-        () => { this.fadeToScene('GameScene') },
-        () => { clearSave(); this.fadeToScene('GameScene') }
+        () => { this.input.enabled = true; this.fadeToScene('GameScene') },
+        () => { this.input.enabled = true; clearSave(); this.fadeToScene('GameScene') }
       )
     } else {
       this.fadeToScene('GameScene')
