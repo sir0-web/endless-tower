@@ -123,6 +123,7 @@ export class GameScene extends Phaser.Scene {
   // 描画タイルサイズ（シーン起動時に確定。ワールド座標 = タイル座標 × rts）
   private rts = TILE_SIZE
   private lastMoveAt = 0          // キーリピート抑制（移動テンポ制御）
+  private lastActionWasAttack = false  // 攻撃後のキーリピートによる意図しない移動防止
   private snapNextRender = false  // フロア切替直後はトゥイーンせず即時配置＋カメラスナップ
   private stairsGlow: Phaser.GameObjects.Arc | null = null
   private stairsGlowPos: import('../types').Position | null = null
@@ -167,8 +168,9 @@ export class GameScene extends Phaser.Scene {
     this.isEventFloor       = false
     this.eventFacilities    = []
     this.rts                = window.innerWidth < 768 ? Math.round(TILE_SIZE * 1.5) : TILE_SIZE
-    this.lastMoveAt         = 0
-    this.snapNextRender     = false
+    this.lastMoveAt            = 0
+    this.lastActionWasAttack   = false
+    this.snapNextRender        = false
     this.stairsGlow         = null
     this.stairsGlowPos      = null
     this.lowHpVignette      = null
@@ -549,9 +551,12 @@ export class GameScene extends Phaser.Scene {
     if (enemy) {
       this.attackEnemy(enemy)
       didAttack = true
-      // 敵を倒した直後は長押しによる意図しない移動を防ぐためクールダウンを延長
+      this.lastActionWasAttack = true
       if (enemy.hp <= 0) this.lastMoveAt = performance.now() + 300
     } else {
+      // キーリピート中、直前の行動が攻撃だった場合は移動をブロック（一度離して押し直す必要がある）
+      if (event.repeat && this.lastActionWasAttack) return
+      this.lastActionWasAttack = false
       player.position.x = nx
       player.position.y = ny
 
