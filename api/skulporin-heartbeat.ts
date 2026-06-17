@@ -12,7 +12,7 @@ export default async function handler(req: any, res: any) {
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!SUPABASE_URL || !SERVICE_KEY) {
     console.error('[skulporin] env missing:', { SUPABASE_URL: !!SUPABASE_URL, SERVICE_KEY: !!SERVICE_KEY })
-    return res.status(500).json({ spawn: null, _debug: 'env missing' })
+    return res.json({ spawn: null, _debug: 'env missing: check Vercel env vars' })
   }
 
   const { player_id, player_name, floor } = req.body ?? {}
@@ -103,6 +103,6 @@ export default async function handler(req: any, res: any) {
 
   } catch (e: any) {
     console.error('[skulporin] unhandled error:', e)
-    return res.status(500).json({ spawn: null, _debug: `exception: ${e?.message}` })
+    return res.json({ spawn: null, _debug: `exception: ${e?.message}` })
   }
 }
