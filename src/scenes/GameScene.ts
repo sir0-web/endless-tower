@@ -549,6 +549,8 @@ export class GameScene extends Phaser.Scene {
     if (enemy) {
       this.attackEnemy(enemy)
       didAttack = true
+      // 敵を倒した直後は長押しによる意図しない移動を防ぐためクールダウンを延長
+      if (enemy.hp <= 0) this.lastMoveAt = performance.now() + 300
     } else {
       player.position.x = nx
       player.position.y = ny
