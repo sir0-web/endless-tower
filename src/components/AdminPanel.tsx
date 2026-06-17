@@ -498,7 +498,8 @@ export function AdminPanel() {
     if (!evMonster)  { setEvMsg('モンスターを選択してください'); return }
     const p = onlinePlayers.find(o => o.player_id === evTargetId)
     const entry = MONSTER_REGISTRY.find(m => m.name === evMonster)
-    const floorNum = evFloor.trim() ? parseInt(evFloor, 10) : (p?.floor ?? null)
+    const parsedFloor = evFloor.trim() ? parseInt(evFloor, 10) : null
+    const floorNum = parsedFloor != null ? Math.max(1, parsedFloor) : (p?.floor ?? null)
     await postEvent({
       action: 'spawn_monster',
       target_player_id: evTargetId,
@@ -777,7 +778,7 @@ export function AdminPanel() {
                   </div>
                   <div>
                     <label style={S.label}>出現フロア</label>
-                    <input type="number" value={evFloor} onChange={e => setEvFloor(e.target.value)} placeholder="現在階" style={{ ...S.input, width: 100 }} />
+                    <input type="number" min="1" value={evFloor} onChange={e => setEvFloor(e.target.value === '' ? '' : String(Math.max(1, parseInt(e.target.value, 10) || 1)))} placeholder="現在階" style={{ ...S.input, width: 100 }} />
                   </div>
                   <button onClick={fireSpawnMonster} disabled={!evTargetId} style={S.btnPrimary}>⚡ 出現させる</button>
                 </div>
