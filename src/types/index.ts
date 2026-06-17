@@ -176,6 +176,7 @@ declare global {
     addWorldLogMessage?: (text: string) => void
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
     showReport?: () => void
+    triggerSkulporinCheck?: () => void
     showEventMessage?: (message: string, color?: string) => void
     showSkulporinReward?: (
       equips: Item[],

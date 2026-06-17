@@ -277,6 +277,9 @@ export class GameScene extends Phaser.Scene {
     window.runShadowChallenge   = ()                  => this.runShadowChallenge()
     window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
 
+    // ADMINパネルからの即時チェック用（強制出現後に即反映）
+    window.triggerSkulporinCheck = () => { void this.sendSkulporinHeartbeat() }
+
     // すかるぽりん heartbeat（30秒ごと）
     this.skulporinHeartbeatTimer = setInterval(() => this.sendSkulporinHeartbeat(), 30_000)
     // 逃走タイマー監視（1秒ごと）
@@ -1643,6 +1646,7 @@ export class GameScene extends Phaser.Scene {
     if (this.animatingTimer) { clearTimeout(this.animatingTimer); this.animatingTimer = null }
     if (this.skulporinHeartbeatTimer) { clearInterval(this.skulporinHeartbeatTimer); this.skulporinHeartbeatTimer = null }
     if (this.skulporinEscapeTimer) { clearInterval(this.skulporinEscapeTimer); this.skulporinEscapeTimer = null }
+    window.triggerSkulporinCheck = undefined
   }
 
   // ─────────────────────────────────────────────────────────

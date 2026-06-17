@@ -477,7 +477,8 @@ export function AdminPanel() {
 
   const fireSkulporin = async () => {
     if (!confirm('すかるぽりんを全プレイヤーに強制出現させますか？')) return
-    await postEvent({ action: 'skulporin' })
+    const ok = await postEvent({ action: 'skulporin' })
+    if (ok) window.triggerSkulporinCheck?.()
   }
 
   const fireMonsterHouse = async () => {
