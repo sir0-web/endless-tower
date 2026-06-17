@@ -21,7 +21,8 @@ export default async function handler(req: any, res: any) {
   if (!serviceKey)
     return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY が Vercel 環境変数に未設定です' })
 
-  const db = createClient(process.env.VITE_SUPABASE_URL!, serviceKey, {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://ovutdzjddrwbguwjwmuw.supabase.co'
+  const db = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
   })
 

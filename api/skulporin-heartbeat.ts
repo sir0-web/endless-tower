@@ -7,12 +7,12 @@ const MAX_DAILY_SPAWNS   = 50                // 1日の最大スポーン数
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  // 環境変数チェック
-  const SUPABASE_URL = process.env.VITE_SUPABASE_URL
+  // SupabaseのURLは公開値。Vercel実行時に VITE_ 変数が無い場合のフォールバックを持つ。
+  const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://ovutdzjddrwbguwjwmuw.supabase.co'
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!SUPABASE_URL || !SERVICE_KEY) {
-    console.error('[skulporin] env missing:', { SUPABASE_URL: !!SUPABASE_URL, SERVICE_KEY: !!SERVICE_KEY })
-    return res.json({ spawn: null, _debug: 'env missing: check Vercel env vars' })
+  if (!SERVICE_KEY) {
+    console.error('[skulporin] SERVICE_KEY missing')
+    return res.json({ spawn: null, _debug: 'SUPABASE_SERVICE_ROLE_KEY missing in Vercel' })
   }
 
   const { player_id, player_name, floor } = req.body ?? {}

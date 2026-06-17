@@ -9,7 +9,14 @@
       "PowerShell(\\(Get-Command rembg\\).Source)",
       "Bash(npm run *)",
       "Bash(git push *)",
-      "Skill(run)"
+      "Skill(run)",
+      "Bash(node -e ' *)",
+      "Bash(npx --yes playwright screenshot --viewport-size=1280,880 --wait-for-timeout=1500 http://localhost:5174/ /tmp/full.png)",
+      "Bash(cp /tmp/measure.js ./_measure.cjs)",
+      "Bash(node ./_measure.cjs)",
+      "Bash(pip list *)",
+      "Bash(npm i *)",
+      "Bash(npx vite *)"
     ]
   }
 }
