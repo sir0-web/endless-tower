@@ -1725,15 +1725,19 @@ export class GameScene extends Phaser.Scene {
       return
     }
     const { map, player } = this.state
-    const floors: { x: number; y: number }[] = []
+    const inView:   { x: number; y: number }[] = []
+    const fallback: { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
-        if (map[y][x] === 'floor') {
-          const dist = Math.abs(x - player.position.x) + Math.abs(y - player.position.y)
-          if (dist >= 4) floors.push({ x, y })
-        }
+        if (map[y][x] !== 'floor') continue
+        const dx = x - player.position.x
+        const dy = y - player.position.y
+        const distSq = dx * dx + dy * dy
+        if (distSq >= 1 && distSq <= VISION_RADIUS * VISION_RADIUS) inView.push({ x, y })
+        else if (distSq > VISION_RADIUS * VISION_RADIUS) fallback.push({ x, y })
       }
     }
+    const floors = inView.length > 0 ? inView : fallback
     if (floors.length === 0) return
     const pos = floors[Math.floor(Math.random() * floors.length)]
     const enemy = behavior === 'boss'
