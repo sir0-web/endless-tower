@@ -72,6 +72,8 @@ export default async function handler(req: any, res: any) {
       target_floor: floor,
       target_player_id: player_id,
       spawn_date: today,
+      status: 'active',
+      spawned_at: now.toISOString(),
       escapes_at: escapesAt.toISOString(),
     })
     .select()

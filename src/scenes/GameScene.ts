@@ -1668,8 +1668,6 @@ export class GameScene extends Phaser.Scene {
     status: string
   } | null): void {
     if (!spawn || spawn.status !== 'active') return
-    if (spawn.target_player_id !== getPlayerId()) return
-    if (spawn.target_floor !== this.state.player.floor) return
 
     // すでにマップに存在する場合はスキップ
     if (this.state.enemies.some(e => e.isSkulporin)) return
