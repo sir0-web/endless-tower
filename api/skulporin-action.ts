@@ -16,7 +16,8 @@ export default async function handler(req: any, res: any) {
 
   const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
-  const { error } = await db
+  // status='active' を実際に変更できた1人だけが通知を出す（複数プレイヤーの重複通知を防ぐ）
+  const { data: updated, error } = await db
     .from('skulporin_spawns')
     .update({
       status: action === 'kill' ? 'defeated' : 'escaped',
@@ -24,10 +25,16 @@ export default async function handler(req: any, res: any) {
     })
     .eq('id', spawn_id)
     .eq('status', 'active')
+    .select('id')
 
   if (error) {
     console.error('skulporin action error:', error)
     return res.status(500).json({ error: error.message })
+  }
+
+  // 0行マッチ（すでに他プレイヤーが討伐/逃走を確定済み）→ 通知を出さずに終了
+  if (!updated || updated.length === 0) {
+    return res.json({ ok: true, duplicate: true })
   }
 
   const notif = action === 'kill'
