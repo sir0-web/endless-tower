@@ -7,12 +7,11 @@ const MAX_DAILY_SPAWNS   = 50                // 1日の最大スポーン数
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  // SupabaseのURLは公開値。Vercel実行時に VITE_ 変数が無い場合のフォールバックを持つ。
   const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://ovutdzjddrwbguwjwmuw.supabase.co'
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!SERVICE_KEY) {
     console.error('[skulporin] SERVICE_KEY missing')
-    return res.json({ spawn: null, _debug: 'SUPABASE_SERVICE_ROLE_KEY missing in Vercel' })
+    return res.json({ spawn: null, commands: [], _debug: 'SUPABASE_SERVICE_ROLE_KEY missing in Vercel' })
   }
 
   const { player_id, player_name, floor } = req.body ?? {}
@@ -24,21 +23,29 @@ export default async function handler(req: any, res: any) {
     const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
     const now = new Date()
 
-    // 1. セッション更新
-    await db.from('active_sessions').upsert({
-      player_id,
-      player_name: player_name ?? '冒険者',
-      floor,
-      updated_at: now.toISOString(),
-    })
+    // 1-3: セッション更新・ADMINコマンド取得・アクティブスポーン確認を並列実行
+    const [, cmdsResult, activeResult] = await Promise.all([
+      db.from('active_sessions').upsert({
+        player_id,
+        player_name: player_name ?? '冒険者',
+        floor,
+        updated_at: now.toISOString(),
+      }),
+      db.from('admin_event_commands')
+        .select('*')
+        .eq('target_player_id', player_id)
+        .eq('status', 'pending'),
+      db.from('skulporin_spawns')
+        .select('*')
+        .eq('status', 'active')
+        .gt('escapes_at', now.toISOString())
+        .limit(1)
+        .maybeSingle(),
+    ])
 
-    // 1.5 このプレイヤー宛のADMINコマンドを取り出して消費（モンスターハウス/モンスター強制ポップ）
+    // ADMINコマンドを消費
     let commands: any[] = []
-    const { data: cmds } = await db
-      .from('admin_event_commands')
-      .select('*')
-      .eq('target_player_id', player_id)
-      .eq('status', 'pending')
+    const cmds = cmdsResult.data
     if (cmds && cmds.length > 0) {
       commands = cmds
       await db.from('admin_event_commands')
@@ -46,24 +53,17 @@ export default async function handler(req: any, res: any) {
         .in('id', cmds.map((c: any) => c.id))
     }
 
-    // 2. 現在アクティブなスポーンを確認
-    const { data: active } = await db
-      .from('skulporin_spawns')
-      .select('*')
-      .eq('status', 'active')
-      .gt('escapes_at', now.toISOString())
-      .limit(1)
-      .single()
-
+    // アクティブなスポーンがあればそのまま返す
+    const active = activeResult.data
     if (active) return res.json({ spawn: active, commands })
 
-    // 3. クールダウンチェック（最後のスポーンから20分）
+    // 4. クールダウンチェック（最後のスポーンから20分）
     const { data: last } = await db
       .from('skulporin_spawns')
       .select('spawned_at')
       .order('spawned_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (last) {
       const lastTime = new Date(last.spawned_at).getTime()
@@ -72,7 +72,7 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    // 4. 本日の最大スポーン数チェック
+    // 5. 本日の最大スポーン数チェック
     const today = now.toISOString().slice(0, 10)
     const { count: dailyCount } = await db
       .from('skulporin_spawns')
@@ -83,7 +83,7 @@ export default async function handler(req: any, res: any) {
       return res.json({ spawn: null, commands, _debug: 'daily limit reached' })
     }
 
-    // 5. スポーン
+    // 6. スポーン
     const escapesAt = new Date(Date.now() + SPAWN_DURATION_MS)
 
     const { data: newSpawn, error } = await db
@@ -104,7 +104,7 @@ export default async function handler(req: any, res: any) {
       return res.json({ spawn: null, commands, _debug: `insert error: ${error?.message ?? 'no data'}` })
     }
 
-    // 6. ワールド通知
+    // 7. ワールド通知
     await db.from('world_notifications').insert({
       type: 'event',
       title: '[緊急]すかるぽりんが出現しました！',
@@ -117,6 +117,6 @@ export default async function handler(req: any, res: any) {
 
   } catch (e: any) {
     console.error('[skulporin] unhandled error:', e)
-    return res.json({ spawn: null, _debug: `exception: ${e?.message}` })
+    return res.json({ spawn: null, commands: [], _debug: `exception: ${e?.message}` })
   }
 }
