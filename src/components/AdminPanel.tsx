@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { MONSTER_REGISTRY } from '../game/dungeon'
 
 const PROD_URL = import.meta.env.VITE_SUPABASE_URL as string
 const PROD_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -8,7 +9,9 @@ const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats'
+type Tab = 'maintenance' | 'message' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats'
+
+interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
 
 interface MaintenanceWindow { from: number; to: number | null }
 interface RankingEntry { id: number; player_name: string; floor: number; level: number; created_at: string }
@@ -120,6 +123,15 @@ export function AdminPanel() {
   // ── Stats ──
   const [stats, setStats] = useState<{ totalDeaths: number; totalKills: number; floorDist: [string,number][]; slotDist: [string,number][]; killDist: [string,number][] } | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
+
+  // ── Event ──
+  const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([])
+  const [evLoading, setEvLoading]   = useState(false)
+  const [evMsg, setEvMsg]           = useState('')
+  const [evTargetId, setEvTargetId] = useState('')       // モンスターポップ用ターゲット
+  const [evMhTargetId, setEvMhTargetId] = useState('')   // モンスターハウス用ターゲット
+  const [evMonster, setEvMonster]   = useState(MONSTER_REGISTRY[0]?.name ?? '')
+  const [evFloor, setEvFloor]       = useState('')
 
   // ゲームのグローバルCSSがhtml/body/#rootにoverflow:hidden+height:100%を設定しているためAdmin画面でスクロールを許可する
   useEffect(() => {
@@ -431,6 +443,65 @@ export function AdminPanel() {
     }
   }, [db, fetchAllRows])
 
+  // ── Event ──
+  const loadOnlinePlayers = useCallback(async () => {
+    setEvLoading(true); setEvMsg('')
+    try {
+      const res = await fetch('/api/admin-event', { method: 'GET' })
+      const json = await res.json()
+      if (!res.ok) { setEvMsg(`エラー: ${json.error ?? res.status}`); setOnlinePlayers([]) }
+      else setOnlinePlayers((json.players ?? []) as OnlinePlayer[])
+    } catch (e) {
+      setEvMsg(`エラー: ${String(e)}`)
+    }
+    setEvLoading(false)
+  }, [])
+
+  const postEvent = async (body: Record<string, unknown>): Promise<boolean> => {
+    setEvMsg('')
+    try {
+      const res = await fetch('/api/admin-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: ADMIN_KEY, ...body }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setEvMsg(`エラー: ${json.error ?? res.status}`); return false }
+      setEvMsg('送信しました ✓')
+      return true
+    } catch (e) {
+      setEvMsg(`エラー: ${String(e)}`)
+      return false
+    }
+  }
+
+  const fireSkulporin = async () => {
+    if (!confirm('すかるぽりんを全プレイヤーに強制出現させますか？')) return
+    await postEvent({ action: 'skulporin' })
+  }
+
+  const fireMonsterHouse = async () => {
+    if (!evMhTargetId) { setEvMsg('対象プレイヤーを選択してください'); return }
+    const p = onlinePlayers.find(o => o.player_id === evMhTargetId)
+    await postEvent({ action: 'monster_house', target_player_id: evMhTargetId, target_player_name: p?.player_name })
+  }
+
+  const fireSpawnMonster = async () => {
+    if (!evTargetId) { setEvMsg('対象プレイヤーを選択してください'); return }
+    if (!evMonster)  { setEvMsg('モンスターを選択してください'); return }
+    const p = onlinePlayers.find(o => o.player_id === evTargetId)
+    const entry = MONSTER_REGISTRY.find(m => m.name === evMonster)
+    const floorNum = evFloor.trim() ? parseInt(evFloor, 10) : (p?.floor ?? null)
+    await postEvent({
+      action: 'spawn_monster',
+      target_player_id: evTargetId,
+      target_player_name: p?.player_name,
+      monster_name: evMonster,
+      monster_behavior: entry?.behavior ?? 'normal',
+      target_floor: floorNum,
+    })
+  }
+
   useEffect(() => {
     if (!authed) return
     if (tab === 'maintenance') loadMaintenance()
@@ -438,7 +509,8 @@ export function AdminPanel() {
     if (tab === 'worldlog')    loadWorldLogs()
     if (tab === 'reports')     loadReports()
     if (tab === 'stats')       loadStats()
-  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats])
+    if (tab === 'event')       loadOnlinePlayers()
+  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers])
 
   const now = Date.now()
   const isOpen = windows.some(w => winActive(w, now))
@@ -457,7 +529,7 @@ export function AdminPanel() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    maintenance: 'メンテナンス', message: 'メッセージ配信',
+    maintenance: 'メンテナンス', message: 'メッセージ配信', event: 'イベント',
     ranking: 'ランキング', worldlog: 'ワールドログ',
     users: 'ユーザー管理', reports: '報告BOX', stats: '統計',
   }
@@ -636,6 +708,77 @@ export function AdminPanel() {
             <div style={S.row}>
               <button onClick={sendMessage} disabled={msgSending || !msgTitle || !msgBody} style={S.btnPrimary}>{msgSending ? '送信中…' : '🌐 全ユーザーに送信'}</button>
               {msgResult && <span style={{ color: msgResult.includes('エラー') ? '#f87171' : '#4ade80' }}>{msgResult}</span>}
+            </div>
+          </div>
+        )}
+
+        {/* ══ イベント ══ */}
+        {tab === 'event' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <button onClick={loadOnlinePlayers} style={S.btnSm}>🔄 オンライン更新</button>
+              <span style={S.muted}>オンライン中: {onlinePlayers.length} 人{evLoading ? '（読み込み中…）' : ''}</span>
+            </div>
+            {evMsg && <div style={{ color: evMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 12 }}>{evMsg}</div>}
+
+            {/* イベント強制発動 */}
+            <div style={S.section}>
+              <div style={S.sectionTitle}>イベント強制発動</div>
+              <div style={{ ...S.card, marginTop: 0 }}>
+                <div style={S.cardTitle}>すかるぽりん出現（全プレイヤー対象・即時）</div>
+                <button onClick={fireSkulporin} style={S.btnPrimary}>👹 すかるぽりんを出現させる</button>
+              </div>
+              <div style={S.card}>
+                <div style={S.cardTitle}>モンスターハウス強制発動（指定プレイヤーの次フロア）</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <label style={S.label}>対象プレイヤー（オンライン中）</label>
+                    <select value={evMhTargetId} onChange={e => setEvMhTargetId(e.target.value)} style={S.input}>
+                      <option value="">― 選択 ―</option>
+                      {onlinePlayers.map(p => (
+                        <option key={p.player_id} value={p.player_id}>{p.player_name}（B{p.floor}F）</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button onClick={fireMonsterHouse} disabled={!evMhTargetId} style={S.btnPrimary}>🏠 モンスターハウス発動</button>
+                </div>
+                <p style={{ ...S.muted, marginTop: 8, marginBottom: 0 }}>対象が次のフロアへ進んだ時にモンスターハウス化します。</p>
+              </div>
+            </div>
+
+            {/* モンスター強制ポップ */}
+            <div style={S.section}>
+              <div style={S.sectionTitle}>モンスター強制ポップ</div>
+              <div style={{ ...S.card, marginTop: 0 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ minWidth: 200 }}>
+                    <label style={S.label}>モンスター</label>
+                    <select value={evMonster} onChange={e => setEvMonster(e.target.value)} style={S.input}>
+                      {MONSTER_REGISTRY.map(m => (
+                        <option key={m.name} value={m.name}>[{m.category}] {m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label style={S.label}>対象プレイヤー（オンライン中）</label>
+                    <select value={evTargetId} onChange={e => { setEvTargetId(e.target.value); const p = onlinePlayers.find(o => o.player_id === e.target.value); if (p) setEvFloor(String(p.floor)) }} style={S.input}>
+                      <option value="">― 選択 ―</option>
+                      {onlinePlayers.map(p => (
+                        <option key={p.player_id} value={p.player_id}>{p.player_name}（B{p.floor}F）</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.label}>出現フロア</label>
+                    <input type="number" value={evFloor} onChange={e => setEvFloor(e.target.value)} placeholder="現在階" style={{ ...S.input, width: 100 }} />
+                  </div>
+                  <button onClick={fireSpawnMonster} disabled={!evTargetId} style={S.btnPrimary}>⚡ 出現させる</button>
+                </div>
+                <p style={{ ...S.muted, marginTop: 8, marginBottom: 0 }}>
+                  通常モンスター=通常戦闘 / MINI・MVP・エリア=ボス仕様 / すかるぽりん=特殊仕様。
+                  対象が現在いる階と異なる階を指定した場合、その階に到達した時に出現します。
+                </p>
+              </div>
             </div>
           </div>
         )}

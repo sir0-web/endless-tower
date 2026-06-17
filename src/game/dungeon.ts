@@ -287,6 +287,59 @@ export function makeChaosBoss(floor: number) {
   return makeBoss(pick.name, floor, pick.hpMult, pick.atkMult, pick.defMult, pick.prefix)
 }
 
+// ── ADMIN：登録済みモンスター一覧（イベントタブのプルダウン用）──
+// behavior: 通常モンスター='normal' / MINI・MVP・エリアボス='boss' / すかるぽりん='skulporin'
+export type MonsterBehavior = 'normal' | 'boss' | 'skulporin'
+export interface MonsterRegistryEntry { name: string; category: string; behavior: MonsterBehavior }
+
+export const MONSTER_REGISTRY: MonsterRegistryEntry[] = [
+  ...ENEMY_TABLE.map(e => ({ name: e.name, category: '通常', behavior: 'normal' as MonsterBehavior })),
+  ...Object.values(MINI_BOSS_TABLE).map(b => ({ name: b.name, category: 'MINI', behavior: 'boss' as MonsterBehavior })),
+  ...Object.values(MVP_BOSS_TABLE).map(b => ({ name: b.name, category: 'MVP', behavior: 'boss' as MonsterBehavior })),
+  ...AREA_BOSS_TABLE.map(a => ({ name: a.name, category: 'エリア', behavior: 'boss' as MonsterBehavior })),
+  { name: 'すかるぽりん', category: '特殊', behavior: 'skulporin' },
+]
+
+// 名前→ボス倍率・接頭辞の逆引き（MINI/MVP/エリア）
+function lookupBossMult(name: string): { hpMult: number; atkMult: number; defMult: number; prefix: string } {
+  const mini = Object.values(MINI_BOSS_TABLE).find(b => b.name === name)
+  if (mini) return { ...mini, prefix: '【MINI】' }
+  const mvp = Object.values(MVP_BOSS_TABLE).find(b => b.name === name)
+  if (mvp) return { ...mvp, prefix: '【MVP】' }
+  const area = AREA_BOSS_TABLE.find(a => a.name === name)
+  if (area) return { hpMult: 3.6, atkMult: 2.1, defMult: 1.5, prefix: '【エリア】' }
+  return { hpMult: 3.0, atkMult: 1.8, defMult: 1.5, prefix: '【BOSS】' }
+}
+
+/** ADMIN：指定名の通常モンスターを1体生成（指定フロアのスケールを適用） */
+export function makeNamedNormalEnemy(name: string, floor: number) {
+  const base = ENEMY_TABLE.find(e => e.name === name)
+    ?? { name, hpBase: 20, atkBase: 8, defBase: 2, str: 10, vit: 6, agi: 10, luk: 4 }
+  const f1Mult = floor <= 3 ? 0.6 : 1.0
+  const scale = ((1 + floor * 0.1) / (1 + floor * 0.02)) * f1Mult
+  return {
+    id: `admin_enemy_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    position: { x: 0, y: 0 },
+    hp:      Math.floor((base.hpBase  + floor) * scale),
+    maxHp:   Math.floor((base.hpBase  + floor) * scale),
+    attack:  Math.floor((base.atkBase + Math.floor(floor * 0.5)) * scale),
+    defense: Math.floor((base.defBase + Math.floor(floor / 4))   * scale),
+    str: Math.floor(base.str * scale),
+    vit: Math.floor(base.vit * scale),
+    agi: Math.floor(base.agi * scale),
+    luk: Math.floor(base.luk * scale),
+    slowedTurns: 0,
+    name: base.name,
+    isBoss: false,
+  }
+}
+
+/** ADMIN：指定名のボス（MINI/MVP/エリア）を1体生成（指定フロアのスケールを適用） */
+export function makeNamedBossEnemy(name: string, floor: number) {
+  const m = lookupBossMult(name)
+  return makeBoss(name, floor, m.hpMult, m.atkMult, m.defMult, m.prefix)
+}
+
 export function getFloorTelopMessage(floor: number, areaBossFloors: Record<number, string>): string | null {
   const isMini = floor % 5 === 0 && floor % 10 !== 0
   const isMvp = floor % 10 === 0

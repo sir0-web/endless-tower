@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
-import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
+import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
@@ -135,6 +135,10 @@ export class GameScene extends Phaser.Scene {
   private skulporinEscapeAt: number | null = null
   private skulporinHeartbeatTimer: ReturnType<typeof setInterval> | null = null
   private skulporinEscapeTimer: ReturnType<typeof setInterval> | null = null
+
+  // ── ADMIN イベント（モンスターハウス強制・モンスター強制ポップ）──
+  private forceMonsterHouseNextFloor = false
+  private pendingAdminSpawns: { name: string; behavior: 'normal' | 'boss' | 'skulporin'; floor: number }[] = []
 
   constructor() {
     super({ key: 'GameScene' })
@@ -1360,7 +1364,12 @@ export class GameScene extends Phaser.Scene {
     this.state.map = map
     this.state.player.position = { ...playerPos }
 
-    const floorType = this.determineFloorType(this.state.player.luk, floor)
+    // ADMINがモンスターハウスを強制予約していたら、このフロアをchaos化（1回限り）
+    let floorType = this.determineFloorType(this.state.player.luk, floor)
+    if (this.forceMonsterHouseNextFloor) {
+      floorType = 'chaos'
+      this.forceMonsterHouseNextFloor = false
+    }
     const base     = 5
     const lukBonus = Math.floor(this.state.player.luk * 0.5)
     const count    = base + Math.floor(Math.random() * (base + lukBonus))
@@ -1403,8 +1412,9 @@ export class GameScene extends Phaser.Scene {
       fireWorldNotification('world', '【緊急速報】', `${getDisplayName()}さんがモンスターハウスに遭遇しました！`, `mhouse:${floor}`)
     }
 
-    // フロア入場時にすかるぽりんチェック（heartbeatを即時実行）
+    // フロア入場時にすかるぽりんチェック（heartbeatを即時実行）＋保留中のADMIN指定スポーン適用
     void this.sendSkulporinHeartbeat()
+    this.flushPendingAdminSpawns()
   }
 
   // ── イベントフロア（ベースキャンプ「あるかなひろば」）──
@@ -1655,9 +1665,82 @@ export class GameScene extends Phaser.Scene {
       if (!res.ok) return
       const json = await res.json().catch(() => null)
       this.handleSkulporinSpawnResponse(json?.spawn ?? null)
+      if (Array.isArray(json?.commands)) this.handleAdminCommands(json.commands)
     } catch {
       // fire-and-forget
     }
+  }
+
+  // ── ADMIN イベントコマンド処理（モンスターハウス強制 / モンスター強制ポップ）──
+  private handleAdminCommands(cmds: Array<{
+    command_type: string
+    monster_name?: string | null
+    monster_behavior?: string | null
+    target_floor?: number | null
+  }>): void {
+    for (const c of cmds) {
+      if (c.command_type === 'monster_house') {
+        this.forceMonsterHouseNextFloor = true
+        this.addMessage('⚠️ 何か嫌な予感がする……次のフロアに気をつけろ！')
+        this.showPickupNotif('⚠️ 次のフロアに異変の気配……')
+      } else if (c.command_type === 'spawn_monster' && c.monster_name) {
+        // target_floor 指定があり現在フロアと違う場合は保留（到達時に発動）
+        if (c.target_floor != null && c.target_floor !== this.state.player.floor) {
+          this.pendingAdminSpawns.push({
+            name: c.monster_name,
+            behavior: (c.monster_behavior ?? 'normal') as 'normal' | 'boss' | 'skulporin',
+            floor: c.target_floor,
+          })
+        } else {
+          this.spawnAdminMonster(c.monster_name, (c.monster_behavior ?? 'normal') as 'normal' | 'boss' | 'skulporin')
+        }
+      }
+    }
+  }
+
+  // 保留中の指定モンスターのうち、現在フロアに該当するものを出現させる
+  private flushPendingAdminSpawns(): void {
+    if (this.pendingAdminSpawns.length === 0) return
+    const floor = this.state.player.floor
+    const remain: typeof this.pendingAdminSpawns = []
+    for (const p of this.pendingAdminSpawns) {
+      if (p.floor === floor) this.spawnAdminMonster(p.name, p.behavior)
+      else remain.push(p)
+    }
+    this.pendingAdminSpawns = remain
+  }
+
+  // 指定モンスターを現在フロアの空きタイルへ1体出現させる
+  private spawnAdminMonster(name: string, behavior: 'normal' | 'boss' | 'skulporin'): void {
+    if (this.isEventFloor || this.isGameOver) return
+    if (behavior === 'skulporin') {
+      if (this.state.enemies.some(e => e.isSkulporin)) return
+      this.skulporinSpawnId  = -1
+      this.skulporinEscapeAt = Date.now() + 3 * 60 * 1000
+      this.spawnSkulporinOnFloor()
+      return
+    }
+    const { map, player } = this.state
+    const floors: { x: number; y: number }[] = []
+    for (let y = 0; y < map.length; y++) {
+      for (let x = 0; x < map[y].length; x++) {
+        if (map[y][x] === 'floor') {
+          const dist = Math.abs(x - player.position.x) + Math.abs(y - player.position.y)
+          if (dist >= 4) floors.push({ x, y })
+        }
+      }
+    }
+    if (floors.length === 0) return
+    const pos = floors[Math.floor(Math.random() * floors.length)]
+    const enemy = behavior === 'boss'
+      ? makeNamedBossEnemy(name, player.floor)
+      : makeNamedNormalEnemy(name, player.floor)
+    enemy.position = { ...pos }
+    this.state.enemies.push(enemy)
+    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    this.addMessage(`⚡ ${enemy.name} が出現した！`)
+    this.showPickupNotif(`⚡ ${enemy.name} 出現！`)
+    this.renderMap()
   }
 
   private handleSkulporinSpawnResponse(spawn: {

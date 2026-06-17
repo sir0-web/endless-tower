@@ -32,6 +32,20 @@ export default async function handler(req: any, res: any) {
       updated_at: now.toISOString(),
     })
 
+    // 1.5 このプレイヤー宛のADMINコマンドを取り出して消費（モンスターハウス/モンスター強制ポップ）
+    let commands: any[] = []
+    const { data: cmds } = await db
+      .from('admin_event_commands')
+      .select('*')
+      .eq('target_player_id', player_id)
+      .eq('status', 'pending')
+    if (cmds && cmds.length > 0) {
+      commands = cmds
+      await db.from('admin_event_commands')
+        .update({ status: 'consumed' })
+        .in('id', cmds.map((c: any) => c.id))
+    }
+
     // 2. 現在アクティブなスポーンを確認
     const { data: active } = await db
       .from('skulporin_spawns')
@@ -41,7 +55,7 @@ export default async function handler(req: any, res: any) {
       .limit(1)
       .single()
 
-    if (active) return res.json({ spawn: active })
+    if (active) return res.json({ spawn: active, commands })
 
     // 3. クールダウンチェック（最後のスポーンから20分）
     const { data: last } = await db
@@ -54,7 +68,7 @@ export default async function handler(req: any, res: any) {
     if (last) {
       const lastTime = new Date(last.spawned_at).getTime()
       if (Date.now() - lastTime < SPAWN_COOLDOWN_MS) {
-        return res.json({ spawn: null, _debug: `cooldown: ${Math.ceil((SPAWN_COOLDOWN_MS - (Date.now() - lastTime)) / 60000)}min remaining` })
+        return res.json({ spawn: null, commands, _debug: `cooldown: ${Math.ceil((SPAWN_COOLDOWN_MS - (Date.now() - lastTime)) / 60000)}min remaining` })
       }
     }
 
@@ -66,7 +80,7 @@ export default async function handler(req: any, res: any) {
       .eq('spawn_date', today)
 
     if ((dailyCount ?? 0) >= MAX_DAILY_SPAWNS) {
-      return res.json({ spawn: null, _debug: 'daily limit reached' })
+      return res.json({ spawn: null, commands, _debug: 'daily limit reached' })
     }
 
     // 5. スポーン
@@ -87,7 +101,7 @@ export default async function handler(req: any, res: any) {
 
     if (error || !newSpawn) {
       console.error('[skulporin] insert error:', error)
-      return res.json({ spawn: null, _debug: `insert error: ${error?.message ?? 'no data'}` })
+      return res.json({ spawn: null, commands, _debug: `insert error: ${error?.message ?? 'no data'}` })
     }
 
     // 6. ワールド通知
@@ -99,7 +113,7 @@ export default async function handler(req: any, res: any) {
       player_id: 'system',
     })
 
-    return res.json({ spawn: newSpawn })
+    return res.json({ spawn: newSpawn, commands })
 
   } catch (e: any) {
     console.error('[skulporin] unhandled error:', e)
