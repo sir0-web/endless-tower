@@ -1042,9 +1042,9 @@ export class GameScene extends Phaser.Scene {
       if (chebDist === 1 && !diagAttackBlocked) {
         // 隣接（斜め含む。ただし壁角越しの斜めは不可）→攻撃
 
-        // すかるぽりん専用攻撃（最大HPの10%の固定ダメージ）
+        // すかるぽりん専用攻撃（最大HPの3%の固定ダメージ。長期戦でも倒しきれるよう低めに設定）
         if (enemy.isSkulporin) {
-          const dmg = Math.max(1, Math.floor(player.maxHp * 0.1))
+          const dmg = Math.max(1, Math.floor(player.maxHp * 0.03))
           player.hp = Math.max(0, player.hp - dmg)
           playDamage()
           const eg2 = this.enemyGraphics.get(enemy.id)
@@ -1059,7 +1059,7 @@ export class GameScene extends Phaser.Scene {
           this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true })
           this.flashPlayer()
           this.cameras.main.shake(180, 0.010)
-          this.addMessage(`すかるぽりんから${dmg}ダメージ！（最大HPの10%）`)
+          this.addMessage(`すかるぽりんから${dmg}ダメージ！`)
           if (player.hp <= 0) { this.gameOver(); return }
           continue
         }
@@ -1764,18 +1764,20 @@ export class GameScene extends Phaser.Scene {
 
   private spawnSkulporinOnFloor(): void {
     const { map, player } = this.state
-    // プレイヤーから離れたフロアタイルをランダム選択
-    const floors: { x: number; y: number }[] = []
+    // プレイヤーのすぐ近く（2〜4マス）に出現させて見つけやすくする
+    const near: { x: number; y: number }[] = []
+    const far:  { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
-        if (map[y][x] === 'floor') {
-          const dist = Math.abs(x - player.position.x) + Math.abs(y - player.position.y)
-          if (dist >= 5) floors.push({ x, y })
-        }
+        if (map[y][x] !== 'floor') continue
+        const dist = Math.abs(x - player.position.x) + Math.abs(y - player.position.y)
+        if (dist >= 2 && dist <= 4) near.push({ x, y })
+        else if (dist >= 1) far.push({ x, y })
       }
     }
-    if (floors.length === 0) return
-    const pos = floors[Math.floor(Math.random() * floors.length)]
+    const pool = near.length > 0 ? near : far
+    if (pool.length === 0) return
+    const pos = pool[Math.floor(Math.random() * pool.length)]
 
     this.state.enemies.push({
       id: 'skulporin_active',
