@@ -1803,7 +1803,7 @@ export class GameScene extends Phaser.Scene {
       isSkulporin: true,
     })
 
-    this.addMessage('【すかるぽりんが出現した！】命中率10%。倒せば豪華報酬！3分後に逃げてしまう！')
+    this.addMessage('【すかるぽりんが出現した！】逃げる前に倒そう！')
     this.renderMap()
   }
 
