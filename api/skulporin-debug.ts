@@ -1,49 +1,31 @@
-import { createClient } from '@supabase/supabase-js'
+export default async function handler(_req: any, res: any) {
+  // createClient を呼ばず、環境変数の有無だけ返す（絶対にクラッシュしない診断）
+  const env = {
+    VITE_SUPABASE_URL: !!process.env.VITE_SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    urlHead: (process.env.VITE_SUPABASE_URL ?? '').slice(0, 20),
+  }
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL!
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-export default async function handler(req: any, res: any) {
-  const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
-  const now = new Date()
-
-  const { data: spawns } = await db
-    .from('skulporin_spawns')
-    .select('*')
-    .order('id', { ascending: false })
-    .limit(10)
-
-  const { count: dailyCount } = await db
-    .from('skulporin_spawns')
-    .select('id', { count: 'exact', head: true })
-    .eq('spawn_date', now.toISOString().slice(0, 10))
-
-  const { data: active } = await db
-    .from('skulporin_spawns')
-    .select('*')
-    .eq('status', 'active')
-    .gt('escapes_at', now.toISOString())
-    .limit(1)
-    .single()
-
-  const { data: last } = await db
-    .from('skulporin_spawns')
-    .select('spawned_at, status')
-    .order('spawned_at', { ascending: false })
-    .limit(1)
-    .single()
-
-  const cooldownRemainMs = last
-    ? Math.max(0, 20 * 60 * 1000 - (Date.now() - new Date(last.spawned_at).getTime()))
-    : 0
+  // ここまで来れば関数自体は動いている
+  let dbStatus = 'not-tested'
+  let dbError: string | null = null
+  if (env.VITE_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const db = createClient(
+        process.env.VITE_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false } },
+      )
+      const { error } = await db.from('skulporin_spawns').select('id').limit(1)
+      if (error) { dbStatus = 'query-error'; dbError = error.message }
+      else dbStatus = 'ok'
+    } catch (e: any) {
+      dbStatus = 'exception'
+      dbError = e?.message ?? String(e)
+    }
+  }
 
   res.setHeader('Content-Type', 'application/json')
-  return res.json({
-    now: now.toISOString(),
-    activeSpawn: active ?? null,
-    lastSpawn: last ?? null,
-    cooldownRemainSec: Math.ceil(cooldownRemainMs / 1000),
-    dailyCount,
-    recentSpawns: spawns ?? [],
-  })
+  return res.status(200).json({ env, dbStatus, dbError })
 }
