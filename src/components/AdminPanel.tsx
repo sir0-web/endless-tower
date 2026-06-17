@@ -378,29 +378,58 @@ export function AdminPanel() {
   }
 
   // ── Stats ──
+  // PostgREST は1リクエスト最大1000行しか返さないため、.range() でページ送りして全行を取得する。
+  const fetchAllRows = useCallback(async (
+    columns: string,
+    eventType: string,
+    extra?: (q: any) => any,
+  ): Promise<any[]> => {
+    const PAGE = 1000
+    const all: any[] = []
+    for (let from = 0; ; from += PAGE) {
+      let q = db.from('game_events').select(columns).eq('event_type', eventType).range(from, from + PAGE - 1)
+      if (extra) q = extra(q)
+      const { data, error } = await q
+      if (error) throw error
+      const rows = data ?? []
+      all.push(...rows)
+      if (rows.length < PAGE) break   // 最終ページ
+    }
+    return all
+  }, [db])
+
   const loadStats = useCallback(async () => {
     setStats(null); setStatsError(null)
-    const [{ data: deaths, error: e1 }, { data: slots, error: e2 }, { data: kills, error: e3 }] = await Promise.all([
-      db.from('game_events').select('floor').eq('event_type', 'death').limit(10000),
-      db.from('game_events').select('slot_result').eq('event_type', 'slot_result').not('slot_result', 'is', null).limit(10000),
-      db.from('game_events').select('enemy_name').eq('event_type', 'kill').limit(50000),
-    ])
-    const err = e1 ?? e2 ?? e3
-    if (err) { setStatsError(`Supabaseエラー: ${err.message} (code: ${err.code})`); setStats({ totalDeaths: 0, totalKills: 0, floorDist: [], slotDist: [], killDist: [] }); return }
-    const floorMap: Record<string, number> = {}
-    for (const d of (deaths ?? [])) { const k = `${d.floor ?? '?'}F`; floorMap[k] = (floorMap[k] ?? 0) + 1 }
-    const slotMap: Record<string, number> = {}
-    for (const s of (slots ?? [])) { const k = s.slot_result ?? '?'; slotMap[k] = (slotMap[k] ?? 0) + 1 }
-    const killMap: Record<string, number> = {}
-    for (const k of (kills ?? [])) { const n = k.enemy_name ?? '不明'; killMap[n] = (killMap[n] ?? 0) + 1 }
-    setStats({
-      totalDeaths: (deaths ?? []).length,
-      totalKills:  (kills ?? []).length,
-      floorDist: Object.entries(floorMap).sort((a, b) => parseInt(b[0]) - parseInt(a[0])),
-      slotDist:  Object.entries(slotMap).sort((a, b) => b[1] - a[1]),
-      killDist:  Object.entries(killMap).sort((a, b) => b[1] - a[1]),
-    })
-  }, [db])
+    try {
+      // 総数は count クエリで正確に取得（行数制限の影響を受けない）
+      const [{ count: deathCount }, { count: killCount }] = await Promise.all([
+        db.from('game_events').select('id', { count: 'exact', head: true }).eq('event_type', 'death'),
+        db.from('game_events').select('id', { count: 'exact', head: true }).eq('event_type', 'kill'),
+      ])
+      // 分布はページネーションで全行を取得
+      const [deaths, slots, kills] = await Promise.all([
+        fetchAllRows('floor', 'death'),
+        fetchAllRows('slot_result', 'slot_result', q => q.not('slot_result', 'is', null)),
+        fetchAllRows('enemy_name', 'kill'),
+      ])
+      const floorMap: Record<string, number> = {}
+      for (const d of deaths) { const k = `${d.floor ?? '?'}F`; floorMap[k] = (floorMap[k] ?? 0) + 1 }
+      const slotMap: Record<string, number> = {}
+      for (const s of slots) { const k = s.slot_result ?? '?'; slotMap[k] = (slotMap[k] ?? 0) + 1 }
+      const killMap: Record<string, number> = {}
+      for (const k of kills) { const n = k.enemy_name ?? '不明'; killMap[n] = (killMap[n] ?? 0) + 1 }
+      setStats({
+        totalDeaths: deathCount ?? deaths.length,
+        totalKills:  killCount ?? kills.length,
+        floorDist: Object.entries(floorMap).sort((a, b) => parseInt(b[0]) - parseInt(a[0])),
+        slotDist:  Object.entries(slotMap).sort((a, b) => b[1] - a[1]),
+        killDist:  Object.entries(killMap).sort((a, b) => b[1] - a[1]),
+      })
+    } catch (err: any) {
+      setStatsError(`Supabaseエラー: ${err?.message} (code: ${err?.code})`)
+      setStats({ totalDeaths: 0, totalKills: 0, floorDist: [], slotDist: [], killDist: [] })
+    }
+  }, [db, fetchAllRows])
 
   useEffect(() => {
     if (!authed) return
