@@ -121,7 +121,7 @@ export function AdminPanel() {
   const [repSelected, setRepSelected]   = useState<Set<number>>(new Set())
 
   // ── Stats ──
-  const [stats, setStats] = useState<{ totalDeaths: number; totalKills: number; floorDist: [string,number][]; slotDist: [string,number][]; killDist: [string,number][] } | null>(null)
+  const [stats, setStats] = useState<{ totalDeaths: number; totalKills: number; floorDist: [string,number][]; slotDist: [string,number][]; killDist: [string,number][]; skulporinTotal: number; skulporinDefeated: number; skulporinEscaped: number } | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
 
   // ── Event ──
@@ -414,9 +414,12 @@ export function AdminPanel() {
     setStats(null); setStatsError(null)
     try {
       // 総数は count クエリで正確に取得（行数制限の影響を受けない）
-      const [{ count: deathCount }, { count: killCount }] = await Promise.all([
+      const [{ count: deathCount }, { count: killCount }, { count: skulporinTotal }, { count: skulporinDefeated }, { count: skulporinEscaped }] = await Promise.all([
         db.from('game_events').select('id', { count: 'exact', head: true }).eq('event_type', 'death'),
         db.from('game_events').select('id', { count: 'exact', head: true }).eq('event_type', 'kill'),
+        db.from('skulporin_spawns').select('id', { count: 'exact', head: true }),
+        db.from('skulporin_spawns').select('id', { count: 'exact', head: true }).eq('status', 'defeated'),
+        db.from('skulporin_spawns').select('id', { count: 'exact', head: true }).eq('status', 'escaped'),
       ])
       // 分布はページネーションで全行を取得
       const [deaths, slots, kills] = await Promise.all([
@@ -436,10 +439,13 @@ export function AdminPanel() {
         floorDist: Object.entries(floorMap).sort((a, b) => parseInt(b[0]) - parseInt(a[0])),
         slotDist:  Object.entries(slotMap).sort((a, b) => b[1] - a[1]),
         killDist:  Object.entries(killMap).sort((a, b) => b[1] - a[1]),
+        skulporinTotal:    skulporinTotal    ?? 0,
+        skulporinDefeated: skulporinDefeated ?? 0,
+        skulporinEscaped:  skulporinEscaped  ?? 0,
       })
     } catch (err: any) {
       setStatsError(`Supabaseエラー: ${err?.message} (code: ${err?.code})`)
-      setStats({ totalDeaths: 0, totalKills: 0, floorDist: [], slotDist: [], killDist: [] })
+      setStats({ totalDeaths: 0, totalKills: 0, floorDist: [], slotDist: [], killDist: [], skulporinTotal: 0, skulporinDefeated: 0, skulporinEscaped: 0 })
     }
   }, [db, fetchAllRows])
 
@@ -1169,6 +1175,31 @@ export function AdminPanel() {
                 <div style={S.statCard}>
                   <div style={S.statLabel}>総撃破数</div>
                   <div style={S.statValue}>{stats.totalKills.toLocaleString()}</div>
+                </div>
+              </div>
+              <div style={S.section}>
+                <div style={S.sectionTitle}>💀 すかるぽりん</div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <div style={S.statCard}>
+                    <div style={S.statLabel}>出現回数</div>
+                    <div style={S.statValue}>{stats.skulporinTotal.toLocaleString()}</div>
+                  </div>
+                  <div style={S.statCard}>
+                    <div style={S.statLabel}>討伐数</div>
+                    <div style={{ ...S.statValue, color: '#4ade80' }}>{stats.skulporinDefeated.toLocaleString()}</div>
+                  </div>
+                  <div style={S.statCard}>
+                    <div style={S.statLabel}>逃走数</div>
+                    <div style={{ ...S.statValue, color: '#f87171' }}>{stats.skulporinEscaped.toLocaleString()}</div>
+                  </div>
+                  <div style={S.statCard}>
+                    <div style={S.statLabel}>討伐率</div>
+                    <div style={S.statValue}>
+                      {stats.skulporinTotal > 0
+                        ? `${Math.round(stats.skulporinDefeated / stats.skulporinTotal * 100)}%`
+                        : '—'}
+                    </div>
+                  </div>
                 </div>
               </div>
               <div style={S.section}>
