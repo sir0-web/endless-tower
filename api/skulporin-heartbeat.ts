@@ -3,11 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-const SPAWN_COOLDOWN_MS  = 30 * 60 * 1000   // 30分クールダウン
+const SPAWN_COOLDOWN_MS  = 20 * 60 * 1000   // 20分クールダウン（強制発生）
 const SPAWN_DURATION_MS  = 3  * 60 * 1000   // 出現後3分で逃げる
-const SESSION_TIMEOUT_MS = 2  * 60 * 1000   // 2分以内に heartbeat → アクティブ扱い
-const MIN_PLAYERS        = 2                 // スポーン条件: 2人以上アクティブ
-const MIN_FLOOR          = 5                 // スポーン条件: B5階以上にいるプレイヤー
 const MAX_DAILY_SPAWNS   = 50                // 1日の最大スポーン数
 
 export default async function handler(req: any, res: any) {
@@ -40,11 +37,10 @@ export default async function handler(req: any, res: any) {
 
   if (active) return res.json({ spawn: active })
 
-  // 3. クールダウンチェック（最後のスポーンから30分）
+  // 3. クールダウンチェック（最後のスポーンから20分）
   const { data: last } = await db
     .from('skulporin_spawns')
     .select('spawned_at')
-    .in('status', ['defeated', 'escaped'])
     .order('spawned_at', { ascending: false })
     .limit(1)
     .single()
@@ -67,27 +63,14 @@ export default async function handler(req: any, res: any) {
     return res.json({ spawn: null })
   }
 
-  // 5. アクティブなプレイヤー数チェック（MIN_FLOOR以上にいる2人以上）
-  const cutoff = new Date(Date.now() - SESSION_TIMEOUT_MS).toISOString()
-  const { data: players } = await db
-    .from('active_sessions')
-    .select('player_id, floor, player_name')
-    .gte('floor', MIN_FLOOR)
-    .gt('updated_at', cutoff)
-
-  if (!players || players.length < MIN_PLAYERS) {
-    return res.json({ spawn: null })
-  }
-
-  // 6. ランダムにターゲットプレイヤーを選んでスポーン
-  const target = players[Math.floor(Math.random() * players.length)]
+  // 5. スポーン（プレイヤー数・フロア条件なし。20分ごとに強制発生）
   const escapesAt = new Date(Date.now() + SPAWN_DURATION_MS)
 
   const { data: newSpawn, error } = await db
     .from('skulporin_spawns')
     .insert({
-      target_floor: target.floor,
-      target_player_id: target.player_id,
+      target_floor: floor,
+      target_player_id: player_id,
       spawn_date: today,
       escapes_at: escapesAt.toISOString(),
     })
@@ -99,7 +82,7 @@ export default async function handler(req: any, res: any) {
     return res.json({ spawn: null })
   }
 
-  // 7. ワールド通知
+  // 6. ワールド通知
   await db.from('world_notifications').insert({
     type: 'event',
     title: '[緊急]すかるぽりんが出現しました！',
