@@ -119,14 +119,6 @@ this.add.text(colLevel, headerY, 'Lv', headerStyle).setOrigin(0.5)
     ).setOrigin(0.5)
   })
 }
-
-this.add.text(
-  colLevel,
-  y,
-  String(entry.level),
-  { fontSize: fs(14), color }
-).setOrigin(0.5)
-
     const btnLabel = this.from === 'title' ? 'もどる' : 'もう一度挑戦する'
 
     const btn = this.add.text(cx, H * 0.88, btnLabel, {
