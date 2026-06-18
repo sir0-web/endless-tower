@@ -12,7 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey)
 export interface RankingEntry {
   player_name: string
   floor: number
-  level: number
+  max_level: number   // ← ここに統一
   created_at?: string
 }
 
@@ -25,10 +25,10 @@ export async function submitRanking(
   const { error } = await supabase
     .from('ebt_rankings')
     .insert({
-      player_name,
-      floor,
-      level,
-    })
+  player_name,
+  floor,
+  max_level,
+})
 
   if (error) {
     console.error('ランキング登録エラー:', error)
