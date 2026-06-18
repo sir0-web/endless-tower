@@ -4,6 +4,7 @@ import { playBGM } from '../game/sound'
 
 interface RankingEntry {
   player_name: string
+  floor: number
   level: number
   created_at: string
 }
