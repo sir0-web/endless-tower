@@ -50,7 +50,7 @@ init(data: {
     }).setOrigin(0.5)
 
     if (this.floor > 0) {
-      this.add.text(cx, H * 0.15, `あなたの記録：${floorLabel(this.floor)}`, {
+      this.add.text(cx, H * 0.15, `あなたの記録：${floorLabel(entry.floor)}`, {
         fontSize: fs(18),
         color: '#aaffaa',
       }).setOrigin(0.5)
