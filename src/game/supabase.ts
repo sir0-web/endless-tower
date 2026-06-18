@@ -81,7 +81,7 @@ type GameEventType =
 
 interface GameEventPayload {
   floor?: number
-  max_level?: number
+  level?: number   
   slot_result?: string
   enemy_name?: string
   is_boss?: boolean
