@@ -5,31 +5,81 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-export async function submitRanking(playerName: string, floor: number, level: number): Promise<string | null> {
+
+// ─────────────────────────────
+// 🏆 ランキング（EBT統一版）
+// ─────────────────────────────
+
+export interface RankingEntry {
+  player_name: string
+  max_level: number
+}
+
+// 登録
+export async function submitRanking(
+  playerName: string,
+  maxLevel: number
+): Promise<string | null> {
   const { error } = await supabase
     .from('rankings')
-    .insert({ player_name: playerName, floor, level })
+    .insert({
+      player_name: playerName,
+      max_level: maxLevel
+    })
 
   if (error) {
     console.error('ランキング登録エラー:', error)
     return error.message
   }
+
   return null
 }
 
-// ── プレイヤー識別（匿名UUID。同じブラウザ＝同じ player_id として集計可能）──
+// 取得（TOP10）
+export async function fetchRanking(): Promise<RankingEntry[]> {
+  const { data, error } = await supabase
+    .from('rankings')
+    .select('player_name, max_level')
+    .order('max_level', { ascending: false })
+    .limit(10)
+
+  if (error) {
+    console.error('ランキング取得エラー:', error)
+    return []
+  }
+
+  return (data ?? []) as RankingEntry[]
+}
+
+
+// ─────────────────────────────
+// 🆔 プレイヤー識別
+// ─────────────────────────────
+
 const PLAYER_ID_KEY = 'et_player_id'
+
 export function getPlayerId(): string {
   let id = localStorage.getItem(PLAYER_ID_KEY)
+
   if (!id) {
     id = crypto.randomUUID()
     localStorage.setItem(PLAYER_ID_KEY, id)
   }
+
   return id
 }
 
-// ── 行動ログ（バランス調整の統計用。fire-and-forget でゲーム進行を妨げない）──
-type GameEventType = 'floor_reached' | 'slot_result' | 'death' | 'kill'
+
+// ─────────────────────────────
+// 📊 行動ログ（そのまま維持）
+// ─────────────────────────────
+
+type GameEventType =
+  | 'floor_reached'
+  | 'slot_result'
+  | 'death'
+  | 'kill'
+
 interface GameEventPayload {
   floor?: number
   level?: number
@@ -38,25 +88,20 @@ interface GameEventPayload {
   is_boss?: boolean
 }
 
-export function logEvent(eventType: GameEventType, payload: GameEventPayload = {}): void {
+export function logEvent(
+  eventType: GameEventType,
+  payload: GameEventPayload = {}
+): void {
   void supabase
     .from('game_events')
-    .insert({ player_id: getPlayerId(), event_type: eventType, ...payload })
-    .then(({ error }) => {
-      if (error) console.warn('行動ログ送信失敗:', error.message)
+    .insert({
+      player_id: getPlayerId(),
+      event_type: eventType,
+      ...payload
     })
-}
-
-export async function fetchRanking() {
-  const { data, error } = await supabase
-    .from('rankings')
-    .select('*')
-    .order('floor', { ascending: false })
-    .limit(10)
-  
-  if (error) {
-    console.error('ランキング取得エラー:', error)
-    return []
-  }
-  return data
+    .then(({ error }) => {
+      if (error) {
+        console.warn('行動ログ送信失敗:', error.message)
+      }
+    })
 }
