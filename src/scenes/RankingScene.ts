@@ -18,11 +18,11 @@ export class RankingScene extends Phaser.Scene {
     super({ key: 'RankingScene' })
   }
 
-  init(data: {
-    ranking: RankingEntry[]
-    floor: number
-    from?: 'title' | 'gameover'
-  }) {
+init(data: {
+  ranking: RankingEntry[]
+  floor: number
+  from?: 'title' | 'gameover'
+}) {
     this.ranking = data.ranking
     this.floor   = data.floor
     this.from    = data.from ?? 'gameover'
