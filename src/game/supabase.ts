@@ -12,7 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey)
 export interface RankingEntry {
   player_name: string
   floor: number
-  max_level: number
+  level: number
   created_at?: string
 }
 
@@ -20,7 +20,7 @@ export interface RankingEntry {
 export async function submitRanking(
   player_name: string,
   floor: number,
-  max_level: number
+  level: number
 ): Promise<string | null> {
   const { error } = await supabase
     .from('ebt_rankings')
