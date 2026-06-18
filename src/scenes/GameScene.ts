@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
-import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS } from '../game/items'
+import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
@@ -273,6 +273,7 @@ export class GameScene extends Phaser.Scene {
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
     window.applyArcanaResult = (points: number) => this.applyArcanaResult(points)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
+    window.grantReward     = (reward, message) => this.grantLikeReward(reward, message)
     window.saveGame        = () => this.doSaveGame()
     window.addWorldLogMessage = (text: string) => this.addWorldLogMessage(text)
     window.runRefineChallenge   = (slot, sacrificeId) => this.runRefineChallenge(slot, sacrificeId)
@@ -1654,6 +1655,7 @@ export class GameScene extends Phaser.Scene {
     if (this.skulporinHeartbeatTimer) { clearInterval(this.skulporinHeartbeatTimer); this.skulporinHeartbeatTimer = null }
     if (this.skulporinEscapeTimer) { clearInterval(this.skulporinEscapeTimer); this.skulporinEscapeTimer = null }
     window.triggerSkulporinCheck = undefined
+    window.grantReward = undefined
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1677,9 +1679,57 @@ export class GameScene extends Phaser.Scene {
       const json = await res.json().catch(() => null)
       this.handleSkulporinSpawnResponse(json?.spawn ?? null)
       if (Array.isArray(json?.commands)) this.handleAdminCommands(json.commands)
+      if (Array.isArray(json?.rewards)) this.handleLikeRewards(json.rewards)
     } catch {
       // fire-and-forget
     }
+  }
+
+  // いいねされた側：保留報酬を受け取って付与する
+  private handleLikeRewards(rewards: Array<{ reward_type: string; reward_name?: string | null; from_name?: string | null }>): void {
+    for (const r of rewards) {
+      this.grantLikeReward(r, `${r.from_name ?? '冒険者'}さんからいいねいただきました！`)
+    }
+  }
+
+  // いいね報酬を実際に付与する（押した本人＝messageは「〜にいいねしました」、される側＝「〜からいいね…」）
+  private grantLikeReward(
+    reward: { reward_type: string; reward_name?: string | null },
+    message: string,
+  ): void {
+    let detail = ''
+    if (reward.reward_type === 'point') {
+      this.state.player.statPoints += 1
+      detail = 'ステータスポイント+1！'
+    } else if (reward.reward_type === 'coin') {
+      const coinCount = this.state.heals.filter(h => h.coin).length
+      if (coinCount >= 10) {
+        window.spinSlotOnce?.()
+        detail = '女神のコイン獲得（満タンのため即使用）！'
+      } else {
+        this.state.heals.push({ id: `like_coin_${Date.now()}`, name: '女神のコイン', type: 'heal', position: { x: 0, y: 0 }, coin: true })
+        detail = '女神のコインを獲得！'
+      }
+    } else {
+      const name = reward.reward_name ?? '黄ポーション'
+      const def = HEAL_ITEMS.find(h => h.name === name)
+      const sameCount = this.state.heals.filter(h => h.name === name).length
+      if (sameCount >= 10) {
+        detail = `${name}を獲得したが持ちきれなかった…`
+      } else {
+        this.state.heals.push({
+          id: `like_potion_${Date.now()}`,
+          name,
+          type: 'heal',
+          position: { x: 0, y: 0 },
+          healAmount: def?.healAmount ?? 0,
+          ...(def && 'staminaPercent' in def ? { staminaPercent: (def as { staminaPercent: number }).staminaPercent } : {}),
+        })
+        detail = `${name}を獲得！`
+      }
+    }
+    this.addMessage(`💗 ${message} ${detail}`)
+    this.updateWindowGameState()
   }
 
   // ── ADMIN イベントコマンド処理（モンスターハウス強制 / モンスター強制ポップ）──

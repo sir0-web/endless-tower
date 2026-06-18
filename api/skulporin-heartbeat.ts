@@ -26,7 +26,7 @@ export default async function handler(req: any, res: any) {
     // 0-3: 時間切れactiveの掃除・セッション更新・ADMINコマンド取得・アクティブスポーン確認を並列実行
     //   掃除：オフライン等でクライアントがescape処理できないまま残った個体を escaped に倒す。
     //         これが無いと下のユニークインデックス(active=1体)が古い個体で詰まり新規が出なくなる。
-    const [, , cmdsResult, activeResult] = await Promise.all([
+    const [, , cmdsResult, activeResult, rewardsResult] = await Promise.all([
       db.from('skulporin_spawns')
         .update({ status: 'escaped' })
         .eq('status', 'active')
@@ -47,6 +47,11 @@ export default async function handler(req: any, res: any) {
         .gt('escapes_at', now.toISOString())
         .limit(1)
         .maybeSingle(),
+      db.from('like_rewards')
+        .select('*')
+        .eq('to_player_id', player_id)
+        .eq('status', 'pending')
+        .limit(50),
     ])
 
     // ADMINコマンドを消費
@@ -59,9 +64,19 @@ export default async function handler(req: any, res: any) {
         .in('id', cmds.map((c: any) => c.id))
     }
 
+    // いいね保留報酬を消費して返す（次プレイ時に受け取り）
+    let rewards: any[] = []
+    const pend = rewardsResult.data
+    if (pend && pend.length > 0) {
+      rewards = pend
+      await db.from('like_rewards')
+        .update({ status: 'consumed' })
+        .in('id', pend.map((r: any) => r.id))
+    }
+
     // アクティブなスポーンがあればそのまま返す
     const active = activeResult.data
-    if (active) return res.json({ spawn: active, commands })
+    if (active) return res.json({ spawn: active, commands, rewards })
 
     // 4. クールダウンチェック（最後のスポーンから20分）
     const { data: last } = await db
@@ -74,7 +89,7 @@ export default async function handler(req: any, res: any) {
     if (last) {
       const lastTime = new Date(last.spawned_at).getTime()
       if (Date.now() - lastTime < SPAWN_COOLDOWN_MS) {
-        return res.json({ spawn: null, commands, _debug: `cooldown: ${Math.ceil((SPAWN_COOLDOWN_MS - (Date.now() - lastTime)) / 60000)}min remaining` })
+        return res.json({ spawn: null, commands, rewards, _debug: `cooldown: ${Math.ceil((SPAWN_COOLDOWN_MS - (Date.now() - lastTime)) / 60000)}min remaining` })
       }
     }
 
@@ -86,7 +101,7 @@ export default async function handler(req: any, res: any) {
       .eq('spawn_date', today)
 
     if ((dailyCount ?? 0) >= MAX_DAILY_SPAWNS) {
-      return res.json({ spawn: null, commands, _debug: 'daily limit reached' })
+      return res.json({ spawn: null, commands, rewards, _debug: 'daily limit reached' })
     }
 
     // 6. スポーン
@@ -109,10 +124,10 @@ export default async function handler(req: any, res: any) {
       // 23505 = unique_violation：別リクエストがほぼ同時にスポーン済み（出現レース）。
       //   uniq_skulporin_active により2体目のINSERTがここで弾かれる＝正常系として握りつぶす。
       if (error?.code === '23505') {
-        return res.json({ spawn: null, commands, _debug: 'race: another active spawn already exists' })
+        return res.json({ spawn: null, commands, rewards, _debug: 'race: another active spawn already exists' })
       }
       console.error('[skulporin] insert error:', error)
-      return res.json({ spawn: null, commands, _debug: `insert error: ${error?.message ?? 'no data'}` })
+      return res.json({ spawn: null, commands, rewards, _debug: `insert error: ${error?.message ?? 'no data'}` })
     }
 
     // 7. ワールド通知
@@ -124,7 +139,7 @@ export default async function handler(req: any, res: any) {
       player_id: 'system',
     })
 
-    return res.json({ spawn: newSpawn, commands })
+    return res.json({ spawn: newSpawn, commands, rewards })
 
   } catch (e: any) {
     console.error('[skulporin] unhandled error:', e)

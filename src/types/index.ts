@@ -50,6 +50,13 @@ export interface Item {
 
 export type FacilityKind = 'refine' | 'shadow' | 'spellbook'
 
+// いいね報酬（サーバー抽選）。potion時のみ reward_name に色名が入る。
+export interface LikeReward {
+  reward_type: 'potion' | 'coin' | 'point'
+  reward_name?: string | null
+  from_name?: string | null
+}
+
 export interface RefineResult { success: boolean; itemName: string; refineLevel: number }
 export interface ShadowResult { success: boolean }
 export interface SpellbookResult { success: boolean; lostName: string; gainedName?: string }
@@ -183,6 +190,8 @@ declare global {
       spells: Item[],
       onAccept: () => void,
     ) => void
+    // ── いいね機能：報酬付与（いいねした本人側。messageは「XXさんにいいねしました」等）──
+    grantReward?: (reward: LikeReward, message: string) => void
     // ── イベントフロア施設 ──
     openFacility?: (kind: FacilityKind) => void
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null

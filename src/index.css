@@ -2981,10 +2981,29 @@ html, body {
   word-break: break-word;
 }
 
+.world-telop-like {
+  margin: 4px 0 6px;
+  padding: 5px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(180deg, #ff6b8b, #e84a6f);
+  border: 1px solid #ff9ab0;
+  border-radius: 999px;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 2px 8px rgba(232, 74, 111, 0.45);
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+.world-telop-like:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+.world-telop-like:active:not(:disabled) { transform: translateY(0); }
+.world-telop-like:disabled { opacity: 0.7; cursor: default; }
+
 @media (max-width: 500px) {
   .world-telop { padding: 8px 16px 9px; min-width: 200px; }
   .world-telop-title { font-size: 13px; }
   .world-telop-msg   { font-size: 12px; }
+  .world-telop-like  { font-size: 12px; padding: 6px 16px; }
 }
 
 /* ══════════════════════════════════════════════════════════

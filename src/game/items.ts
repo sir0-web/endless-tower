@@ -8,12 +8,15 @@ export const SPELL_ITEMS: { name: string; spellType: SpellType }[] = [
   { name: 'メテオストームの書',     spellType: 'meteostorm'    },
 ]
 
-const HEAL_ITEMS = [
+export const HEAL_ITEMS = [
   { name: '黄ポーション', healAmount: 15 },
   { name: '白ポーション', healAmount: 30 },
   { name: '赤ポーション', healAmount: 8 },
   { name: 'スタミナポーション', healAmount: 0, staminaPercent: 30 },
 ]
+
+// いいね報酬で配るポーション名（色ランダム抽選用）
+export const POTION_NAMES = HEAL_ITEMS.map(h => h.name)
 
 // atkBonus/defBonus を廃止し strBonus/vitBonus に統一
 // minFloor: その階以降でのみ出現する（深層ほど強力な装備が出る）
