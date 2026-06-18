@@ -57,9 +57,10 @@ init(data: {
     }
 
     // 列レイアウト（シンプル化）
-    const colRank = W * 0.08
-    const colName = W * 0.25
-    const colMax  = W * 0.75
+const colRank  = W * 0.08
+const colName  = W * 0.25
+const colFloor = W * 0.65
+const colLevel = W * 0.88
 
     const headerY = H * 0.23
     const headerStyle = { fontSize: fs(16), color: '#888888' }
