@@ -104,7 +104,7 @@ init(data: {
         this.add.text(
           colMax,
           y,
-          floorLabel(entry.max_level),
+          floorLabel(entry.level),
           { fontSize: fs(14), color }
         ).setOrigin(0.5)
       })
