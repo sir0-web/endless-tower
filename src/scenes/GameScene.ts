@@ -1365,7 +1365,10 @@ export class GameScene extends Phaser.Scene {
     this.state.driedSprings = []
     this.state.player.floor++
     const floor = this.state.player.floor
-    logEvent('floor_reached', { floor, level: this.state.player.level })
+    logEvent('floor_reached', {
+  floor,
+  level: this.level
+})
     if (floor % 5 === 0) {
       fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがB${floor}階に到達しました！`, `floor:${floor}`)
     }
@@ -1953,7 +1956,9 @@ export class GameScene extends Phaser.Scene {
   private gameOver() {
     if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
     this.isGameOver = true
-    logEvent('death', { floor: this.state.player.floor, level: this.state.player.level })
+    logEvent('death', {
+  floor: this.state.player.floor,
+  level: this.level
     clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
     this.input.keyboard!.off('keydown', this.handleInput, this)
     window.isGameSceneActive = false
@@ -1961,7 +1966,10 @@ export class GameScene extends Phaser.Scene {
     // 少し間を置いてから暗転 → ゲームオーバー画面へ
     this.time.delayedCall(700, () => this.cameras.main.fadeOut(500, 0, 0, 0))
     this.time.delayedCall(1250, () => {
-      this.scene.start('GameOverScene', { floor: this.state.player.floor, level: this.state.player.level })
+      this.scene.start('GameOverScene', {
+  floor: this.state.player.floor,
+  level: this.level
+})
     })
   }
 
