@@ -1988,7 +1988,9 @@ private gameOver() {
     if (this.state.messages.length > 50) this.state.messages.pop()
     this.updateWindowGameState()
   }
-
+private addMessage(text: string) {
+  this.addWorldLogMessage(text)
+}
   private updateWindowGameState() {
     const { player, messages } = this.state
     window.gameState = {
