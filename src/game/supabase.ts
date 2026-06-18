@@ -49,7 +49,7 @@ export function logEvent(eventType: GameEventType, payload: GameEventPayload = {
 
 export async function fetchRanking() {
   const { data, error } = await supabase
-    .from('ebt_ranking_view')
+    .from('ebt_rankings')
     .select('*')
     .order('floor', { ascending: false })
     .limit(10)
