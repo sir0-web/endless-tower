@@ -2580,7 +2580,10 @@ private goGameOver() {
     this.cameras.main.fadeOut(500, 0, 0, 0)
   })
 
-this.goGameOver()
+  this.time.delayedCall(1250, () => {
+    this.scene.start('GameOverScene', {
+      floor,
+      level
     })
   })
 }
