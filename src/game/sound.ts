@@ -1,6 +1,8 @@
-
 // ── BGM / SE 管理 ──
-// BGMはクロスフェードで滑らかに切り替え、SEは多重再生（連撃が重なって鳴る）に対応。
+// BGMはHTMLAudioでクロスフェード切り替え。
+// SEはWeb Audio APIで再生する：効果音を一度だけデコードして使い回し、
+// 再生のたびに軽量なBufferSourceを生成する。これにより従来の cloneNode 量産で
+// 起きていた「メディア要素の枯渇でSEだけ鳴らなくなる」問題を原理的に解消する。
 
 let bgmAudio: HTMLAudioElement | null = null
 let bgmName: string | null = null
@@ -45,6 +47,7 @@ export function toggleMute(): void {
   if (_muted) {
     if (bgmAudio) { bgmAudio.pause(); bgmAudio = null }
   } else {
+    resumeAudio()
     if (bgmName) {
       bgmAudio = new Audio(`/bgm/${bgmName}.mp3`)
       bgmAudio.loop = true
@@ -86,21 +89,77 @@ export function stopBGM(): void {
   bgmName = null
 }
 
-// ── SE（多重再生対応：cloneNode で同時発音を許可） ──
-const seTemplates: Record<string, HTMLAudioElement> = {}
+// ── SE（Web Audio API：大量の重なり再生でも要素枯渇しない） ──
+const SE_NAMES = ['attack', 'damage', 'levelup', 'stairs', 'potion', 'equip']
+
+let audioCtx: AudioContext | null = null
+const seBuffers: Record<string, AudioBuffer> = {}
+const seLoading: Record<string, boolean> = {}
+
+function getCtx(): AudioContext | null {
+  if (audioCtx) return audioCtx
+  try {
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctor) return null
+    audioCtx = new Ctor()
+  } catch {
+    return null
+  }
+  return audioCtx
+}
+
+async function loadSeBuffer(name: string): Promise<void> {
+  const ctx = getCtx()
+  if (!ctx || seBuffers[name] || seLoading[name]) return
+  seLoading[name] = true
+  try {
+    const res = await fetch(`/se/${name}.mp3`)
+    const arr = await res.arrayBuffer()
+    seBuffers[name] = await ctx.decodeAudioData(arr)
+  } catch {
+    // デコード失敗時はその音が鳴らないだけ（ゲーム進行は止めない）
+  } finally {
+    seLoading[name] = false
+  }
+}
+
+/** 全SEを事前デコード（初回ヒットの取りこぼし防止）。ユーザー操作後に呼ぶと確実。 */
+export function preloadSE(): void {
+  for (const n of SE_NAMES) void loadSeBuffer(n)
+}
+
+/** AudioContextをユーザー操作で起こす（モバイルのsuspend/中断からの自動復帰）。 */
+export function resumeAudio(): void {
+  const ctx = getCtx()
+  if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {})
+}
 
 function se(name: string, volMul = 1): void {
   if (_muted) return
-  let tpl = seTemplates[name]
-  if (!tpl) {
-    tpl = new Audio(`/se/${name}.mp3`)
-    tpl.preload = 'auto'
-    seTemplates[name] = tpl
-  }
-  // クローンを再生 → 連続ヒットでも切れずに重なって鳴る
-  const a = tpl.cloneNode() as HTMLAudioElement
-  a.volume = Math.max(0, Math.min(1, (SE_VOLUME[name] ?? 0.5) * volMul))
-  void a.play().catch(() => {})
+  const ctx = getCtx()
+  if (!ctx) return
+  if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+
+  const buf = seBuffers[name]
+  if (!buf) { void loadSeBuffer(name); return }  // 未デコードなら今回はスキップ（次回から鳴る）
+
+  const src  = ctx.createBufferSource()
+  src.buffer = buf
+  const gain = ctx.createGain()
+  gain.gain.value = Math.max(0, Math.min(1, (SE_VOLUME[name] ?? 0.5) * volMul))
+  src.connect(gain).connect(ctx.destination)
+  src.start()
+  src.onended = () => { src.disconnect(); gain.disconnect() }
+}
+
+// ユーザー操作のたびにAudioContextを起こし、SEを事前ロードしておく。
+// これにより、何らかの理由で出力が中断されても次の入力で自動復帰する。
+if (typeof window !== 'undefined') {
+  const prime = () => { resumeAudio(); preloadSE() }
+  window.addEventListener('pointerdown', prime, { passive: true })
+  window.addEventListener('keydown', prime)
+  window.addEventListener('touchstart', prime, { passive: true })
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeAudio() })
 }
 
 export function playAttack():  void { se('attack')  }
