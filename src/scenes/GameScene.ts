@@ -1767,6 +1767,9 @@ export class GameScene extends Phaser.Scene {
   } | null): void {
     if (!spawn || spawn.status !== 'active') return
 
+    // ターゲットに指名された本人のフロアにのみ出現させる（全員には出さない）
+    if (spawn.target_player_id !== getPlayerId()) return
+
     // すでにマップに存在する場合はスキップ
     if (this.state.enemies.some(e => e.isSkulporin)) return
 

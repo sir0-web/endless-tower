@@ -23,8 +23,14 @@ export default async function handler(req: any, res: any) {
     const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
     const now = new Date()
 
-    // 1-3: セッション更新・ADMINコマンド取得・アクティブスポーン確認を並列実行
-    const [, cmdsResult, activeResult] = await Promise.all([
+    // 0-3: 時間切れactiveの掃除・セッション更新・ADMINコマンド取得・アクティブスポーン確認を並列実行
+    //   掃除：オフライン等でクライアントがescape処理できないまま残った個体を escaped に倒す。
+    //         これが無いと下のユニークインデックス(active=1体)が古い個体で詰まり新規が出なくなる。
+    const [, , cmdsResult, activeResult] = await Promise.all([
+      db.from('skulporin_spawns')
+        .update({ status: 'escaped' })
+        .eq('status', 'active')
+        .lt('escapes_at', now.toISOString()),
       db.from('active_sessions').upsert({
         player_id,
         player_name: player_name ?? '冒険者',
@@ -100,6 +106,11 @@ export default async function handler(req: any, res: any) {
       .single()
 
     if (error || !newSpawn) {
+      // 23505 = unique_violation：別リクエストがほぼ同時にスポーン済み（出現レース）。
+      //   uniq_skulporin_active により2体目のINSERTがここで弾かれる＝正常系として握りつぶす。
+      if (error?.code === '23505') {
+        return res.json({ spawn: null, commands, _debug: 'race: another active spawn already exists' })
+      }
       console.error('[skulporin] insert error:', error)
       return res.json({ spawn: null, commands, _debug: `insert error: ${error?.message ?? 'no data'}` })
     }
