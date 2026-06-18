@@ -40,7 +40,7 @@ export async function submitRanking(
 export async function fetchRanking(): Promise<RankingEntry[]> {
   const { data, error } = await supabase
     .from('rankings')
-    .select('player_name, max_level')
+    .select('player_name, floor, level')
     .order('max_level', { ascending: false })
     .limit(10)
 
