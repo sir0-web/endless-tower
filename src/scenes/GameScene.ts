@@ -1365,10 +1365,7 @@ export class GameScene extends Phaser.Scene {
     this.state.driedSprings = []
     this.state.player.floor++
     const floor = this.state.player.floor
-    logEvent('floor_reached', {
-  floor,
-  level: this.state.player.level
-})
+    logEvent('floor_reached', { floor, level: this.state.player.level })
     if (floor % 5 === 0) {
       fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがB${floor}階に到達しました！`, `floor:${floor}`)
     }
@@ -1953,34 +1950,26 @@ export class GameScene extends Phaser.Scene {
 
   // ─────────────────────────────────────────────────────────
 
-private gameOver() {
-  if (this.isGameOver) return // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
-
-  this.isGameOver = true
-
-  logEvent('death', {
-    floor: this.state.player.floor,
-    level: this.state.player.level
-  })
-
-  clearSave() // セーブデータがあった場合、ゲームオーバーで強制消滅させる
-
-  this.input.keyboard!.off('keydown', this.handleInput, this)
-  window.isGameSceneActive = false
-  window.dispatchEvent(new Event('game-scene-changed'))
-
-  // 少し間を置いてから暗転 → ゲームオーバー画面へ
-  this.time.delayedCall(700, () => {
-    this.cameras.main.fadeOut(500, 0, 0, 0)
-  })
-
-  this.time.delayedCall(1250, () => {
-    this.scene.start('GameOverScene', {
-      floor: this.state.player.floor,
-      level: this.state.player.level
+  private gameOver() {
+    if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
+    this.isGameOver = true
+    logEvent('death', { floor: this.state.player.floor, level: this.state.player.level })
+    clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
+    this.input.keyboard!.off('keydown', this.handleInput, this)
+    window.isGameSceneActive = false
+    window.dispatchEvent(new Event('game-scene-changed'))
+    // 少し間を置いてから暗転 → ゲームオーバー画面へ
+    this.time.delayedCall(700, () => this.cameras.main.fadeOut(500, 0, 0, 0))
+    this.time.delayedCall(1250, () => {
+      this.scene.start('GameOverScene', { floor: this.state.player.floor, level: this.state.player.level })
     })
-  })
-}
+  }
+
+  private addMessage(msg: string) {
+    this.state.messages.unshift(msg)
+    if (this.state.messages.length > 50) this.state.messages.pop()
+    window.showEventMessage?.(msg)
+  }
 
   /** ワールド通知をゲーム内ログに残す（EventMsgBarは光らせない。テロップと役割分担）。 */
   private addWorldLogMessage(text: string) {
@@ -1988,9 +1977,7 @@ private gameOver() {
     if (this.state.messages.length > 50) this.state.messages.pop()
     this.updateWindowGameState()
   }
-private addMessage(text: string) {
-  this.addWorldLogMessage(text)
-}
+
   private updateWindowGameState() {
     const { player, messages } = this.state
     window.gameState = {
