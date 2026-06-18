@@ -41,8 +41,8 @@ export async function fetchRanking(): Promise<RankingEntry[]> {
   const { data, error } = await supabase
     .from('rankings')
     .select('player_name, floor, level')
-    .order('max_level', { ascending: false })
-    .limit(10)
+.order('floor', { ascending: false })
+.limit(10)
 
   if (error) {
     console.error('ランキング取得エラー:', error)
