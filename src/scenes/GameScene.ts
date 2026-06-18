@@ -1367,7 +1367,7 @@ export class GameScene extends Phaser.Scene {
     const floor = this.state.player.floor
     logEvent('floor_reached', {
   floor,
-  level: this.level
+  level: this.state.player.level
 })
     if (floor % 5 === 0) {
       fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがB${floor}階に到達しました！`, `floor:${floor}`)
@@ -1953,26 +1953,34 @@ export class GameScene extends Phaser.Scene {
 
   // ─────────────────────────────────────────────────────────
 
-  private gameOver() {
-    if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
-    this.isGameOver = true
-    logEvent('death', {
-  clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
-this.input.keyboard!.off('keydown', this.handleInput, this)
-window.isGameSceneActive = false
-window.dispatchEvent(new Event('game-scene-changed'))
+private gameOver() {
+  if (this.isGameOver) return // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
 
-// 少し間を置いてから暗転 → ゲームオーバー画面へ
-this.time.delayedCall(700, () => {
-  this.cameras.main.fadeOut(500, 0, 0, 0)
-})
+  this.isGameOver = true
 
-this.time.delayedCall(1250, () => {
-  this.scene.start('GameOverScene', {
+  logEvent('death', {
     floor: this.state.player.floor,
-    level: this.level
+    level: this.state.player.level
   })
-})
+
+  clearSave() // セーブデータがあった場合、ゲームオーバーで強制消滅させる
+
+  this.input.keyboard!.off('keydown', this.handleInput, this)
+  window.isGameSceneActive = false
+  window.dispatchEvent(new Event('game-scene-changed'))
+
+  // 少し間を置いてから暗転 → ゲームオーバー画面へ
+  this.time.delayedCall(700, () => {
+    this.cameras.main.fadeOut(500, 0, 0, 0)
+  })
+
+  this.time.delayedCall(1250, () => {
+    this.scene.start('GameOverScene', {
+      floor: this.state.player.floor,
+      level: this.state.player.level
+    })
+  })
+}
 
   /** ワールド通知をゲーム内ログに残す（EventMsgBarは光らせない。テロップと役割分担）。 */
   private addWorldLogMessage(text: string) {
@@ -2558,7 +2566,24 @@ this.time.delayedCall(1250, () => {
     this.facilityBoundsCache.set(key, result)
     return result
   }
+private goGameOver() {
+  const floor = this.state.player.floor
+  const level = this.state.player.level
 
+  clearSave()
+
+  this.input.keyboard!.off('keydown', this.handleInput, this)
+  window.isGameSceneActive = false
+  window.dispatchEvent(new Event('game-scene-changed'))
+
+  this.time.delayedCall(700, () => {
+    this.cameras.main.fadeOut(500, 0, 0, 0)
+  })
+
+this.goGameOver()
+    })
+  })
+}
   private renderMap() {
     this.graphics.clear()
     const { map, player, enemies, items } = this.state
