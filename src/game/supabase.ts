@@ -5,6 +5,10 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
+// =======================
+// 🎯 ランキング
+// =======================
+
 export interface RankingEntry {
   player_name: string
   floor: number
@@ -12,7 +16,7 @@ export interface RankingEntry {
   created_at?: string
 }
 
-// 🔥 送信
+// 送信
 export async function submitRanking(
   player_name: string,
   floor: number,
@@ -23,7 +27,7 @@ export async function submitRanking(
     .insert({
       player_name,
       floor,
-      level
+      level,
     })
 
   if (error) {
@@ -34,11 +38,11 @@ export async function submitRanking(
   return null
 }
 
-// 🔥 取得
+// 取得
 export async function fetchRanking(): Promise<RankingEntry[]> {
   const { data, error } = await supabase
     .from('ebt_rankings')
-    .select('player_name, floor, level')
+    .select('player_name, floor, level, created_at')
     .order('floor', { ascending: false })
     .limit(10)
 
@@ -50,7 +54,10 @@ export async function fetchRanking(): Promise<RankingEntry[]> {
   return (data ?? []) as RankingEntry[]
 }
 
-// プレイヤーID
+// =======================
+// 👤 プレイヤーID
+// =======================
+
 const PLAYER_ID_KEY = 'et_player_id'
 
 export function getPlayerId(): string {
@@ -60,4 +67,39 @@ export function getPlayerId(): string {
     localStorage.setItem(PLAYER_ID_KEY, id)
   }
   return id
+}
+
+// =======================
+// 📊 行動ログ（Vercel互換で残す）
+// =======================
+
+type GameEventType =
+  | 'floor_reached'
+  | 'slot_result'
+  | 'death'
+  | 'kill'
+
+interface GameEventPayload {
+  floor?: number
+  level?: number
+  slot_result?: string
+  enemy_name?: string
+  is_boss?: boolean
+}
+
+// 🔥 これが今回エラー出てたやつ（復活）
+export function logEvent(
+  eventType: GameEventType,
+  payload: GameEventPayload = {}
+): void {
+  void supabase
+    .from('game_events')
+    .insert({
+      player_id: getPlayerId(),
+      event_type: eventType,
+      ...payload,
+    })
+    .then(({ error }) => {
+      if (error) console.warn('行動ログ送信失敗:', error.message)
+    })
 }
