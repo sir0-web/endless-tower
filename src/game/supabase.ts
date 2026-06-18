@@ -5,28 +5,26 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-
-// ─────────────────────────────
-// 🏆 ランキング（EBT統一版）
-// ─────────────────────────────
-
 export interface RankingEntry {
   player_name: string
-  max_level: number
+  floor: number
+  level: number
+  created_at?: string
 }
 
-// 登録
+// 🔥 送信
 export async function submitRanking(
-  playerName: string,
-  maxLevel: number
+  player_name: string,
+  floor: number,
+  level: number
 ): Promise<string | null> {
   const { error } = await supabase
-    .from('rankings')
+    .from('ebt_rankings')
     .insert({
-  player_name,
-  floor,
-  level
-})
+      player_name,
+      floor,
+      level
+    })
 
   if (error) {
     console.error('ランキング登録エラー:', error)
@@ -36,13 +34,13 @@ export async function submitRanking(
   return null
 }
 
-// 取得（TOP10）
+// 🔥 取得
 export async function fetchRanking(): Promise<RankingEntry[]> {
   const { data, error } = await supabase
-    .from('rankings')
+    .from('ebt_rankings')
     .select('player_name, floor, level')
-.order('floor', { ascending: false })
-.limit(10)
+    .order('floor', { ascending: false })
+    .limit(10)
 
   if (error) {
     console.error('ランキング取得エラー:', error)
@@ -52,57 +50,14 @@ export async function fetchRanking(): Promise<RankingEntry[]> {
   return (data ?? []) as RankingEntry[]
 }
 
-
-// ─────────────────────────────
-// 🆔 プレイヤー識別
-// ─────────────────────────────
-
+// プレイヤーID
 const PLAYER_ID_KEY = 'et_player_id'
 
 export function getPlayerId(): string {
   let id = localStorage.getItem(PLAYER_ID_KEY)
-
   if (!id) {
     id = crypto.randomUUID()
     localStorage.setItem(PLAYER_ID_KEY, id)
   }
-
   return id
-}
-
-
-// ─────────────────────────────
-// 📊 行動ログ（そのまま維持）
-// ─────────────────────────────
-
-type GameEventType =
-  | 'floor_reached'
-  | 'slot_result'
-  | 'death'
-  | 'kill'
-
-interface GameEventPayload {
-  floor?: number
-  level?: number
-  slot_result?: string
-  enemy_name?: string
-  is_boss?: boolean
-}
-
-export function logEvent(
-  eventType: GameEventType,
-  payload: GameEventPayload = {}
-): void {
-  void supabase
-    .from('game_events')
-    .insert({
-      player_id: getPlayerId(),
-      event_type: eventType,
-      ...payload
-    })
-    .then(({ error }) => {
-      if (error) {
-        console.warn('行動ログ送信失敗:', error.message)
-      }
-    })
 }
