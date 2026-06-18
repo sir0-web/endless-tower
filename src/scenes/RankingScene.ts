@@ -103,14 +103,19 @@ this.add.text(colLevel, headerY, 'Lv', headerStyle).setOrigin(0.5)
         this.add.text(colName, y, entry.player_name, { fontSize: entryFs, color })
 
         // EBTでは floor = max_level相当として扱う
-        this.add.text(
-          colMax,
-          y,
-          floorLabel(entry.level),
-          { fontSize: fs(14), color }
-        ).setOrigin(0.5)
-      })
-    }
+this.add.text(
+  colFloor,
+  y,
+  floorLabel(entry.floor),
+  { fontSize: fs(14), color }
+).setOrigin(0.5)
+
+this.add.text(
+  colLevel,
+  y,
+  String(entry.level),
+  { fontSize: fs(14), color }
+).setOrigin(0.5)
 
     const btnLabel = this.from === 'title' ? 'もどる' : 'もう一度挑戦する'
 
