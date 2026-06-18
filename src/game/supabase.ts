@@ -41,7 +41,7 @@ export async function submitRanking(
 // 取得
 export async function fetchRanking(): Promise<RankingEntry[]> {
   const { data, error } = await supabase
-    .from('ebt_rankings')
+    .from('ebt_ranking_view')
     .select('player_name, floor, level, created_at')
     .order('floor', { ascending: false })
     .limit(10)
