@@ -49,8 +49,8 @@ init(data: {
       fontStyle: 'bold',
     }).setOrigin(0.5)
 
-    if (this.floor > 0) {
-      this.add.text(cx, H * 0.15, `あなたの記録：${floorLabel(entry.floor)}`, {
+if (this.floor > 0) {
+  this.add.text(cx, H * 0.15, `あなたの記録：${floorLabel(this.floor)}`, {
         fontSize: fs(18),
         color: '#aaffaa',
       }).setOrigin(0.5)
@@ -79,36 +79,46 @@ this.add.text(colLevel, headerY, 'Lv', headerStyle).setOrigin(0.5)
     const listTop = H * 0.28
 
     if (this.ranking.length === 0) {
-      this.add.text(cx, H * 0.5, 'まだ記録がありません', {
-        fontSize: fs(18),
-        color: '#aaaaaa',
-      }).setOrigin(0.5)
-    } else {
-      this.ranking.forEach((entry, i) => {
-        const y = listTop + i * rowH
+  this.add.text(cx, H * 0.5, 'まだ記録がありません', {
+    fontSize: fs(18),
+    color: '#aaaaaa',
+  }).setOrigin(0.5)
+} else {
+  this.ranking.forEach((entry, i) => {
+    const y = listTop + i * rowH
 
-        const color =
-          i === 0 ? '#ffdd00' :
-          i === 1 ? '#cccccc' :
-          i === 2 ? '#cc8844' : '#ffffff'
+    const color =
+      i === 0 ? '#ffdd00' :
+      i === 1 ? '#cccccc' :
+      i === 2 ? '#cc8844' : '#ffffff'
 
-        const medal =
-          i === 0 ? '🥇' :
-          i === 1 ? '🥈' :
-          i === 2 ? '🥉' : `${i + 1}.`
+    const medal =
+      i === 0 ? '🥇' :
+      i === 1 ? '🥈' :
+      i === 2 ? '🥉' : `${i + 1}.`
 
-        const entryFs = fs(18)
+    const entryFs = fs(18)
 
-        this.add.text(colRank, y, medal, { fontSize: entryFs, color })
-        this.add.text(colName, y, entry.player_name, { fontSize: entryFs, color })
+    this.add.text(colRank, y, medal, { fontSize: entryFs, color })
+    this.add.text(colName, y, entry.player_name, { fontSize: entryFs, color })
 
-        // EBTでは floor = max_level相当として扱う
-this.add.text(
-  colFloor,
-  y,
-  floorLabel(entry.floor),
-  { fontSize: fs(14), color }
-).setOrigin(0.5)
+    // 到達階
+    this.add.text(
+      colFloor,
+      y,
+      floorLabel(entry.floor),
+      { fontSize: fs(14), color }
+    ).setOrigin(0.5)
+
+    // レベル
+    this.add.text(
+      colLevel,
+      y,
+      String(entry.level),
+      { fontSize: fs(14), color }
+    ).setOrigin(0.5)
+  })
+}
 
 this.add.text(
   colLevel,
