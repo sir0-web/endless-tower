@@ -23,9 +23,10 @@ export async function submitRanking(
   const { error } = await supabase
     .from('rankings')
     .insert({
-      player_name: playerName,
-      max_level: maxLevel
-    })
+  player_name,
+  floor,
+  level
+})
 
   if (error) {
     console.error('ランキング登録エラー:', error)
