@@ -624,13 +624,20 @@ export class GameScene extends Phaser.Scene {
       'down-right': [1, 1], 'down-left': [-1, 1], 'up-right': [1, -1], 'up-left': [-1, -1],
     }
     const [vx, vy] = vec[this.playerDir]
+    // 突進の基準は常にプレイヤーの現在タイル中心にする。
+    // g.x基準＋tween重ねだと、同方向に連打した際に基準位置が前へ累積して
+    // グラフィックだけ前進し続けてしまうため、毎回タイル中心へ戻してから突進する。
+    const { x: bx, y: by } = this.tileToWorld(this.state.player.position.x, this.state.player.position.y)
+    this.tweens.killTweensOf(g)
+    g.setPosition(bx, by)
     this.tweens.add({
       targets: g,
-      x: g.x + vx * this.rts * 0.3,
-      y: g.y + vy * this.rts * 0.3,
+      x: bx + vx * this.rts * 0.3,
+      y: by + vy * this.rts * 0.3,
       duration: 80,
       yoyo: true,
       ease: 'Quad.Out',
+      onComplete: () => { g.setPosition(bx, by) },
     })
   }
 
@@ -1697,7 +1704,7 @@ export class GameScene extends Phaser.Scene {
     reward: { reward_type: string; reward_name?: string | null },
     message: string,
   ): void {
-    let detail = ''
+    let detail: string
     if (reward.reward_type === 'point') {
       this.state.player.statPoints += 1
       detail = 'ステータスポイント+1！'
