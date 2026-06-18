@@ -11,7 +11,6 @@ interface RankingEntry {
 export class RankingScene extends Phaser.Scene {
   private ranking: RankingEntry[] = []
   private floor: number = 1
-  private level: number = 1
   private from: 'title' | 'gameover' = 'gameover'
 
   constructor() {
