@@ -4,7 +4,7 @@ import { playBGM } from '../game/sound'
 
 interface RankingEntry {
   player_name: string
-  max_level: number
+  level: number
   created_at: string
 }
 
