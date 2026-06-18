@@ -65,9 +65,10 @@ const colLevel = W * 0.88
     const headerY = H * 0.23
     const headerStyle = { fontSize: fs(16), color: '#888888' }
 
-    this.add.text(colRank, headerY, '順位', headerStyle)
-    this.add.text(colName, headerY, '名前', headerStyle)
-    this.add.text(colMax,  headerY, '到達階', headerStyle).setOrigin(0.5)
+this.add.text(colRank, headerY, '順位', headerStyle)
+this.add.text(colName, headerY, '名前', headerStyle)
+this.add.text(colFloor, headerY, '到達階', headerStyle).setOrigin(0.5)
+this.add.text(colLevel, headerY, 'Lv', headerStyle).setOrigin(0.5)
 
     const lineY = headerY + Math.round(22 * sc)
     const line = this.add.graphics()
