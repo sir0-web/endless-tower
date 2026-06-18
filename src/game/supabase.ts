@@ -12,7 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey)
 export interface RankingEntry {
   player_name: string
   floor: number
-  max_level: number   // ← ここに統一
+  max_level: number
   created_at?: string
 }
 
@@ -20,15 +20,15 @@ export interface RankingEntry {
 export async function submitRanking(
   player_name: string,
   floor: number,
-  level: number
+  max_level: number
 ): Promise<string | null> {
   const { error } = await supabase
     .from('ebt_rankings')
     .insert({
-  player_name,
-  floor,
-  max_level,
-})
+      player_name,
+      floor,
+      max_level,
+    })
 
   if (error) {
     console.error('ランキング登録エラー:', error)
@@ -42,7 +42,7 @@ export async function submitRanking(
 export async function fetchRanking(): Promise<RankingEntry[]> {
   const { data, error } = await supabase
     .from('ebt_rankings')
-    .select('player_name, floor, level, created_at')
+    .select('player_name, floor, max_level, created_at')
     .order('floor', { ascending: false })
     .limit(10)
 
@@ -70,7 +70,7 @@ export function getPlayerId(): string {
 }
 
 // =======================
-// 📊 行動ログ（Vercel互換で残す）
+// 📊 行動ログ
 // =======================
 
 type GameEventType =
@@ -81,13 +81,12 @@ type GameEventType =
 
 interface GameEventPayload {
   floor?: number
-  level?: number
+  max_level?: number
   slot_result?: string
   enemy_name?: string
   is_boss?: boolean
 }
 
-// 🔥 これが今回エラー出てたやつ（復活）
 export function logEvent(
   eventType: GameEventType,
   payload: GameEventPayload = {}
