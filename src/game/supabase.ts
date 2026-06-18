@@ -24,11 +24,11 @@ export async function submitRanking(
 ): Promise<string | null> {
   const { error } = await supabase
     .from('ebt_rankings')
-    .insert({
-      player_name,
-      floor,
-      max_level,
-    })
+.insert({
+  player_name,
+  floor,
+  level,
+})
 
   if (error) {
     console.error('ランキング登録エラー:', error)
