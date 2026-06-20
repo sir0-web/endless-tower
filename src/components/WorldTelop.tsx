@@ -73,12 +73,14 @@ export function WorldTelop() {
     if (clearRef.current) { clearTimeout(clearRef.current); clearRef.current = null }
     setVisible(true)
   }
-  const resumeHide = () => {
+  // delay後に隠して消去する（タイマーを張り直す）。like後やホバー解除で使う
+  const scheduleHide = (delay: number) => {
     if (hideRef.current)  clearTimeout(hideRef.current)
     if (clearRef.current) clearTimeout(clearRef.current)
-    hideRef.current  = setTimeout(() => setVisible(false), 1000)
-    clearRef.current = setTimeout(() => setCurrent(null), 1000 + FADE_MS)
+    hideRef.current  = setTimeout(() => setVisible(false), delay)
+    clearRef.current = setTimeout(() => setCurrent(null), delay + FADE_MS)
   }
+  const resumeHide = () => scheduleHide(1000)
 
   const doLike = async () => {
     if (!current || likeStatus !== 'idle') return
@@ -103,6 +105,9 @@ export function WorldTelop() {
         setLikeStatus('done')
         window.showEventMessage?.(json?.message ?? 'いいねできませんでした', '#ff9a9a')
       }
+      // いいね後は「いいね済み」を一瞬見せてから必ず自動で閉じる
+      // （タッチ操作で pauseHide によりタイマーが止まったまま残るのを防ぐ）
+      scheduleHide(1300)
     } catch {
       setLikeStatus('idle')   // 通信失敗時は再挑戦できるよう戻す
     }
@@ -125,6 +130,7 @@ export function WorldTelop() {
       onMouseEnter={likeable ? pauseHide : undefined}
       onMouseLeave={likeable ? resumeHide : undefined}
       onTouchStart={likeable ? pauseHide : undefined}
+      onTouchEnd={likeable ? resumeHide : undefined}
     >
       <div className="world-telop-rule" style={{ background: c.border }} />
       <div className="world-telop-title" style={{ color: c.title }}>{current.title}</div>

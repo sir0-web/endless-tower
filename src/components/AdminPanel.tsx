@@ -332,16 +332,30 @@ export function AdminPanel() {
     setRepLoading(false)
   }, [db])
 
+  // 報告のステータス更新・削除は service key 経由のAPIで行う（reportsはanon更新/削除をRLSで弾くため）
+  const reportApi = async (body: Record<string, unknown>): Promise<{ ok?: boolean; deleted?: number; error?: string }> => {
+    if (!ADMIN_KEY) return { error: 'VITE_ADMIN_KEY 未設定' }
+    try {
+      const res = await fetch('/api/admin-report', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: ADMIN_KEY, ...body }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) return { error: json.error ?? `HTTP ${res.status}` }
+      return json
+    } catch (e) { return { error: String(e) } }
+  }
+
   const updateRepStatus = async (id: number, status: Report['status']) => {
-    const { error } = await db.from('reports').update({ status }).eq('id', id)
-    if (error) { setRepMsg(`エラー: ${error.message}`); return }
+    const { error } = await reportApi({ action: 'set_status', id, status })
+    if (error) { setRepMsg(`エラー: ${error}`); return }
     setReports(rs => rs.map(r => r.id === id ? { ...r, status } : r))
     if (repDetail?.id === id) setRepDetail(d => d ? { ...d, status } : d)
   }
 
   const deleteReport = async (id: number) => {
     if (!confirm('この報告を削除しますか？')) return
-    const { deleted, error } = await adminDelete('reports', [id])
+    const { deleted, error } = await reportApi({ action: 'delete', ids: [id] })
     if (error) { setRepMsg(`エラー: ${error}`); return }
     if (!deleted) { setRepMsg('削除できませんでした'); return }
     setRepMsg('削除しました ✓')
@@ -377,7 +391,7 @@ export function AdminPanel() {
     const ids = [...repSelected]
     if (ids.length === 0) return
     if (!confirm(`選択した ${ids.length} 件の報告を削除しますか？`)) return
-    const { deleted, error } = await adminDelete('reports', ids)
+    const { deleted, error } = await reportApi({ action: 'delete', ids })
     if (error) { setRepMsg(`エラー: ${error}`); return }
     if (!deleted) { setRepMsg('削除できませんでした'); return }
     setReports(rs => rs.filter(r => !ids.includes(r.id)))
