@@ -2,10 +2,20 @@ import { useEffect, useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface ToastState   { message: string }
-interface ConfirmState { message: string; onYes: () => void; onNo: () => void }
+interface ConfirmState {
+  message: string
+  onYes: () => void
+  onNo: () => void
+  yesLabel?: string
+  noLabel?: string
+  // true のとき「いいえ」を強調色（取り返しのつかない操作用）にする
+  danger?: boolean
+}
 
 // iOS Safari でも確実にスクロールを止める（position:fixed パターン）
 function lockScroll() {
+  // 既にロック中なら二重適用しない（二段階確認でスクロール位置が0に化けるのを防ぐ）
+  if (document.body.dataset.lockedY !== undefined) return
   const y = window.scrollY
   document.body.style.position = 'fixed'
   document.body.style.top      = `-${y}px`
@@ -42,7 +52,25 @@ export function GameToast() {
     }
     window.showResumeConfirm = (onYes, onNo) => {
       lockScroll()
-      setConfirm({ message: '前回の中断データがあります。\n中断データから再開しますか？', onYes, onNo })
+      // 「最初から」は中断データを完全削除する取り返しのつかない操作のため、
+      // 二段階確認を挟んで誤タップによるセーブ消失を防ぐ。
+      const confirmStartOver = () => {
+        setConfirm({
+          message: '本当に最初から始めますか？\n中断データは削除され、元に戻せません。',
+          yesLabel: '削除して最初から',
+          noLabel:  'やめる',
+          danger: true,
+          onYes: onNo,                    // 二段階目で「はい」→ 実際に clearSave + 新規開始
+          onNo:  () => window.showResumeConfirm?.(onYes, onNo),  // 取り消し → 最初の選択に戻る
+        })
+      }
+      setConfirm({
+        message: '前回の中断データがあります。\n続きから再開しますか？',
+        yesLabel: '続きから',
+        noLabel:  '最初から',
+        onYes,
+        onNo: confirmStartOver,
+      })
     }
     return () => {
       window.showGameToast     = undefined
@@ -56,8 +84,10 @@ export function GameToast() {
     if (!confirm) unlockScroll()
   }, [confirm])
 
-  const handleYes = () => { confirm?.onYes(); setConfirm(null) }
-  const handleNo  = () => { confirm?.onNo();  setConfirm(null) }
+  // 先に閉じてからコールバックを呼ぶ。コールバック内で次の確認(setConfirm)を出す場合、
+  // 後から呼ばれた setConfirm が勝つため、二段階確認への遷移が正しく行える。
+  const handleYes = () => { const cb = confirm?.onYes; setConfirm(null); cb?.() }
+  const handleNo  = () => { const cb = confirm?.onNo;  setConfirm(null); cb?.() }
 
   return createPortal(
     <>
@@ -81,8 +111,15 @@ export function GameToast() {
               ))}
             </p>
             <div className="g-confirm-btns">
-              <button className="g-confirm-yes" onClick={handleYes}>はい</button>
-              <button className="g-confirm-no"  onClick={handleNo}>いいえ</button>
+              <button
+                className={`g-confirm-yes${confirm.danger ? ' g-confirm-danger' : ''}`}
+                onClick={handleYes}
+              >
+                {confirm.yesLabel ?? 'はい'}
+              </button>
+              <button className="g-confirm-no" onClick={handleNo}>
+                {confirm.noLabel ?? 'いいえ'}
+              </button>
             </div>
           </div>
         </div>

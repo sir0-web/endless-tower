@@ -367,6 +367,9 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 .g-confirm-no  { background: #5c1a1a; color: #ff8888; }
 .g-confirm-no:hover  { filter: brightness(1.2); }
 
+/* 取り返しのつかない操作（中断データ削除）の確定ボタンは危険色で強調する */
+.g-confirm-yes.g-confirm-danger { background: #5c1a1a; color: #ff8888; }
+
 /* ── 仮想ジョイスティック（タッチ位置に出現） ── */
 .vj-outer {
   position: fixed;

@@ -20,11 +20,20 @@ export interface SaveData {
   savedAt: number
 }
 
-export function saveGame(data: Omit<SaveData, 'savedAt'>): void {
+// 保存が実際に永続化できたかを返す。
+// iOS Safari のプライベートモードや容量超過、ストレージ無効環境では
+// setItem が例外を投げる/書けても読み戻せないことがあるため、書き込み後に検証する。
+// （以前は失敗を握りつぶし、呼び出し側が常に「セーブしました」と誤表示していた）
+export function saveGame(data: Omit<SaveData, 'savedAt'>): boolean {
   try {
     const payload: SaveData = { ...data, savedAt: Date.now() }
-    localStorage.setItem(SAVE_KEY, JSON.stringify(payload))
-  } catch { /* 容量超過等は無視 */ }
+    const json = JSON.stringify(payload)
+    localStorage.setItem(SAVE_KEY, json)
+    // 読み戻して実際に保存されたか確認（プライベートモード等の握りつぶし対策）
+    return localStorage.getItem(SAVE_KEY) === json
+  } catch {
+    return false
+  }
 }
 
 export function loadGame(): SaveData | null {
