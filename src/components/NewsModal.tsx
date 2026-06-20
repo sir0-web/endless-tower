@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  fetchPublishedAnnouncements, markAnnouncementsSeen, registerView, isUnread,
+  fetchPublishedAnnouncements, registerView, isNew,
   type Announcement,
 } from '../game/announcements'
 import { RichTextView } from './RichText'
@@ -17,17 +17,16 @@ export function NewsModal() {
   const [list, setList]       = useState<Announcement[]>([])
   const [selected, setSelected] = useState<Announcement | null>(null)
 
-  useEffect(() => {
-    window.showNews = () => { setOpen(true); setSelected(null); void load() }
-  }, [])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     const data = await fetchPublishedAnnouncements()
     setList(data)
-    markAnnouncementsSeen(data)   // 一覧を開いた時点で既読化（TOPバッジ消灯）
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    window.showNews = () => { setOpen(true); setSelected(null); void load() }
+  }, [load])
 
   const openDetail = (a: Announcement) => { setSelected(a); void registerView(a.id) }
   const close = () => { setOpen(false); setSelected(null) }
@@ -57,7 +56,7 @@ export function NewsModal() {
                     <button key={a.id} onClick={() => openDetail(a)} style={S.row}>
                       <span style={S.rowDate}>{fmtDate(a.published_at)}</span>
                       <span style={S.rowTitle}>{a.title}</span>
-                      {isUnread(a) && <span style={S.newTag}>NEW</span>}
+                      {isNew(a) && <span style={S.newTag}>NEW</span>}
                     </button>
                   ))}
                 </div>

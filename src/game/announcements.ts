@@ -27,37 +27,33 @@ export async function fetchPublishedAnnouncements(): Promise<Announcement[]> {
   return (data ?? []) as Announcement[]
 }
 
-// ── 未読判定（TOPの NEW バッジ用）。最後に一覧を開いた時刻を localStorage に保存する ──
-const LAST_SEEN_KEY = 'et_news_last_seen'
-const VIEWED_KEY    = 'et_news_viewed'
+// ── NEW 判定：掲載24時間以内 かつ このブラウザで未閲覧 ──
+const RECENT_MS  = 24 * 60 * 60 * 1000
+const VIEWED_KEY = 'et_news_viewed'   // このブラウザで詳細を開いた記事ID（VIEW重複防止と兼用）
 
-export function getLastSeen(): number {
-  const v = localStorage.getItem(LAST_SEEN_KEY)
-  return v ? Number(v) : 0
-}
-
-/** 一覧を開いた時点で「既読」にする（最新の published_at を保存） */
-export function markAnnouncementsSeen(list: Announcement[]): void {
-  const latest = list.reduce((max, a) => Math.max(max, Date.parse(a.published_at)), 0)
-  if (latest > 0) localStorage.setItem(LAST_SEEN_KEY, String(latest))
-}
-
-/** 未読（最後に見た時刻より新しい公開お知らせ）があるか */
-export async function hasUnreadAnnouncements(): Promise<boolean> {
-  const list = await fetchPublishedAnnouncements()
-  if (list.length === 0) return false
-  const latest = Date.parse(list[0].published_at)
-  return latest > getLastSeen()
-}
-
-/** 個別お知らせの未読判定（一覧の NEW タグ用） */
-export function isUnread(a: Announcement): boolean {
-  return Date.parse(a.published_at) > getLastSeen()
-}
-
-// ── VIEW数カウント（同一ブラウザ・1記事1回まで。水増し防止）──
 function getViewedIds(): number[] {
   try { return JSON.parse(localStorage.getItem(VIEWED_KEY) ?? '[]') } catch { return [] }
+}
+
+/** このブラウザで一度でも詳細を開いたか */
+export function isViewed(id: number): boolean {
+  return getViewedIds().includes(id)
+}
+
+/** 掲載から24時間以内か（時間条件のみ） */
+export function isRecent(a: Announcement): boolean {
+  return Date.now() - Date.parse(a.published_at) < RECENT_MS
+}
+
+/** NEW表示するか：掲載24時間以内 かつ このブラウザで未閲覧 */
+export function isNew(a: Announcement): boolean {
+  return isRecent(a) && !isViewed(a.id)
+}
+
+/** NEW対象（24時間以内・未閲覧）の投稿があるか（TOPの NEW バッジ用） */
+export async function hasNewAnnouncement(): Promise<boolean> {
+  const list = await fetchPublishedAnnouncements()
+  return list.some(isNew)
 }
 
 /** 詳細を開いたときに呼ぶ。未カウントの記事だけサーバーで view_count を+1する */

@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import { playBGM, isMuted, toggleMute } from '../game/sound'
 import { fetchRanking } from '../game/supabase'
-import { hasUnreadAnnouncements } from '../game/announcements'
+import { hasNewAnnouncement } from '../game/announcements'
 import { hasSave, clearSave } from '../game/save'
 import { getDisplayName, setDisplayName } from '../game/playerName'
 
@@ -48,25 +48,27 @@ export class TitleScene extends Phaser.Scene {
       this.add.rectangle(cx, H / 2, W, H, 0x060610).setDepth(0)
     }
 
-    // ── ボタン（下部中央・縦並び・全幅統一）──
+    // ── ボタン（下部中央・縦並び・全幅統一）。NEWS を含め6つ収めるため詰める ──
     const btnFont = W < 500 ? 15 : 22
-    const gap     = H * 0.088
-    const top     = H * 0.56
+    const gap     = H * 0.078
+    const top     = H * 0.52
 
-    // ── 表示名（GAME START の上）。タップで変更可 ──
+    // ── 表示名（NEWS の上）。タップで変更可 ──
     this.makeNameBadge(cx, top - gap * 0.95, W)
 
-    // ①〜⑤ すべて同じ固定幅 BTN_WIDTH で生成
-    const startBtn = this.makeBtn(cx, top,          'GAME START',  btnFont, () => {
-      this.startGame()
-    })
-    const b2 = this.makeBtn(cx, top + gap,    'RANKING',     btnFont, () => { void this.goRanking() })
-    const b3 = this.makeBtn(cx, top + gap * 2,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
-    const b4 = this.makeBtn(cx, top + gap * 3,'HOW TO PLAY', btnFont, () => { this.openHowTo(W, H) })
-    const b5 = this.makeBtn(cx, top + gap * 4,'REPORT',      btnFont, () => { window.showReport?.() })
+    // NEWS は GAME START の真上・同サイズ。以降すべて同じ固定幅で生成
+    const newsBtn  = this.makeBtn(cx, top,          'NEWS',        btnFont, () => { window.showNews?.() })
+    const startBtn = this.makeBtn(cx, top + gap,    'GAME START',  btnFont, () => { this.startGame() })
+    const b2 = this.makeBtn(cx, top + gap * 2,'RANKING',     btnFont, () => { void this.goRanking() })
+    const b3 = this.makeBtn(cx, top + gap * 3,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
+    const b4 = this.makeBtn(cx, top + gap * 4,'HOW TO PLAY', btnFont, () => { this.openHowTo() })
+    const b5 = this.makeBtn(cx, top + gap * 5,'REPORT',      btnFont, () => { window.showReport?.() })
+
+    // NEWS ボタンに NEW バッジ（24時間以内・このブラウザ未閲覧の投稿があれば点灯）
+    this.attachNewsBadge(newsBtn, W)
 
     // ボタンを下から段階的にフェードイン
-    const btns = [startBtn, b2, b3, b4, b5]
+    const btns = [newsBtn, startBtn, b2, b3, b4, b5]
     btns.forEach((btn, i) => {
       btn.setAlpha(0)
       const baseY = btn.y
@@ -91,9 +93,6 @@ export class TitleScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     })
-
-    // ── お知らせ（NEWS）ボタン：右上に小さく配置。未読があれば赤バッジ ──
-    this.makeNewsButton(W)
 
     // React 側レイアウトへ「非プレイ画面（全幅化）」を通知。
     // スマホではキャンバスを全幅表示にして余白を埋める（プレイ遷移で GameScene が元に戻す）。
@@ -169,36 +168,18 @@ export class TitleScene extends Phaser.Scene {
     return btn
   }
 
-  // ── お知らせボタン（右上・コンパクト。未読バッジ付き）──
-  private makeNewsButton(W: number) {
+  // ── NEWS ボタンへ「NEW」バッジを重ねる（24時間以内・未閲覧の投稿があれば点灯）──
+  private attachNewsBadge(btn: Phaser.GameObjects.Container, W: number) {
     const small = W < 500
-    const w = small ? 104 : 128
-    const h = small ? 36 : 44
-    const x = W - w / 2 - (small ? 12 : 20)
-    const y = h / 2 + (small ? 12 : 18)
-
-    const frame = this.add.image(0, 0, 'btn-frame').setDisplaySize(w, h)
-    const txt = this.add.text(0, 0, '📜NEWS', {
-      fontFamily: PIXEL_FONT, fontSize: `${small ? 10 : 13}px`, color: '#f4e3a8', align: 'center',
-    }).setOrigin(0.5)
-    txt.setShadow(2, 2, '#160a02', 4, true, true)
-    const badge = this.add.circle(w / 2 - 5, -h / 2 + 5, small ? 6 : 7, 0xff3b30)
-      .setStrokeStyle(2, 0xfff2cc).setVisible(false)
-
-    const btn = this.add.container(x, y, [frame, txt, badge]).setSize(w, h).setDepth(11)
-    btn.setInteractive({
-      hitArea: new Phaser.Geom.Rectangle(0, 0, w, h),
-      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
-      useHandCursor: true,
-    })
-    btn.on('pointerover', () => { frame.setTint(0xfff2cc); txt.setColor('#fffbe6') })
-    btn.on('pointerout',  () => { frame.clearTint();       txt.setColor('#f4e3a8') })
-    btn.on('pointerdown', () => { badge.setVisible(false); window.showNews?.() })
-
-    // 入場フェード＋未読チェック
-    btn.setAlpha(0)
-    this.tweens.add({ targets: btn, alpha: 1, duration: 400, delay: 600 })
-    void hasUnreadAnnouncements().then(u => badge.setVisible(u)).catch(() => {})
+    const bw = small ? 268 : 332
+    const bh = small ? 54 : 66
+    const tag = this.add.text(bw / 2 - 26, -bh / 2 + 4, 'NEW', {
+      fontFamily: PIXEL_FONT, fontSize: `${small ? 9 : 11}px`, color: '#ffffff',
+      backgroundColor: '#c0392b', padding: { x: 5, y: 3 },
+    }).setOrigin(0.5).setVisible(false)
+    tag.setShadow(1, 1, '#000000', 2, true, true)
+    btn.add(tag)
+    void hasNewAnnouncement().then(n => tag.setVisible(n)).catch(() => {})
   }
 
   private closeOverlay() { this.overlay?.destroy(); this.overlay = null }
@@ -257,7 +238,7 @@ export class TitleScene extends Phaser.Scene {
 
 
   // ── 遊び方モーダル（React側の HowToPlay コンポーネントに委譲）──
-  private openHowTo(_W: number, _H: number) {
+  private openHowTo() {
     window.showHowToPlay?.()
   }
 
