@@ -527,8 +527,13 @@ export class GameScene extends Phaser.Scene {
   // セーブ実行（プレイ中のセーブボタンから呼ばれる）
   private doSaveGame() {
     const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
-    saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor })
-    window.showGameToast?.('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
+    const ok = saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor })
+    if (ok) {
+      window.showGameToast?.('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
+    } else {
+      // 保存できていないのに成功表示する不具合を防止（プライベートモード/容量制限等）
+      window.showGameToast?.('⚠️セーブに失敗しました。\nプライベートモードを解除し、\nブラウザのデータ保存を許可してください。')
+    }
   }
 
   private showTelopIfNeeded() {
@@ -1838,6 +1843,31 @@ export class GameScene extends Phaser.Scene {
   // すかるぽりん
   // ─────────────────────────────────────────────────────────
 
+  // ADMINユーザー管理での閲覧用に、プレイヤーの現在状態を軽量JSONへまとめる。
+  // 心拍(30秒ごと)に相乗りして active_sessions.state に保存される（最終同期時点のスナップショット）。
+  private buildStateSnapshot(): Record<string, unknown> {
+    const { player, spells, heals, bag } = this.state
+    const equipment = Object.entries(player.equipment)
+      .filter(([, it]) => !!it)
+      .map(([slot, it]) => ({ slot, name: it!.name, refine: it!.refineLevel ?? 0 }))
+    // 回復/コインは名前ごとに個数集計
+    const healCounts: Record<string, number> = {}
+    for (const h of heals) healCounts[h.name] = (healCounts[h.name] ?? 0) + 1
+    return {
+      level: player.level, exp: player.exp,
+      hp: player.hp, maxHp: player.maxHp,
+      stamina: player.stamina, maxStamina: player.maxStamina,
+      floor: player.floor, turn: this.state.turn,
+      str: player.str, agi: player.agi, dex: player.dex,
+      int: player.int, vit: player.vit, luk: player.luk,
+      statPoints: player.statPoints,
+      equipment,
+      spells: spells.map(s => s.name),
+      heals: Object.entries(healCounts).map(([name, count]) => ({ name, count })),
+      bagEquip: bag.filter(b => b.type === 'equip').map(b => ({ name: b.name, refine: b.refineLevel ?? 0 })),
+    }
+  }
+
   private async sendSkulporinHeartbeat(): Promise<void> {
     if (this.isGameOver || this.isEventFloor) return
     const { player } = this.state
@@ -1849,6 +1879,8 @@ export class GameScene extends Phaser.Scene {
           player_id: getPlayerId(),
           player_name: getDisplayName(),
           floor: player.floor,
+          // ADMINユーザー管理で「現在のステータス・装備」を閲覧するための軽量スナップショット
+          state: this.buildStateSnapshot(),
         }),
       })
       if (!res.ok) return

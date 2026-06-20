@@ -57,6 +57,21 @@ interface RankingEntry { id: number; player_name: string; floor: number; level: 
 interface WorldNotif { id: number; type: string; title: string; message: string; player_name: string; created_at: string }
 interface EditingRanking { id: number; player_name: string; floor: number; level: number }
 
+// active_sessions.state に保存されるプレイヤー状態スナップショット（心拍で同期）
+interface PlayerStateSnapshot {
+  level: number; exp: number; hp: number; maxHp: number; stamina: number; maxStamina: number
+  floor: number; turn: number
+  str: number; agi: number; dex: number; int: number; vit: number; luk: number; statPoints: number
+  equipment: { slot: string; name: string; refine: number }[]
+  spells: string[]
+  heals: { name: string; count: number }[]
+  bagEquip: { name: string; refine: number }[]
+}
+interface PlayerSession {
+  player_id: string; player_name: string; floor: number; updated_at: string
+  state: PlayerStateSnapshot | null
+}
+
 interface Report {
   id: number; category: string; content: string
   player_name: string | null; image_url: string | null
@@ -145,6 +160,7 @@ export function AdminPanel() {
   const [uLoading, setULoading]   = useState(false)
   const [uMsg, setUMsg]           = useState('')
   const [uEditingRanking, setUEditingRanking] = useState<EditingRanking | null>(null)
+  const [uSessions, setUSessions] = useState<PlayerSession[]>([])
 
   // ── Reports ──
   const [reports, setReports]         = useState<Report[]>([])
@@ -326,6 +342,17 @@ export function AdminPanel() {
     ])
     setURankings((ranks ?? []) as RankingEntry[])
     setUNotifs((notifs ?? []) as WorldNotif[])
+    // 現在のステータス・装備（active_sessions.state）はservice key経由のAPIで取得
+    setUSessions([])
+    if (ADMIN_KEY) {
+      try {
+        const res = await fetch('/api/admin-event', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminKey: ADMIN_KEY, action: 'player_state', name }),
+        })
+        if (res.ok) { const j = await res.json(); setUSessions((j.sessions ?? []) as PlayerSession[]) }
+      } catch { /* API不在（ローカル等）→ 空のまま */ }
+    }
     setULoading(false)
   }
 
@@ -585,6 +612,20 @@ export function AdminPanel() {
 
   const dbRowOf = (category: string, ref: string) =>
     dbRows.find(r => r.category === category && r.ref === ref)
+
+  // 一覧に表示する実効値：下書きパッチ(draft_patch)があればそれ、なければデフォルト。
+  // 編集パネル(openDbEditor)と同じ規則でマージするため、一覧と詳細の表示が必ず一致する。
+  // （以前は一覧がハードコードのデフォルト値だけを表示し、編集が反映されないように見えていた）
+  const dbMerged = <T extends Record<string, unknown>>(category: OverrideCategory, defaults: T): T => {
+    const row = dbRowOf(category, String(defaults.name))
+    const draft = (row?.draft_patch ?? {}) as Record<string, unknown>
+    const merged: Record<string, unknown> = { ...defaults }
+    for (const k of Object.keys(draft)) {
+      const v = draft[k]
+      if (v !== undefined && v !== null && v !== '') merged[k] = v
+    }
+    return merged as T
+  }
 
   const dbStatusOf = (category: string, ref: string): '' | 'draft' | 'pub' => {
     const r = dbRowOf(category, ref)
@@ -1206,6 +1247,57 @@ export function AdminPanel() {
 
             {uSearched && !uLoading && (
               <>
+                {/* 現在のステータス・装備（最終同期：active_sessions.state） */}
+                <div style={S.section}>
+                  <div style={S.sectionTitle}>現在のステータス・装備 — "{uSearched}" ({uSessions.length} 件)</div>
+                  <p style={S.muted}>※ プレイ中の心拍（約30秒ごと）で同期される最終状態です。オフラインの場合は最後に同期された時点の内容です。</p>
+                  {uSessions.length === 0 && <p style={S.muted}>同期データなし（未プレイ／古いバージョン／state列未追加の可能性）。</p>}
+                  {uSessions.map(sess => {
+                    const st = sess.state
+                    return (
+                      <div key={sess.player_id} style={{ ...S.card, marginBottom: 10 }}>
+                        <div style={S.cardTitle}>
+                          {sess.player_name}
+                          <span style={{ marginLeft: 8, fontSize: 11, color: '#888' }}>最終同期: {fmtJstDate(sess.updated_at)}</span>
+                        </div>
+                        {!st ? <p style={S.muted}>状態スナップショットなし（floor {sess.floor}F）</p> : (
+                          <>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 13, marginBottom: 8 }}>
+                              <span>Lv <b>{st.level}</b></span>
+                              <span>EXP {st.exp}</span>
+                              <span>到達 <b>{st.floor}F</b></span>
+                              <span>HP {st.hp}/{st.maxHp}</span>
+                              <span>スタミナ {st.stamina}/{st.maxStamina}</span>
+                              <span>ターン {st.turn}</span>
+                              <span>未割振Pt {st.statPoints}</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 13, marginBottom: 8, color: '#a5b4fc' }}>
+                              <span>STR {st.str}</span><span>AGI {st.agi}</span><span>DEX {st.dex}</span>
+                              <span>INT {st.int}</span><span>VIT {st.vit}</span><span>LUK {st.luk}</span>
+                            </div>
+                            <div style={{ fontSize: 13 }}>
+                              <div style={{ color: '#888', marginBottom: 2 }}>装備</div>
+                              {st.equipment.length === 0 ? <span style={{ color: '#666' }}>なし</span> : (
+                                <ul style={{ margin: '0 0 8px', paddingLeft: 18 }}>
+                                  {st.equipment.map((e, i) => (
+                                    <li key={i}>{EQUIP_SLOT_LABELS[e.slot] ?? e.slot}：{e.name}{e.refine ? ` +${e.refine}` : ''}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              <div style={{ color: '#888', marginBottom: 2 }}>魔法の書</div>
+                              <div style={{ marginBottom: 8 }}>{st.spells.length ? st.spells.join('、') : <span style={{ color: '#666' }}>なし</span>}</div>
+                              <div style={{ color: '#888', marginBottom: 2 }}>所持品（回復/コイン）</div>
+                              <div style={{ marginBottom: 8 }}>{st.heals.length ? st.heals.map(h => `${h.name}×${h.count}`).join('、') : <span style={{ color: '#666' }}>なし</span>}</div>
+                              <div style={{ color: '#888', marginBottom: 2 }}>バッグ内装備</div>
+                              <div>{st.bagEquip.length ? st.bagEquip.map(b => `${b.name}${b.refine ? ` +${b.refine}` : ''}`).join('、') : <span style={{ color: '#666' }}>なし</span>}</div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
                 {/* ランキング */}
                 <div style={S.section}>
                   <div style={S.sectionTitle}>ランキング記録 — "{uSearched}" ({uRankings.length} 件)</div>
@@ -1637,15 +1729,18 @@ export function AdminPanel() {
                     <th style={S.th}>STR</th><th style={S.th}>VIT</th><th style={S.th}>AGI</th><th style={S.th}>LUK</th>
                   </tr></thead>
                   <tbody>
-                    {NORMAL_MONSTERS.map(m => (
+                    {NORMAL_MONSTERS.map(m => {
+                      const v = dbMerged('monster_normal', m)
+                      return (
                       <tr key={m.name} onClick={() => openDbEditor('monster_normal', m)} style={dbRowStyle('monster_normal', m.name)}>
                         {dbStatusCell('monster_normal', m.name)}
-                        <td style={S.td}>{m.name}</td>
-                        <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{m.minFloor}〜{m.maxFloor}</td>
-                        <td style={S.td}>{m.hpBase}</td><td style={S.td}>{m.atkBase}</td><td style={S.td}>{m.defBase}</td>
-                        <td style={S.td}>{m.str}</td><td style={S.td}>{m.vit}</td><td style={S.td}>{m.agi}</td><td style={S.td}>{m.luk}</td>
+                        <td style={S.td}>{v.name}</td>
+                        <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{v.minFloor}〜{v.maxFloor}</td>
+                        <td style={S.td}>{v.hpBase}</td><td style={S.td}>{v.atkBase}</td><td style={S.td}>{v.defBase}</td>
+                        <td style={S.td}>{v.str}</td><td style={S.td}>{v.vit}</td><td style={S.td}>{v.agi}</td><td style={S.td}>{v.luk}</td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
                 <p style={S.muted}>※ HP/ATK/DEF はベース値。実際は出現フロアに応じてスケールします。</p>
@@ -1654,10 +1749,13 @@ export function AdminPanel() {
                 <table style={S.table}>
                   <thead><tr><th style={S.th}>状態</th><th style={S.th}>出現F</th><th style={S.th}>名前</th><th style={S.th}>HP倍率</th><th style={S.th}>ATK倍率</th><th style={S.th}>DEF倍率</th></tr></thead>
                   <tbody>
-                    {MINI_BOSSES.map(b => (
+                    {MINI_BOSSES.map(b => {
+                      const v = dbMerged('monster_mini', b)
+                      return (
                       <tr key={`mini-${b.floor}-${b.name}`} onClick={() => openDbEditor('monster_mini', b)} style={dbRowStyle('monster_mini', b.name)}>
-                        {dbStatusCell('monster_mini', b.name)}<td style={S.td}>B{b.floor}</td><td style={S.td}>{b.name}</td><td style={S.td}>×{b.hpMult}</td><td style={S.td}>×{b.atkMult}</td><td style={S.td}>×{b.defMult}</td></tr>
-                    ))}
+                        {dbStatusCell('monster_mini', b.name)}<td style={S.td}>B{b.floor}</td><td style={S.td}>{v.name}</td><td style={S.td}>×{v.hpMult}</td><td style={S.td}>×{v.atkMult}</td><td style={S.td}>×{v.defMult}</td></tr>
+                      )
+                    })}
                   </tbody>
                 </table>
 
@@ -1665,10 +1763,13 @@ export function AdminPanel() {
                 <table style={S.table}>
                   <thead><tr><th style={S.th}>状態</th><th style={S.th}>出現F</th><th style={S.th}>名前</th><th style={S.th}>HP倍率</th><th style={S.th}>ATK倍率</th><th style={S.th}>DEF倍率</th></tr></thead>
                   <tbody>
-                    {MVP_BOSSES.map(b => (
+                    {MVP_BOSSES.map(b => {
+                      const v = dbMerged('monster_mvp', b)
+                      return (
                       <tr key={`mvp-${b.floor}-${b.name}`} onClick={() => openDbEditor('monster_mvp', b)} style={dbRowStyle('monster_mvp', b.name)}>
-                        {dbStatusCell('monster_mvp', b.name)}<td style={S.td}>B{b.floor}</td><td style={S.td}>{b.name}</td><td style={S.td}>×{b.hpMult}</td><td style={S.td}>×{b.atkMult}</td><td style={S.td}>×{b.defMult}</td></tr>
-                    ))}
+                        {dbStatusCell('monster_mvp', b.name)}<td style={S.td}>B{b.floor}</td><td style={S.td}>{v.name}</td><td style={S.td}>×{v.hpMult}</td><td style={S.td}>×{v.atkMult}</td><td style={S.td}>×{v.defMult}</td></tr>
+                      )
+                    })}
                   </tbody>
                 </table>
 
@@ -1676,10 +1777,13 @@ export function AdminPanel() {
                 <table style={S.table}>
                   <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>出現F</th></tr></thead>
                   <tbody>
-                    {AREA_BOSSES.map(b => (
+                    {AREA_BOSSES.map(b => {
+                      const v = dbMerged('monster_area', b)
+                      return (
                       <tr key={`area-${b.name}`} onClick={() => openDbEditor('monster_area', b)} style={dbRowStyle('monster_area', b.name)}>
-                        {dbStatusCell('monster_area', b.name)}<td style={S.td}>{b.name}</td><td style={S.td}>B{b.minFloor}〜B{b.maxFloor}</td></tr>
-                    ))}
+                        {dbStatusCell('monster_area', b.name)}<td style={S.td}>{v.name}</td><td style={S.td}>B{v.minFloor}〜B{v.maxFloor}</td></tr>
+                      )
+                    })}
                   </tbody>
                 </table>
                 <p style={S.muted}>※ ボスは通常モンスター基準値に倍率を掛けて生成されます。</p>
@@ -1693,18 +1797,21 @@ export function AdminPanel() {
                   {EQUIP_BONUS_LABELS.map(b => <th key={b.key} style={S.th}>{b.label}</th>)}
                 </tr></thead>
                 <tbody>
-                  {EQUIPMENT.map(e => (
+                  {EQUIPMENT.map(e => {
+                    const ev = dbMerged('equip', e)
+                    return (
                     <tr key={e.name} onClick={() => openDbEditor('equip', e)} style={dbRowStyle('equip', e.name)}>
                       {dbStatusCell('equip', e.name)}
                       <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{EQUIP_SLOT_LABELS[e.equipSlot] ?? e.equipSlot}</td>
-                      <td style={S.td}>{e.name}</td>
-                      <td style={S.td}>{e.minFloor ?? 1}</td>
+                      <td style={S.td}>{ev.name}</td>
+                      <td style={S.td}>{ev.minFloor ?? 1}</td>
                       {EQUIP_BONUS_LABELS.map(b => {
-                        const v = e[b.key]
-                        return <td key={b.key} style={{ ...S.td, color: v ? '#4ade80' : '#444' }}>{v ? `+${v}` : '−'}</td>
+                        const bv = ev[b.key]
+                        return <td key={b.key} style={{ ...S.td, color: bv ? '#4ade80' : '#444' }}>{bv ? `+${bv}` : '−'}</td>
                       })}
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             )}
@@ -1715,20 +1822,26 @@ export function AdminPanel() {
                 <table style={S.table}>
                   <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>HP回復</th><th style={S.th}>スタミナ回復</th></tr></thead>
                   <tbody>
-                    {HEAL_ITEMS.map(h => (
+                    {HEAL_ITEMS.map(h => {
+                      const v = dbMerged('item', h)
+                      return (
                       <tr key={h.name} onClick={() => openDbEditor('item', h)} style={dbRowStyle('item', h.name)}>
-                        {dbStatusCell('item', h.name)}<td style={S.td}>{h.name}</td><td style={S.td}>{h.healAmount ? `+${h.healAmount}` : '−'}</td><td style={S.td}>{h.staminaPercent ? `+${h.staminaPercent}%` : '−'}</td></tr>
-                    ))}
+                        {dbStatusCell('item', h.name)}<td style={S.td}>{v.name}</td><td style={S.td}>{v.healAmount ? `+${v.healAmount}` : '−'}</td><td style={S.td}>{v.staminaPercent ? `+${v.staminaPercent}%` : '−'}</td></tr>
+                      )
+                    })}
                   </tbody>
                 </table>
                 <div style={S.dbHead}>羽（行商人）</div>
                 <table style={S.table}>
                   <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>コイン枚数</th><th style={S.th}>説明</th></tr></thead>
                   <tbody>
-                    {Object.values(WING_ITEMS).map(w => (
+                    {Object.values(WING_ITEMS).map(w => {
+                      const v = dbMerged('item', w)
+                      return (
                       <tr key={w.name} onClick={() => openDbEditor('item', w)} style={dbRowStyle('item', w.name)}>
-                        {dbStatusCell('item', w.name)}<td style={S.td}>{w.name}</td><td style={S.td}>🪙{w.cost}</td><td style={S.td}>{w.desc}</td></tr>
-                    ))}
+                        {dbStatusCell('item', w.name)}<td style={S.td}>{v.name}</td><td style={S.td}>🪙{v.cost}</td><td style={S.td}>{v.desc}</td></tr>
+                      )
+                    })}
                   </tbody>
                 </table>
                 <div style={S.dbHead}>特殊</div>
@@ -1745,10 +1858,13 @@ export function AdminPanel() {
               <table style={S.table}>
                 <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>効果</th></tr></thead>
                 <tbody>
-                  {SPELLS.map(s => (
+                  {SPELLS.map(s => {
+                    const v = dbMerged('spell', s)
+                    return (
                     <tr key={s.name} onClick={() => openDbEditor('spell', s)} style={dbRowStyle('spell', s.name)}>
-                      {dbStatusCell('spell', s.name)}<td style={{ ...S.td, whiteSpace: 'nowrap' }}>{s.name}</td><td style={S.td}>{s.effect}</td></tr>
-                  ))}
+                      {dbStatusCell('spell', s.name)}<td style={{ ...S.td, whiteSpace: 'nowrap' }}>{v.name}</td><td style={S.td}>{v.effect}</td></tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}

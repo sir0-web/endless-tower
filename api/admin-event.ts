@@ -86,6 +86,19 @@ export default async function handler(req: any, res: any) {
       return res.json({ ok: true })
     }
 
+    // ── ユーザー管理：名前で active_sessions を検索し、現在のステータス・装備を返す ──
+    if (action === 'player_state') {
+      const { name } = req.body ?? {}
+      if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'name 必須' })
+      const { data, error } = await db.from('active_sessions')
+        .select('player_id, player_name, floor, updated_at, state')
+        .ilike('player_name', `%${name.trim()}%`)
+        .order('updated_at', { ascending: false })
+        .limit(20)
+      if (error) return res.status(500).json({ error: error.message })
+      return res.json({ sessions: data ?? [] })
+    }
+
     return res.status(400).json({ error: 'invalid action' })
   } catch (e: any) {
     console.error('[admin-event] error:', e)

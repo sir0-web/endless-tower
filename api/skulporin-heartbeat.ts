@@ -14,7 +14,7 @@ export default async function handler(req: any, res: any) {
     return res.json({ spawn: null, commands: [], _debug: 'SUPABASE_SERVICE_ROLE_KEY missing in Vercel' })
   }
 
-  const { player_id, player_name, floor } = req.body ?? {}
+  const { player_id, player_name, floor, state } = req.body ?? {}
   if (!player_id || typeof floor !== 'number') {
     return res.status(400).json({ error: 'invalid params' })
   }
@@ -53,6 +53,13 @@ export default async function handler(req: any, res: any) {
         .eq('status', 'pending')
         .limit(50),
     ])
+
+    // プレイヤー状態スナップショットを保存（ADMINユーザー管理での閲覧用）。
+    // state列が未追加の環境でも心拍本体（スポーン/コマンド/報酬）を壊さないよう、別更新＋エラー握りつぶし。
+    if (state && typeof state === 'object') {
+      const { error: stErr } = await db.from('active_sessions').update({ state }).eq('player_id', player_id)
+      if (stErr) console.warn('[heartbeat] state保存スキップ（active_sessions.state列が必要）:', stErr.message)
+    }
 
     // ADMINコマンドを消費
     let commands: any[] = []
