@@ -266,7 +266,7 @@ export function AdminPanel() {
   // ── Ranking ──
   const loadRankings = useCallback(async (search = '') => {
     setRLoading(true); setRMsg('')
-    let q = db.from('rankings').select('*').order('floor', { ascending: false }).limit(100)
+    let q = db.from('ebt_rankings').select('*').order('floor', { ascending: false }).limit(100)
     if (search) q = q.ilike('player_name', `%${search}%`)
     const { data } = await q
     setRankings((data ?? []) as RankingEntry[])
@@ -276,7 +276,7 @@ export function AdminPanel() {
 
   const deleteRanking = async (id: number) => {
     if (!confirm('このランキングエントリを削除しますか？')) return
-    const { deleted, error } = await adminDelete('rankings', [id])
+    const { deleted, error } = await adminDelete('ebt_rankings', [id])
     if (error) { setRMsg(`削除エラー: ${error}`); return }
     if (!deleted) { setRMsg('削除できませんでした'); return }
     setRMsg('削除しました ✓')
@@ -285,7 +285,7 @@ export function AdminPanel() {
 
   const saveEditRanking = async () => {
     if (!editingRanking) return
-    const { error } = await db.from('rankings').update({ player_name: editingRanking.player_name, floor: editingRanking.floor, level: editingRanking.level }).eq('id', editingRanking.id)
+    const { error } = await db.from('ebt_rankings').update({ player_name: editingRanking.player_name, floor: editingRanking.floor, level: editingRanking.level }).eq('id', editingRanking.id)
     if (error) { setRMsg(`更新エラー: ${error.message}`); return }
     setRMsg('更新しました ✓')
     setRankings(rs => rs.map(r => r.id === editingRanking.id ? { ...r, ...editingRanking } : r))
@@ -321,7 +321,7 @@ export function AdminPanel() {
     const name = uSearch.trim()
     setUSearched(name)
     const [{ data: ranks }, { data: notifs }] = await Promise.all([
-      db.from('rankings').select('*').ilike('player_name', `%${name}%`).order('floor', { ascending: false }).limit(50),
+      db.from('ebt_rankings').select('*').ilike('player_name', `%${name}%`).order('floor', { ascending: false }).limit(50),
       db.from('world_notifications').select('*').ilike('player_name', `%${name}%`).order('created_at', { ascending: false }).limit(100),
     ])
     setURankings((ranks ?? []) as RankingEntry[])
@@ -331,7 +331,7 @@ export function AdminPanel() {
 
   const deleteURanking = async (id: number) => {
     if (!confirm('削除しますか？')) return
-    const { deleted, error } = await adminDelete('rankings', [id])
+    const { deleted, error } = await adminDelete('ebt_rankings', [id])
     if (error) { setUMsg(`エラー: ${error}`); return }
     if (!deleted) { setUMsg('削除できませんでした'); return }
     setUMsg('ランキング削除 ✓')
@@ -340,7 +340,7 @@ export function AdminPanel() {
 
   const saveUEditRanking = async () => {
     if (!uEditingRanking) return
-    const { error } = await db.from('rankings').update({ player_name: uEditingRanking.player_name, floor: uEditingRanking.floor, level: uEditingRanking.level }).eq('id', uEditingRanking.id)
+    const { error } = await db.from('ebt_rankings').update({ player_name: uEditingRanking.player_name, floor: uEditingRanking.floor, level: uEditingRanking.level }).eq('id', uEditingRanking.id)
     if (error) { setUMsg(`エラー: ${error.message}`); return }
     setUMsg('更新しました ✓')
     setURankings(rs => rs.map(r => r.id === uEditingRanking.id ? { ...r, ...uEditingRanking } : r))
@@ -404,7 +404,7 @@ export function AdminPanel() {
     const ids = [...rankSelected]
     if (ids.length === 0) return
     if (!confirm(`選択した ${ids.length} 件のランキングを削除しますか？`)) return
-    const { deleted, error } = await adminDelete('rankings', ids)
+    const { deleted, error } = await adminDelete('ebt_rankings', ids)
     if (error) { setRMsg(`削除エラー: ${error}`); return }
     if (!deleted) { setRMsg('削除できませんでした'); return }
     setRankings(rs => rs.filter(r => !ids.includes(r.id)))

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 
-const ALLOWED_TABLES = ['rankings', 'world_notifications', 'reports']
+const ALLOWED_TABLES = ['rankings', 'ebt_rankings', 'world_notifications', 'reports']
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).end()
