@@ -1354,17 +1354,19 @@ export class GameScene extends Phaser.Scene {
     return true
   }
 
-  /** 行商人：女神のコイン1枚を消費して羽を1個購入（各10個まで） */
+  /** 行商人：女神のコインを cost 枚消費して羽を1個購入（各10個まで） */
   private buyMerchantItem(key: WingKey): { ok: boolean; reason?: 'coin' | 'limit' } {
-    const name = WING_ITEMS[key].name
+    const { name, cost } = WING_ITEMS[key]
     const held = this.state.heals.filter(h => h.name === name).length
     if (held >= 10) return { ok: false, reason: 'limit' }
-    const coin = this.state.heals.find(h => h.coin)
-    if (!coin) return { ok: false, reason: 'coin' }
+    const coins = this.state.heals.filter(h => h.coin)
+    if (coins.length < cost) return { ok: false, reason: 'coin' }
 
-    this.state.heals = this.state.heals.filter(h => h.id !== coin.id)
+    // コインを cost 枚だけ消費する
+    const spendIds = new Set(coins.slice(0, cost).map(c => c.id))
+    this.state.heals = this.state.heals.filter(h => !spendIds.has(h.id))
     this.state.heals.push(makeWingItem(key))
-    this.addMessage(`${name}を1個購入した！（女神のコイン -1）`)
+    this.addMessage(`${name}を1個購入した！（女神のコイン -${cost}）`)
     this.updateWindowGameState()
     return { ok: true }
   }
@@ -1607,7 +1609,7 @@ export class GameScene extends Phaser.Scene {
       { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', texture: 'horu',     position: npcPositions[0] },
       { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', texture: 'master',   position: npcPositions[1] },
       { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', texture: 'maho',     position: npcPositions[2] },
-      { id: 'facility_merchant',  kind: 'merchant',  name: '行商人カゴメ',   icon: '🛒', texture: 'merchant', position: npcPositions[3] },
+      { id: 'facility_merchant',  kind: 'merchant',  name: '行商人とるいぬ',   icon: '🛒', texture: 'merchant', position: npcPositions[3] },
     ]
     this.state.floorType = 'normal'
     this.buildFloorVariants(map)

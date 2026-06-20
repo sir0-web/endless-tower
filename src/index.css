@@ -206,6 +206,11 @@ html, body {
   background: rgba(79, 70, 229, 0.45);
   border-color: rgba(160, 160, 255, 0.7);
 }
+/* ウィンドウ（各種モーダル）を開いている間は報告BOXアイコンを隠す
+   （半透明の背景越しに 📬 が透けて見えて邪魔になるため） */
+body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-overlay, .news-overlay, .report-overlay) .report-float-btn {
+  display: none !important;
+}
 
 /* ── スクロールロックボタン（スマホ・マップ枠右上） ── */
 .scroll-lock-btn {

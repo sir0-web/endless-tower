@@ -34,7 +34,7 @@ export function NewsModal() {
   if (!open) return null
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) close() }}>
+    <div className="news-overlay" style={S.overlay} onClick={e => { if (e.target === e.currentTarget) close() }}>
       <div style={S.scroll}>
         {/* ── ヘッダー（巻物の上飾り）── */}
         <div style={S.header}>

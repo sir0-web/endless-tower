@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { EquipSlot, Item, RefineResult, ShadowResult, SpellbookResult } from '../types'
+import { WING_ITEMS } from '../game/items'
 
 const SLOT_LABELS: Record<EquipSlot, string> = {
   weapon: '武器', armor: '鎧', shoulder: '肩装備', boots: '靴',
@@ -176,10 +177,10 @@ export function ShadowEquipModal() {
   )
 }
 
-// ── 行商人（羽の購入）──
+// ── 行商人（羽の購入）。価格(cost)は WING_ITEMS を単一ソースとして参照 ──
 const MERCHANT_ITEMS = [
-  { key: 'fly'       as const, icon: '🪰', name: 'ハエの羽', desc: '同じ階のどこかへランダムにワープする' },
-  { key: 'butterfly' as const, icon: '🦋', name: '蝶の羽',   desc: '1〜3階ぶん前の階層へランダムに戻る' },
+  { key: 'fly'       as const, icon: WING_ITEMS.fly.icon,       name: WING_ITEMS.fly.name,       cost: WING_ITEMS.fly.cost,       desc: WING_ITEMS.fly.desc },
+  { key: 'butterfly' as const, icon: WING_ITEMS.butterfly.icon, name: WING_ITEMS.butterfly.name, cost: WING_ITEMS.butterfly.cost, desc: WING_ITEMS.butterfly.desc },
 ]
 
 export function MerchantModal() {
@@ -212,24 +213,24 @@ export function MerchantModal() {
   return (
     <div className="facility-overlay">
       <div className="facility-modal">
-        <p className="facility-title">🛒行商人カゴメ🛒</p>
+        <p className="facility-title">🛒行商人とるいぬ🛒</p>
         <p className="facility-desc">
-          女神のコイン1枚で「羽」を1個お売りするよ。各10個まで持てるよ。
+          女神のコインと「羽」を交換するよ。羽は各10個まで持てるよ。
         </p>
         <p className="facility-sub">所持コイン：🪙 {coins}</p>
         <div className="facility-list">
           {MERCHANT_ITEMS.map(it => {
             const held = heldCount(it.name)
             const full = held >= 10
-            const disabled = full || coins < 1
+            const disabled = full || coins < it.cost
             return (
               <div key={it.key} className="facility-item" style={{ alignItems: 'center', gap: 8 }}>
                 <span className="fi-name" style={{ flex: 1 }}>
-                  {it.icon} {it.name} <span style={{ opacity: 0.7 }}>（{held}/10）</span>
+                  {it.icon} {it.name} <span style={{ opacity: 0.7 }}>（{held}/10・🪙{it.cost}）</span>
                   <br /><span className="facility-empty" style={{ fontSize: '0.8em' }}>{it.desc}</span>
                 </span>
                 <button className="facility-go-btn" disabled={disabled} onClick={() => buy(it.key)}>
-                  🪙1で購入
+                  🪙{it.cost}で購入
                 </button>
               </div>
             )

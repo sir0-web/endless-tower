@@ -18,10 +18,10 @@ export const HEAL_ITEMS = [
 // いいね報酬で配るポーション名（色ランダム抽選用）
 export const POTION_NAMES = HEAL_ITEMS.map(h => h.name)
 
-// ── 羽アイテム（行商人で女神のコイン1枚＝1個。各10個まで）──
+// ── 羽アイテム（行商人で女神のコインと交換。各10個まで）。cost=必要コイン枚数 ──
 export const WING_ITEMS = {
-  fly:       { name: 'ハエの羽', icon: '🪰', desc: '同じ階のどこかへランダムにワープする' },
-  butterfly: { name: '蝶の羽',   icon: '🦋', desc: '1〜3階ぶん前の階層へランダムに戻る' },
+  fly:       { name: 'ハエの羽', icon: '🪰', cost: 3, desc: '同じ階のどこかへランダムにワープする' },
+  butterfly: { name: '蝶の羽',   icon: '🦋', cost: 5, desc: '1〜3階ぶん前の階層へランダムに戻る' },
 } as const
 
 export type WingKey = keyof typeof WING_ITEMS

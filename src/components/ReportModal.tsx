@@ -77,6 +77,7 @@ export function ReportModal() {
 
   return (
     <div
+      className="report-overlay"
       style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) close() }}
     >
