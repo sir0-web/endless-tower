@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { playBGM, isMuted, toggleMute } from '../game/sound'
 import { fetchRanking } from '../game/supabase'
+import { hasUnreadAnnouncements } from '../game/announcements'
 import { hasSave, clearSave } from '../game/save'
 import { getDisplayName, setDisplayName } from '../game/playerName'
 
@@ -91,6 +92,9 @@ export class TitleScene extends Phaser.Scene {
       repeat: -1,
     })
 
+    // ── お知らせ（NEWS）ボタン：右上に小さく配置。未読があれば赤バッジ ──
+    this.makeNewsButton(W)
+
     // React 側レイアウトへ「非プレイ画面（全幅化）」を通知。
     // スマホではキャンバスを全幅表示にして余白を埋める（プレイ遷移で GameScene が元に戻す）。
     window.dispatchEvent(new Event('et-canvas-full'))
@@ -163,6 +167,38 @@ export class TitleScene extends Phaser.Scene {
     btn.on('pointerout',  () => { frame.clearTint();       txt.setColor('#f4e3a8') })
     btn.on('pointerdown', cb)
     return btn
+  }
+
+  // ── お知らせボタン（右上・コンパクト。未読バッジ付き）──
+  private makeNewsButton(W: number) {
+    const small = W < 500
+    const w = small ? 104 : 128
+    const h = small ? 36 : 44
+    const x = W - w / 2 - (small ? 12 : 20)
+    const y = h / 2 + (small ? 12 : 18)
+
+    const frame = this.add.image(0, 0, 'btn-frame').setDisplaySize(w, h)
+    const txt = this.add.text(0, 0, '📜NEWS', {
+      fontFamily: PIXEL_FONT, fontSize: `${small ? 10 : 13}px`, color: '#f4e3a8', align: 'center',
+    }).setOrigin(0.5)
+    txt.setShadow(2, 2, '#160a02', 4, true, true)
+    const badge = this.add.circle(w / 2 - 5, -h / 2 + 5, small ? 6 : 7, 0xff3b30)
+      .setStrokeStyle(2, 0xfff2cc).setVisible(false)
+
+    const btn = this.add.container(x, y, [frame, txt, badge]).setSize(w, h).setDepth(11)
+    btn.setInteractive({
+      hitArea: new Phaser.Geom.Rectangle(0, 0, w, h),
+      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+      useHandCursor: true,
+    })
+    btn.on('pointerover', () => { frame.setTint(0xfff2cc); txt.setColor('#fffbe6') })
+    btn.on('pointerout',  () => { frame.clearTint();       txt.setColor('#f4e3a8') })
+    btn.on('pointerdown', () => { badge.setVisible(false); window.showNews?.() })
+
+    // 入場フェード＋未読チェック
+    btn.setAlpha(0)
+    this.tweens.add({ targets: btn, alpha: 1, duration: 400, delay: 600 })
+    void hasUnreadAnnouncements().then(u => badge.setVisible(u)).catch(() => {})
   }
 
   private closeOverlay() { this.overlay?.destroy(); this.overlay = null }

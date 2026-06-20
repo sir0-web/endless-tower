@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
-import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS } from '../game/items'
+import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, type WingKey } from '../game/items'
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
@@ -12,6 +12,54 @@ import { getDisplayName } from '../game/playerName'
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
 const VISION_FOG_OUTER = 5   // 霧グラデーション終了距離（以遠は真っ暗）
+
+// ── 階層帯ティント：10F刻みで床・壁に色を被せ、上層ほど毒々しくする ──
+// 白(0xffffff)=素の画像。視認性を保つため明度は高めに維持し、色相だけ毒々しく振る。
+// 最後の要素以降の階はクランプ（最深色のまま）。
+// 〜50Fは緑系で毒々しく深まり、51F以降は徐々に紫が侵食していく（緑→紫の連続グラデ）。
+const FLOOR_TINT_TIERS = [
+  0xffffff, // 1-10F   素の石畳（変化なし）
+  0xc8e896, // 11-20F  明るい毒ライム（ここで一気に緑へ）
+  0xafe178, // 21-30F  深まる毒緑
+  0xa0da69, // 31-40F  濃い毒緑
+  0x96d25a, // 41-50F  最も鮮烈な毒緑（緑のピーク）
+  0x96b177, // 51-60F  緑に紫が滲み始める
+  0x96978e, // 61-70F  緑と紫が拮抗（澱んだ中間色）
+  0x967da5, // 71-80F  紫が優勢に
+  0x9663bc, // 81-90F  濃い毒紫
+  0x9650cd, // 91F+    紫が完全侵食（瘴気の底）
+]
+
+/** 色を係数 f(0〜1) で暗くする（壁を床より一段沈ませる用途） */
+function darkenColor(hex: number, f: number): number {
+  const r = Math.round(((hex >> 16) & 0xff) * f)
+  const g = Math.round(((hex >> 8) & 0xff) * f)
+  const b = Math.round((hex & 0xff) * f)
+  return (r << 16) | (g << 8) | b
+}
+
+/**
+ * 階(1始まり)→10F帯のティント色を返す。
+ * 〜100Fはテーブルどおり緑→紫。101F以降はクランプせず、最深の紫を10Fごとに
+ * 少しずつ暗化して「まだ上がある」深淵感を出す（視認性のため暗化は下限0.5でクランプ）。
+ */
+function floorTierTint(floor: number): number {
+  const tier = Math.max(0, Math.floor((floor - 1) / 10))
+  const last = FLOOR_TINT_TIERS.length - 1
+  if (tier <= last) return FLOOR_TINT_TIERS[tier]
+  const extra = tier - last                          // 101-110F→1, 111-120F→2, ...
+  const factor = Math.max(0.5, 1 - extra * 0.06)     // 0.94, 0.88, ... 下限0.5
+  return darkenColor(FLOOR_TINT_TIERS[last], factor)
+}
+
+/** 階に応じた瘴気オーバーレイの色とアルファ（薄め。暗くしすぎない）。1-10Fは無し */
+function floorMiasma(floor: number): { color: number; alpha: number } {
+  const tier = Math.max(0, Math.floor((floor - 1) / 10))
+  if (tier === 0) return { color: 0x000000, alpha: 0 }
+  // 帯のティント色をそのまま瘴気色に流用。視認性優先で薄く（最大0.10でクランプ）
+  const alpha = Math.min(0.10, 0.03 + tier * 0.009)
+  return { color: floorTierTint(floor), alpha }
+}
 
 // 敵名 → テクスチャキー のマッピング（/assets/enemy/<key>.png を想定）
 // 全ボスは画像なし → 色付きRectangleにフォールバック
@@ -120,6 +168,8 @@ export class GameScene extends Phaser.Scene {
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
+  private miasmaOverlay: Phaser.GameObjects.Rectangle | null = null  // 画面全面の瘴気オーバーレイ
+  private miasmaOrbs: Phaser.GameObjects.Image[] = []  // 浮遊する毒の光球
   // 描画タイルサイズ（シーン起動時に確定。ワールド座標 = タイル座標 × rts）
   private rts = TILE_SIZE
   private lastMoveAt = 0          // キーリピート抑制（移動テンポ制御）
@@ -155,6 +205,8 @@ export class GameScene extends Phaser.Scene {
     this.facilityGraphics   = new Map()
     this.tileSprites        = []
     this.floorVariantMap    = []
+    this.miasmaOverlay      = null
+    this.miasmaOrbs         = []
     this.inventoryOpen      = false
     this.isPaused           = false
     this.isStatAllocOpen    = false
@@ -242,6 +294,7 @@ export class GameScene extends Phaser.Scene {
       ['horu',            '/assets/characters/enemies/horu.png'],
       ['master',          '/assets/characters/enemies/master.png'],
       ['maho',            '/assets/characters/enemies/maho.png'],
+      ['merchant',        '/assets/characters/enemies/merchant.png'],
       ['scullporin',      '/assets/characters/enemies/scullporin.png'],
     ]
     for (const [key, path] of enemyImages) this.load.image(key, path)
@@ -279,6 +332,7 @@ export class GameScene extends Phaser.Scene {
     window.runRefineChallenge   = (slot, sacrificeId) => this.runRefineChallenge(slot, sacrificeId)
     window.runShadowChallenge   = ()                  => this.runShadowChallenge()
     window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
+    window.buyMerchantItem      = (key)               => this.buyMerchantItem(key)
 
     // ADMINパネルからの即時チェック用（強制出現後に即反映）
     window.triggerSkulporinCheck = () => { void this.sendSkulporinHeartbeat() }
@@ -1235,6 +1289,14 @@ export class GameScene extends Phaser.Scene {
       return
     }
 
+    // 羽：ワープ系（回復せず移動。使用できた場合のみ消費する）
+    if (item.wing) {
+      const consumed = item.wing === 'fly' ? this.useFlyWing() : this.useButterflyWing()
+      if (consumed) this.state.heals = this.state.heals.filter(h => h.id !== itemId)
+      this.updateWindowGameState()
+      return
+    }
+
     playPotion()
     if (item.staminaPercent) {
       const recover = Math.floor(player.maxStamina * item.staminaPercent / 100)
@@ -1249,6 +1311,62 @@ export class GameScene extends Phaser.Scene {
     this.state.heals = this.state.heals.filter(h => h.id !== itemId)
     this.renderMap()
     this.updateWindowGameState()
+  }
+
+  /** ハエの羽：同じ階の床タイルのどこか（敵のいない場所）へワープ。成功でtrue＝消費 */
+  private useFlyWing(): boolean {
+    if (this.isEventFloor) { this.addMessage('ここでは羽を使えない。'); return false }
+    const { map, player, enemies } = this.state
+    const occupied = new Set(enemies.map(e => `${e.position.x},${e.position.y}`))
+    const dest: import('../types').Position[] = []
+    for (let y = 0; y < map.length; y++) {
+      for (let x = 0; x < map[y].length; x++) {
+        if (map[y][x] !== 'floor') continue
+        if (x === player.position.x && y === player.position.y) continue
+        if (occupied.has(`${x},${y}`)) continue
+        dest.push({ x, y })
+      }
+    }
+    if (dest.length === 0) { this.addMessage('飛べる場所がない！'); return false }
+
+    const t = dest[Math.floor(Math.random() * dest.length)]
+    player.position = { x: t.x, y: t.y }
+    this.addMessage('ハエの羽を使った！フロアのどこかへ飛ばされた！')
+    this.cameras.main.flash(200, 180, 255, 180)
+    this.snapNextRender = true
+    this.renderMap()
+    const { x: wx, y: wy } = this.tileToWorld(t.x, t.y)
+    this.cameras.main.centerOn(wx, wy)
+    return true
+  }
+
+  /** 蝶の羽：1〜3階ぶん前の階層へ戻る（新規生成）。戻れた場合のみtrue＝消費 */
+  private useButterflyWing(): boolean {
+    if (this.isEventFloor) { this.addMessage('ここでは羽を使えない。'); return false }
+    const cur = this.state.player.floor
+    const maxBack = Math.min(3, cur - 1)
+    if (maxBack <= 0) { this.addMessage('これ以上戻れる階層がない！'); return false }
+
+    const back = 1 + Math.floor(Math.random() * maxBack)   // 1〜maxBack
+    this.state.player.floor = cur - back
+    this.addMessage(`蝶の羽を使った！B${cur}階からB${cur - back}階へ引き戻された！`)
+    this.populateFloor()
+    return true
+  }
+
+  /** 行商人：女神のコイン1枚を消費して羽を1個購入（各10個まで） */
+  private buyMerchantItem(key: WingKey): { ok: boolean; reason?: 'coin' | 'limit' } {
+    const name = WING_ITEMS[key].name
+    const held = this.state.heals.filter(h => h.name === name).length
+    if (held >= 10) return { ok: false, reason: 'limit' }
+    const coin = this.state.heals.find(h => h.coin)
+    if (!coin) return { ok: false, reason: 'coin' }
+
+    this.state.heals = this.state.heals.filter(h => h.id !== coin.id)
+    this.state.heals.push(makeWingItem(key))
+    this.addMessage(`${name}を1個購入した！（女神のコイン -1）`)
+    this.updateWindowGameState()
+    return { ok: true }
   }
 
   private castSpell(spellType: import('../types').SpellType) {
@@ -1368,15 +1486,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private enterNormalFloor() {
-    this.isEventFloor = false
-    this.eventFacilities = []
-    this.state.driedSprings = []
     this.state.player.floor++
     const floor = this.state.player.floor
     logEvent('floor_reached', { floor, level: this.state.player.level })
     if (floor % 5 === 0) {
       fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがB${floor}階に到達しました！`, `floor:${floor}`)
     }
+    this.populateFloor()
+  }
+
+  /** 現在の player.floor の階を新規生成して配置・描画する（到達ログ/通知は呼び出し側の責務） */
+  private populateFloor() {
+    this.isEventFloor = false
+    this.eventFacilities = []
+    this.state.driedSprings = []
+    const floor = this.state.player.floor
     const map = generateDungeon()
     const playerPos = getPlayerStartPosition(map)
     this.state.map = map
@@ -1457,10 +1581,10 @@ export class GameScene extends Phaser.Scene {
     shuffleArr(npcPool)
     const npcPositions: { x: number; y: number }[] = []
     for (const p of npcPool) {
-      if (npcPositions.length >= 3) break
+      if (npcPositions.length >= 4) break
       if (npcPositions.every(q => Math.abs(p.x - q.x) >= 2)) npcPositions.push(p)
     }
-    while (npcPositions.length < 3) npcPositions.push({ x: 6 + npcPositions.length * 3, y: 9 })
+    while (npcPositions.length < 4) npcPositions.push({ x: 6 + npcPositions.length * 2, y: 9 })
 
     // ── 回復の泉を部屋下半分にランダム配置（NPC・プレイヤー初期位置を除く）──
     const npcSet = new Set(npcPositions.map(p => `${p.x},${p.y}`))
@@ -1480,9 +1604,10 @@ export class GameScene extends Phaser.Scene {
     this.state.enemies = []
     this.state.items = []
     this.eventFacilities = [
-      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', texture: 'horu',   position: npcPositions[0] },
-      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', texture: 'master', position: npcPositions[1] },
-      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', texture: 'maho',   position: npcPositions[2] },
+      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', texture: 'horu',     position: npcPositions[0] },
+      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', texture: 'master',   position: npcPositions[1] },
+      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', texture: 'maho',     position: npcPositions[2] },
+      { id: 'facility_merchant',  kind: 'merchant',  name: '行商人カゴメ',   icon: '🛒', texture: 'merchant', position: npcPositions[3] },
     ]
     this.state.floorType = 'normal'
     this.buildFloorVariants(map)
@@ -2419,7 +2544,7 @@ export class GameScene extends Phaser.Scene {
         this.makeTransparent(`attack_${dir}_${i}`)
       }
     }
-    for (const key of ['horu', 'master', 'maho', 'deviling', 'masterring']) {
+    for (const key of ['horu', 'master', 'maho', 'merchant', 'deviling', 'masterring']) {
       this.makeTransparent(key)
     }
   }
@@ -2528,6 +2653,9 @@ export class GameScene extends Phaser.Scene {
   /** タイルスプライトを生成（フロア切り替え時に呼び出し）。位置はワールド座標で固定 */
   private createTileSprites(map: import('../types').TileType[][]) {
     const rts = this.rts
+    // 階層帯ティント：上層ほど暗く毒々しく。床は帯色、壁は一段沈めた色を被せる
+    const floorTint = floorTierTint(this.state?.player?.floor ?? 1)
+    const wallTint  = darkenColor(floorTint, 0.8)
     this.tileSprites.forEach(row => row.forEach(s => s?.destroy()))
     this.tileSprites = map.map((row, y) =>
       row.map((tile, x) => {
@@ -2544,13 +2672,115 @@ export class GameScene extends Phaser.Scene {
 
         if (this.failedTextures.has(key) || !this.textures.exists(key)) return null
 
-        return this.add.image(x * rts + rts / 2, y * rts + rts / 2, key)
+        const img = this.add.image(x * rts + rts / 2, y * rts + rts / 2, key)
           .setDisplaySize(rts + 6, rts + 6)
           .setDepth(-1)
           .setVisible(false)
+        if      (tile === 'floor') img.setTint(floorTint)
+        else if (tile === 'wall')  img.setTint(wallTint)
+        return img
       })
     )
     this.createStairsGlow(map)
+    this.updateMiasma()
+    this.updateMiasmaOrbs()
+  }
+
+  /** 画面全面の瘴気オーバーレイを現在フロアに合わせて更新（薄め・暗くしすぎない） */
+  private updateMiasma() {
+    const { color, alpha } = floorMiasma(this.state?.player?.floor ?? 1)
+    if (!this.miasmaOverlay) {
+      // カメラに固定し、タイルより上・エンティティより下に置く
+      this.miasmaOverlay = this.add.rectangle(
+        this.scale.width / 2, this.scale.height / 2,
+        this.scale.width, this.scale.height,
+        color, alpha,
+      )
+        .setScrollFactor(0)
+        .setDepth(3)
+        .setBlendMode(Phaser.BlendModes.MULTIPLY)
+    }
+    this.miasmaOverlay
+      .setFillStyle(color, alpha)
+      .setSize(this.scale.width, this.scale.height)
+      .setPosition(this.scale.width / 2, this.scale.height / 2)
+      .setVisible(alpha > 0)
+  }
+
+  /** 柔らかいグロー用テクスチャ（放射状グラデ）を一度だけ生成 */
+  private ensureGlowTexture() {
+    if (this.textures.exists('miasma-glow')) return
+    const size = 64
+    const c = document.createElement('canvas')
+    c.width = c.height = size
+    const ctx = c.getContext('2d')!
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+    g.addColorStop(0,   'rgba(255,255,255,1)')
+    g.addColorStop(0.4, 'rgba(255,255,255,0.45)')
+    g.addColorStop(1,   'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, size, size)
+    this.textures.addCanvas('miasma-glow', c)
+  }
+
+  /** 毒々しい光球を画面に浮遊させる（加算合成・カメラ固定）。上層ほど数が増える */
+  private updateMiasmaOrbs() {
+    this.miasmaOrbs.forEach(o => { this.tweens.killTweensOf(o); o.destroy() })
+    this.miasmaOrbs = []
+
+    const floor = this.state?.player?.floor ?? 1
+    const tier = Math.max(0, Math.floor((floor - 1) / 10))
+    this.ensureGlowTexture()
+
+    const W = this.scale.width, H = this.scale.height
+    // 1-10Fは無し（10Fで明確に変化）。11F以降、上層ほど増やす（最大16）
+    const count = tier === 0 ? 0 : Math.min(16, 4 + (tier - 1) * 2)
+    if (count === 0) return
+    // 50Fまでは緑、50→100Fで徐々に紫の比率を上げる（連続的に侵食）
+    const purpleRatio = Math.max(0, Math.min(1, (floor - 50) / 50))
+    const GREEN_ORBS  = [0x66ff66, 0x99ff33, 0xccff44, 0x66ffaa]
+    const PURPLE_ORBS = [0xcc66ff, 0xaa66ff, 0xff66cc, 0x9933ff]
+
+    for (let i = 0; i < count; i++) {
+      const palette = Math.random() < purpleRatio ? PURPLE_ORBS : GREEN_ORBS
+      const color = palette[Math.floor(Math.random() * palette.length)]
+      const r = 18 + Math.random() * 28
+      const baseAlpha = 0.16 + Math.random() * 0.20
+      const orb = this.add.image(Math.random() * W, Math.random() * H, 'miasma-glow')
+        .setScrollFactor(0)
+        .setDepth(8)                              // エンティティより前に浮遊させる
+        .setBlendMode(Phaser.BlendModes.ADD)      // 加算なので暗くせず光って見える
+        .setTint(color)
+        .setDisplaySize(r * 2, r * 2)
+        .setAlpha(baseAlpha)
+      this.miasmaOrbs.push(orb)
+
+      // ゆっくり漂う（上方向＋左右ゆらぎ）
+      this.tweens.add({
+        targets: orb,
+        x: orb.x + (Math.random() * 2 - 1) * W * 0.28,
+        y: orb.y - (50 + Math.random() * 140),
+        duration: 4500 + Math.random() * 4000,
+        yoyo: true, repeat: -1, ease: 'Sine.InOut',
+        delay: Math.random() * 1800,
+      })
+      // 明滅
+      this.tweens.add({
+        targets: orb,
+        alpha: baseAlpha * 0.35,
+        duration: 1300 + Math.random() * 1600,
+        yoyo: true, repeat: -1, ease: 'Sine.InOut',
+        delay: Math.random() * 1200,
+      })
+      // 微妙な拡縮で生き物っぽく
+      this.tweens.add({
+        targets: orb,
+        scaleX: orb.scaleX * (0.7 + Math.random() * 0.5),
+        scaleY: orb.scaleY * (0.7 + Math.random() * 0.5),
+        duration: 1800 + Math.random() * 1800,
+        yoyo: true, repeat: -1, ease: 'Sine.InOut',
+      })
+    }
   }
 
   /** 階段タイルに脈動する光輪マーカーを置く（出口の視認性向上） */

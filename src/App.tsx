@@ -9,7 +9,7 @@ import { EquipModal } from './components/EquipModal'
 import { VirtualJoystick } from './components/VirtualJoystick'
 import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
-import { RefineModal, ShadowEquipModal, SpellbookModal } from './components/EventFacilityModals'
+import { RefineModal, ShadowEquipModal, SpellbookModal, MerchantModal } from './components/EventFacilityModals'
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { GameToast } from './components/GameToast'
 import { EventMsgBar } from './components/EventMsgBar'
@@ -18,6 +18,7 @@ import { WorldLog } from './components/WorldLog'
 import { HowToPlay } from './components/HowToPlay'
 import { ArcanaRoulette } from './components/ArcanaRoulette'
 import { ReportModal } from './components/ReportModal'
+import { NewsModal } from './components/NewsModal'
 import { SkulporinReward } from './components/SkulporinReward'
 import { Analytics } from '@vercel/analytics/react'
 
@@ -179,6 +180,8 @@ function App() {
         <RefineModal />
         <ShadowEquipModal />
         <SpellbookModal />
+        <MerchantModal />
+        <NewsModal />
         <GameToast />
       </div>
     </div>

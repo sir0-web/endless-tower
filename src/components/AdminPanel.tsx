@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { MONSTER_REGISTRY } from '../game/dungeon'
+import { RichTextEditor, RichTextView } from './RichText'
+import type { Announcement } from '../game/announcements'
 
 const PROD_URL = import.meta.env.VITE_SUPABASE_URL as string
 const PROD_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -9,7 +11,7 @@ const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats'
+type Tab = 'maintenance' | 'message' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news'
 
 interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
 
@@ -510,6 +512,84 @@ export function AdminPanel() {
     })
   }
 
+  // ── お知らせ（NEWS）──
+  const [news, setNews]             = useState<Announcement[]>([])
+  const [newsLoading, setNewsLoading] = useState(false)
+  const [newsMsg, setNewsMsg]       = useState('')
+  const [editingId, setEditingId]   = useState<number | null>(null)  // null=新規作成中, number=編集中, -1=フォーム閉
+  const [nfTitle, setNfTitle]       = useState('')
+  const [nfBody, setNfBody]         = useState('')
+  const [nfPublished, setNfPublished] = useState(true)
+  const [editorKey, setEditorKey]   = useState(0)   // エディタ再マウント用（読み込み時に初期値を流し込む）
+  const [formOpen, setFormOpen]     = useState(false)
+
+  const loadNews = useCallback(async () => {
+    setNewsLoading(true)
+    // まずAPI(全件・下書き含む)を試し、失敗時はdb直読(RLSで公開分のみ)へフォールバック
+    let rows: Announcement[] | null = null
+    if (ADMIN_KEY) {
+      try {
+        const res = await fetch('/api/admin-news', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminKey: ADMIN_KEY, action: 'list' }),
+        })
+        if (res.ok) { const j = await res.json(); rows = (j.rows ?? []) as Announcement[] }
+      } catch { /* fallthrough to db */ }
+    }
+    if (!rows) {
+      const { data, error } = await db
+        .from('ebt_announcements')
+        .select('*')
+        .order('published_at', { ascending: false })
+        .limit(200)
+      if (error) { setNewsMsg(`エラー: ${error.message}`); setNewsLoading(false); return }
+      rows = (data ?? []) as Announcement[]
+    }
+    setNews(rows)
+    setNewsLoading(false)
+  }, [db])
+
+  const newsApi = async (body: Record<string, unknown>): Promise<boolean> => {
+    if (!ADMIN_KEY) { setNewsMsg('VITE_ADMIN_KEY 未設定'); return false }
+    try {
+      const res = await fetch('/api/admin-news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: ADMIN_KEY, ...body }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setNewsMsg(`エラー: ${json.error ?? res.status}`); return false }
+      return true
+    } catch (e) { setNewsMsg(`エラー: ${String(e)}`); return false }
+  }
+
+  const openNewForm = () => {
+    setEditingId(null); setNfTitle(''); setNfBody(''); setNfPublished(true)
+    setEditorKey(k => k + 1); setFormOpen(true); setNewsMsg('')
+  }
+  const openEditForm = (a: Announcement) => {
+    setEditingId(a.id); setNfTitle(a.title); setNfBody(a.body_html); setNfPublished(a.is_published)
+    setEditorKey(k => k + 1); setFormOpen(true); setNewsMsg('')
+  }
+  const closeForm = () => { setFormOpen(false); setEditingId(-1) }
+
+  const saveNews = async () => {
+    if (!nfTitle.trim()) { setNewsMsg('タイトルを入力してください'); return }
+    const ok = editingId && editingId > 0
+      ? await newsApi({ action: 'update', id: editingId, title: nfTitle.trim(), body_html: nfBody, is_published: nfPublished })
+      : await newsApi({ action: 'create', title: nfTitle.trim(), body_html: nfBody, is_published: nfPublished })
+    if (ok) { setNewsMsg('保存しました'); setFormOpen(false); await loadNews() }
+  }
+
+  const togglePublish = async (a: Announcement) => {
+    if (await newsApi({ action: 'update', id: a.id, is_published: !a.is_published })) await loadNews()
+  }
+
+  const deleteNews = async (a: Announcement) => {
+    if (!confirm(`「${a.title}」を削除しますか？`)) return
+    if (await newsApi({ action: 'delete', id: a.id })) { setNewsMsg('削除しました'); await loadNews() }
+  }
+
   useEffect(() => {
     if (!authed) return
     if (tab === 'maintenance') loadMaintenance()
@@ -518,7 +598,8 @@ export function AdminPanel() {
     if (tab === 'reports')     loadReports()
     if (tab === 'stats')       loadStats()
     if (tab === 'event')       loadOnlinePlayers()
-  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers])
+    if (tab === 'news')        loadNews()
+  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews])
 
   const now = Date.now()
   const isOpen = windows.some(w => winActive(w, now))
@@ -539,7 +620,7 @@ export function AdminPanel() {
   const TAB_LABELS: Record<Tab, string> = {
     maintenance: 'メンテナンス', message: 'メッセージ配信', event: 'イベント',
     ranking: 'ランキング', worldlog: 'ワールドログ',
-    users: 'ユーザー管理', reports: '報告BOX', stats: '統計',
+    users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ',
   }
 
   const REP_STATUS_COLOR: Record<string, string> = {
@@ -1153,6 +1234,82 @@ export function AdminPanel() {
               </table>
             )}
             <p style={S.muted}>行クリックで詳細表示・既読マーク。最大300件。</p>
+          </div>
+        )}
+
+        {/* ══ お知らせ ══ */}
+        {tab === 'news' && (
+          <div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={openNewForm} style={S.btnPrimary}>＋ 新規作成</button>
+              <button onClick={loadNews} style={S.btnSm}>再読込</button>
+              {newsMsg && <span style={{ color: newsMsg.includes('エラー') ? '#f87171' : '#4ade80', fontSize: 13 }}>{newsMsg}</span>}
+            </div>
+
+            {/* 作成・編集フォーム */}
+            {formOpen && (
+              <div style={{ ...S.card, marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontWeight: 700 }}>{editingId && editingId > 0 ? `編集 (ID:${editingId})` : '新規お知らせ'}</span>
+                  <button onClick={closeForm} style={S.btnSm}>閉じる</button>
+                </div>
+                <label style={S.label}>タイトル</label>
+                <input value={nfTitle} onChange={e => setNfTitle(e.target.value)} maxLength={120}
+                  placeholder="例：新アイテム『蝶の羽』登場！" style={{ ...S.input, marginBottom: 10 }} />
+                <label style={S.label}>本文（太字 / サイズ / 色 / 画像挿入が可能）</label>
+                <RichTextEditor key={editorKey} initialHtml={nfBody} onChange={setNfBody} />
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#cfcff0' }}>
+                    <input type="checkbox" checked={nfPublished} onChange={e => setNfPublished(e.target.checked)} />
+                    公開する
+                  </label>
+                  <button onClick={saveNews} style={S.btnPrimary}>保存</button>
+                </div>
+                {/* プレビュー */}
+                <div style={{ marginTop: 14 }}>
+                  <label style={S.label}>プレビュー</label>
+                  <div style={{ background: 'linear-gradient(180deg,#f3e4c2,#e2cb98)', color: '#3a2a14', borderRadius: 8, padding: 14, border: '2px solid #9c7a33' }}>
+                    <div style={{ fontWeight: 700, fontSize: 18, color: '#5a3d12', marginBottom: 8 }}>{nfTitle || '（タイトル未入力）'}</div>
+                    <RichTextView html={nfBody} className="news-body" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 一覧（VIEW数つき）*/}
+            {newsLoading ? <p style={S.muted}>読み込み中…</p> : (
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>ID</th><th style={S.th}>掲載日 (JST)</th>
+                  <th style={S.th}>タイトル</th><th style={S.th}>公開</th>
+                  <th style={S.th}>VIEW</th><th style={S.th}></th>
+                </tr></thead>
+                <tbody>
+                  {news.map(a => (
+                    <tr key={a.id} style={{ background: editingId === a.id ? 'rgba(79,70,229,0.08)' : 'transparent' }}>
+                      <td style={{ ...S.td, color: '#666' }}>{a.id}</td>
+                      <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{fmtJstDate(a.published_at)}</td>
+                      <td style={{ ...S.td, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</td>
+                      <td style={S.td}>
+                        <button onClick={() => togglePublish(a)}
+                          style={{ ...S.btnSm, background: a.is_published ? 'rgba(20,83,45,0.5)' : 'transparent', border: `1px solid ${a.is_published ? '#22c55e' : '#666'}`, color: a.is_published ? '#4ade80' : '#888' }}>
+                          {a.is_published ? '公開中' : '非公開'}
+                        </button>
+                      </td>
+                      <td style={{ ...S.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{a.view_count}</td>
+                      <td style={S.td}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={() => openEditForm(a)} style={S.btnSm}>編集</button>
+                          <button onClick={() => deleteNews(a)} style={S.btnDanger}>削除</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {news.length === 0 && <tr><td colSpan={6} style={{ ...S.td, color: '#666', textAlign: 'center' }}>お知らせはまだありません</td></tr>}
+                </tbody>
+              </table>
+            )}
+            <p style={S.muted}>VIEW数は同一ブラウザ1記事1カウント（水増し防止）。最大200件表示。</p>
           </div>
         )}
 

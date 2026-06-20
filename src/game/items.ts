@@ -18,6 +18,25 @@ export const HEAL_ITEMS = [
 // いいね報酬で配るポーション名（色ランダム抽選用）
 export const POTION_NAMES = HEAL_ITEMS.map(h => h.name)
 
+// ── 羽アイテム（行商人で女神のコイン1枚＝1個。各10個まで）──
+export const WING_ITEMS = {
+  fly:       { name: 'ハエの羽', icon: '🪰', desc: '同じ階のどこかへランダムにワープする' },
+  butterfly: { name: '蝶の羽',   icon: '🦋', desc: '1〜3階ぶん前の階層へランダムに戻る' },
+} as const
+
+export type WingKey = keyof typeof WING_ITEMS
+
+/** 羽アイテムを1個生成（消費アイテム＝type:'heal'＋wingフラグ） */
+export function makeWingItem(key: WingKey): Item {
+  return {
+    id: `wing_${key}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    name: WING_ITEMS[key].name,
+    type: 'heal',
+    position: { x: 0, y: 0 },
+    wing: key,
+  }
+}
+
 // atkBonus/defBonus を廃止し strBonus/vitBonus に統一
 // minFloor: その階以降でのみ出現する（深層ほど強力な装備が出る）
 export const EQUIP_ITEMS: {

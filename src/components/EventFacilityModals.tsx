@@ -6,7 +6,7 @@ const SLOT_LABELS: Record<EquipSlot, string> = {
   accessory1: '指輪①', accessory2: '指輪②', charm: 'お守り',
 }
 
-function useFacilityOpen(kind: 'refine' | 'shadow' | 'spellbook') {
+function useFacilityOpen(kind: 'refine' | 'shadow' | 'spellbook' | 'merchant') {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -171,6 +171,74 @@ export function ShadowEquipModal() {
             <button className="facility-close-btn" onClick={close}>閉じる</button>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── 行商人（羽の購入）──
+const MERCHANT_ITEMS = [
+  { key: 'fly'       as const, icon: '🪰', name: 'ハエの羽', desc: '同じ階のどこかへランダムにワープする' },
+  { key: 'butterfly' as const, icon: '🦋', name: '蝶の羽',   desc: '1〜3階ぶん前の階層へランダムに戻る' },
+]
+
+export function MerchantModal() {
+  const [open, setOpen] = useFacilityOpen('merchant')
+  const [, setTick] = useState(0)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const close = () => { setMsg(null); setOpen(false) }
+
+  if (!open) return null
+
+  const heals = window.gameState?.heals ?? []
+  const coins = heals.filter(h => h.coin).length
+  const heldCount = (name: string) => heals.filter(h => h.name === name).length
+
+  const buy = (key: 'fly' | 'butterfly') => {
+    const r = window.buyMerchantItem?.(key)
+    if (!r) return
+    if (r.ok) {
+      const name = MERCHANT_ITEMS.find(i => i.key === key)!.name
+      setMsg(`${name} を購入した！`)
+    } else if (r.reason === 'coin') {
+      setMsg('女神のコインが足りません…')
+    } else if (r.reason === 'limit') {
+      setMsg('これ以上は持てません（上限10個）')
+    }
+    setTick(t => t + 1)
+  }
+
+  return (
+    <div className="facility-overlay">
+      <div className="facility-modal">
+        <p className="facility-title">🛒行商人カゴメ🛒</p>
+        <p className="facility-desc">
+          女神のコイン1枚で「羽」を1個お売りするよ。各10個まで持てるよ。
+        </p>
+        <p className="facility-sub">所持コイン：🪙 {coins}</p>
+        <div className="facility-list">
+          {MERCHANT_ITEMS.map(it => {
+            const held = heldCount(it.name)
+            const full = held >= 10
+            const disabled = full || coins < 1
+            return (
+              <div key={it.key} className="facility-item" style={{ alignItems: 'center', gap: 8 }}>
+                <span className="fi-name" style={{ flex: 1 }}>
+                  {it.icon} {it.name} <span style={{ opacity: 0.7 }}>（{held}/10）</span>
+                  <br /><span className="facility-empty" style={{ fontSize: '0.8em' }}>{it.desc}</span>
+                </span>
+                <button className="facility-go-btn" disabled={disabled} onClick={() => buy(it.key)}>
+                  🪙1で購入
+                </button>
+              </div>
+            )
+          })}
+        </div>
+        {msg && <p className="facility-sub">{msg}</p>}
+        <div className="facility-btns">
+          <button className="facility-close-btn" onClick={close}>とじる</button>
+        </div>
       </div>
     </div>
   )

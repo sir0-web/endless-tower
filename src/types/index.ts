@@ -46,9 +46,11 @@ export interface Item {
   refineLevel?: number
   // 女神のコイン：使うとスロットを1回回す消費アイテム
   coin?: boolean
+  // 羽アイテム：fly=同フロアワープ / butterfly=1〜3階前へ戻る
+  wing?: 'fly' | 'butterfly'
 }
 
-export type FacilityKind = 'refine' | 'shadow' | 'spellbook'
+export type FacilityKind = 'refine' | 'shadow' | 'spellbook' | 'merchant'
 
 // いいね報酬（サーバー抽選）。potion時のみ reward_name に色名が入る。
 export interface LikeReward {
@@ -179,6 +181,7 @@ declare global {
     debugSkulporin?: () => void
     // ── グローバルUI ──
     showHowToPlay?: () => void
+    showNews?: () => void
     showGameToast?: (message: string) => void
     addWorldLogMessage?: (text: string) => void
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
@@ -197,5 +200,7 @@ declare global {
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
     runShadowChallenge?: () => ShadowResult | null
     runSpellbookChallenge?: (spellId: string) => SpellbookResult | null
+    // ── 行商人：女神のコイン1枚で羽を購入（各10個まで）──
+    buyMerchantItem?: (key: 'fly' | 'butterfly') => { ok: boolean; reason?: 'coin' | 'limit' }
   }
 }

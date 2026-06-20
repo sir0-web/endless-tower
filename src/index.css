@@ -3543,3 +3543,10 @@ html, body {
     font-size: 18px;
   }
 }
+
+/* ── お知らせ本文（羊皮紙ビュー）。画像・リンク・引用の崩れ防止 ── */
+.news-body { color: #3a2a14; }
+.news-body img { max-width: 100%; height: auto; display: block; margin: 8px 0; border-radius: 6px; }
+.news-body a { color: #1450a0; }
+.news-body blockquote { border-left: 3px solid #c9b07e; margin: 8px 0; padding: 2px 0 2px 12px; color: #6a5224; }
+.news-body p { margin: 8px 0; }
