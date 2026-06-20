@@ -132,6 +132,8 @@ export interface GameState {
   areaBossFloors: Record<number, string>
   floorType: 'normal' | 'lucky' | 'chaos'
   driedSprings: string[]
+  // 瘴気が強いフロア（デバフ）：視界が通常より2マス狭くなり紫フォグがかかる。normalフロアでのみ抽選
+  miasmaFloor: boolean
 }
 
 export interface WindowGameState {

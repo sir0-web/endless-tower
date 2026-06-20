@@ -16,6 +16,7 @@ export interface SaveData {
   areaBossFloors: Record<number, string>
   floorType: 'normal' | 'lucky' | 'chaos'
   driedSprings: string[]
+  miasmaFloor?: boolean   // 旧セーブ互換のため任意
   savedAt: number
 }
 

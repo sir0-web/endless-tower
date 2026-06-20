@@ -462,6 +462,7 @@ export class GameScene extends Phaser.Scene {
       areaBossFloors,
       floorType,
       driedSprings: [],
+      miasmaFloor: false,   // 1Fは瘴気フロアにしない（序盤の理不尽さ回避）
     }
     dedupeEnemyPositions(this.state.enemies, map, this.state.player.position)   // 敵が重なって始まらないように
     this.buildFloorVariants(map)
@@ -487,6 +488,7 @@ export class GameScene extends Phaser.Scene {
       areaBossFloors: saved.areaBossFloors,
       floorType: saved.floorType,
       driedSprings: saved.driedSprings ?? [],
+      miasmaFloor: saved.miasmaFloor ?? false,
     }
     this.buildFloorVariants(map)
     this.createTileSprites(map)
@@ -494,23 +496,26 @@ export class GameScene extends Phaser.Scene {
 
   // セーブ実行（プレイ中のセーブボタンから呼ばれる）
   private doSaveGame() {
-    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings } = this.state
-    saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings })
+    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
+    saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor })
     window.showGameToast?.('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
   }
 
   private showTelopIfNeeded() {
-    const { player, areaBossFloors, floorType } = this.state
+    const { player, areaBossFloors, floorType, miasmaFloor } = this.state
     const bossMsg = getFloorTelopMessage(player.floor, areaBossFloors)
 
     const parts: string[] = []
     if (floorType === 'chaos') parts.push('このフロアは混沌とした気配に満ちている！')
     if (floorType === 'lucky') parts.push('このフロアは不思議な光に包まれている・・・')
+    if (miasmaFloor)           parts.push('瘴気が強いフロアだ！目の前がとても見えにくい！')
     if (bossMsg)               parts.push(bossMsg)
     if (parts.length === 0) return
 
+    // 瘴気は紫。chaos橙・lucky水色を優先しつつ、それ以外で瘴気があれば紫
     const color = floorType === 'chaos' ? '#ff6600'
       : floorType === 'lucky' ? '#aaddff'
+      : miasmaFloor ? '#b066ff'
       : '#ff4444'
 
     window.showEventMessage?.(parts.join('\n'), color)
@@ -571,6 +576,8 @@ export class GameScene extends Phaser.Scene {
 
     // 泥の沼スロー処理
     if (player.mudTurns > 0) {
+      // 泥：歩くたびに画面をブラウンにフラッシュして鈍足を演出
+      this.cameras.main.flash(170, 120, 75, 30)
       player.mudTurns--
       if (player.mudSkipNext) {
         player.mudSkipNext = false
@@ -1463,6 +1470,8 @@ export class GameScene extends Phaser.Scene {
     const dmg = 2
     player.hp = Math.max(0, player.hp - dmg)
     player.poisonTurns--
+    // 毒：歩くたびに画面を緑にフラッシュしてダメージを演出
+    this.cameras.main.flash(170, 40, 180, 60)
     this.addMessage(`毒のダメージ！${dmg}ダメージ（残り${player.poisonTurns}ターン）`)
     if (player.poisonTurns <= 0) {
       player.poisoned = false
@@ -1542,6 +1551,8 @@ export class GameScene extends Phaser.Scene {
       ? spawnItems(map, { countMult: 6, floor })
       : spawnItems(map, { countMult: 3, floor })
     this.state.floorType = floorType
+    // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。lucky/chaos/イベントとは排他で競合しない
+    this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10
     this.buildFloorVariants(map)
     this.createTileSprites(map)
     playStairs()
@@ -1612,6 +1623,7 @@ export class GameScene extends Phaser.Scene {
       { id: 'facility_merchant',  kind: 'merchant',  name: '行商人とるいぬ',   icon: '🛒', texture: 'merchant', position: npcPositions[3] },
     ]
     this.state.floorType = 'normal'
+    this.state.miasmaFloor = false   // ベースキャンプは瘴気なし（フル視界）
     this.buildFloorVariants(map)
     this.createTileSprites(map)
     this.addMessage('ベースキャンプ「あるかなひろば」に到着した...')
@@ -2345,12 +2357,20 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
+  /** 現在フロアの視界パラメータ。瘴気フロアでは通常より2マス狭く・紫フォグになる */
+  private vision(): { radius: number; fogInner: number; fogOuter: number; fogColor: number } {
+    return this.state.miasmaFloor
+      ? { radius: VISION_RADIUS - 2, fogInner: VISION_FOG_INNER - 1, fogOuter: VISION_FOG_OUTER - 2, fogColor: 0x3a1a5c }
+      : { radius: VISION_RADIUS,     fogInner: VISION_FOG_INNER,     fogOuter: VISION_FOG_OUTER,     fogColor: 0x000000 }
+  }
+
   private isVisible(tx: number, ty: number): boolean {
     if (this.state.floorType === 'lucky' || this.isEventFloor) return true
     const { player } = this.state
     const dx = tx - player.position.x
     const dy = ty - player.position.y
-    return dx * dx + dy * dy <= VISION_RADIUS * VISION_RADIUS
+    const r = this.vision().radius
+    return dx * dx + dy * dy <= r * r
   }
 
   private isTileVisible(tx: number, ty: number): boolean {
@@ -2358,7 +2378,8 @@ export class GameScene extends Phaser.Scene {
     const { player } = this.state
     const dx = tx - player.position.x
     const dy = ty - player.position.y
-    return dx * dx + dy * dy <= VISION_FOG_OUTER * VISION_FOG_OUTER
+    const o = this.vision().fogOuter
+    return dx * dx + dy * dy <= o * o
   }
 
   // ── 戦闘エフェクト（game feel） ──
@@ -3094,19 +3115,20 @@ export class GameScene extends Phaser.Scene {
     }
     this.snapNextRender = false
 
-    // ── 霧グラデーション（distance 2→5 にかけて円形スモッグ）──
+    // ── 霧グラデーション（inner→outer にかけて円形スモッグ。瘴気フロアは狭く紫色）──
     this.fogGraphics.clear()
     if (this.state.floorType !== 'lucky' && !this.isEventFloor) {
+      const { fogInner, fogOuter, fogColor } = this.vision()
       for (let fy = 0; fy < MAP_HEIGHT; fy++) {
         for (let fx = 0; fx < MAP_WIDTH; fx++) {
           const dx   = fx - player.position.x
           const dy   = fy - player.position.y
           const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist > VISION_FOG_OUTER) continue
-          const t = Math.max(0, (dist - VISION_FOG_INNER) / (VISION_FOG_OUTER - VISION_FOG_INNER))
+          if (dist > fogOuter) continue
+          const t = Math.max(0, (dist - fogInner) / (fogOuter - fogInner))
           const alpha = t * t  // 二次曲線で自然な霧立ち上がり
           if (alpha <= 0) continue
-          this.fogGraphics.fillStyle(0x000000, Math.min(1, alpha))
+          this.fogGraphics.fillStyle(fogColor, Math.min(1, alpha))
           this.fogGraphics.fillRect(fx * rts, fy * rts, rts, rts)
         }
       }
