@@ -8,6 +8,7 @@ import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { logEvent, getPlayerId } from '../game/supabase'
 import { fireWorldNotification, resetWorldNotifyDedup } from '../game/worldNotify'
 import { getDisplayName } from '../game/playerName'
+import { getMonsterTextureOverrides } from '../game/overrides'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
@@ -299,10 +300,38 @@ export class GameScene extends Phaser.Scene {
     ]
     for (const [key, path] of enemyImages) this.load.image(key, path)
 
+    // データベース編集でアップロードされたモンスター画像を上書きロード（透過処理のためCORS有効化）
+    const texOverrides = getMonsterTextureOverrides()
+    if (texOverrides.some(o => o.url)) {
+      this.load.crossOrigin = 'anonymous'
+      for (const o of texOverrides) {
+        if (o.url) this.load.image(`ovr_${o.ref}`, o.url)
+      }
+    }
+
     // 読み込みエラーを記録 → フォールバックで色描画
     this.load.on('loaderror', (file: { key: string }) => {
       this.failedTextures.add(file.key)
     })
+  }
+
+  /** DB編集の画像/改名をテクスチャ解決へ反映（透過処理→可視部分サイズ調整は描画時に適用）。 */
+  private applyMonsterTextureOverrides() {
+    for (const o of getMonsterTextureOverrides()) {
+      const effectiveName = o.newName ?? o.ref
+      if (o.url) {
+        const key = `ovr_${o.ref}`
+        if (this.textures.exists(key) && !this.failedTextures.has(key)) {
+          try { this.makeTransparent(key) } catch (e) { console.warn('上書き画像の透過処理に失敗:', key, e) }
+          ENEMY_TEXTURE_MAP[effectiveName] = key
+          ENEMY_TEXTURE_MAP[o.ref] = key
+        }
+      } else if (o.newName) {
+        // 改名のみ：旧名のテクスチャを新名でも引けるよう登録
+        const cur = ENEMY_TEXTURE_MAP[o.ref]
+        if (cur) ENEMY_TEXTURE_MAP[effectiveName] = cur
+      }
+    }
   }
 
   create() {
@@ -310,6 +339,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * this.rts, MAP_HEIGHT * this.rts)
     this.graphics    = this.add.graphics().setDepth(1)
     this.fogGraphics = this.add.graphics().setDepth(7)
+    this.applyMonsterTextureOverrides()
     this.initGame()
     this.createLowHpVignette()
     document.addEventListener('visibilitychange', this.onVisibilityChange)
@@ -1551,7 +1581,7 @@ export class GameScene extends Phaser.Scene {
       ? spawnItems(map, { countMult: 6, floor })
       : spawnItems(map, { countMult: 3, floor })
     this.state.floorType = floorType
-    // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。lucky/chaos/イベントとは排他で競合しない
+    // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。視界3マス減。lucky/chaos/イベントとは排他で競合しない
     this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10
     this.buildFloorVariants(map)
     this.createTileSprites(map)
@@ -2357,11 +2387,12 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  /** 現在フロアの視界パラメータ。瘴気フロアでは通常より2マス狭く・紫フォグになる */
-  private vision(): { radius: number; fogInner: number; fogOuter: number; fogColor: number } {
+  /** 現在フロアの視界パラメータ。瘴気フロアでは通常より3マス狭く・薄紫フォグになる
+   *  （瘴気の見える2マスは薄い紫の靄、3マス目以遠はタイル非表示で完全暗黒）。 */
+  private vision(): { radius: number; fogInner: number; fogOuter: number; fogColor: number; fogMaxAlpha: number } {
     return this.state.miasmaFloor
-      ? { radius: VISION_RADIUS - 2, fogInner: VISION_FOG_INNER - 1, fogOuter: VISION_FOG_OUTER - 2, fogColor: 0x3a1a5c }
-      : { radius: VISION_RADIUS,     fogInner: VISION_FOG_INNER,     fogOuter: VISION_FOG_OUTER,     fogColor: 0x000000 }
+      ? { radius: VISION_RADIUS - 3, fogInner: VISION_FOG_INNER - 1, fogOuter: VISION_FOG_OUTER - 3, fogColor: 0x9a7ad0, fogMaxAlpha: 0.5 }
+      : { radius: VISION_RADIUS,     fogInner: VISION_FOG_INNER,     fogOuter: VISION_FOG_OUTER,     fogColor: 0x000000, fogMaxAlpha: 1 }
   }
 
   private isVisible(tx: number, ty: number): boolean {
@@ -2997,7 +3028,8 @@ export class GameScene extends Phaser.Scene {
         const fracSized: Record<string, number> = { deviling: 1.25, masterring: 1.25 }
         const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'wanderwolf', 'kingdramo', 'scullporin']
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
-          if (heroSized.includes(textureKey)) {
+          // 上書き画像(ovr_*)も主人公サイズに合わせる（可視部分を計算して補正）
+          if (heroSized.includes(textureKey) || textureKey.startsWith('ovr_')) {
             const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
             g = this.add.image(ex, ey, textureKey)
               .setDisplaySize(rts * 1.25 / wFrac, rts * 1.38 / hFrac).setDepth(5)
@@ -3118,7 +3150,7 @@ export class GameScene extends Phaser.Scene {
     // ── 霧グラデーション（inner→outer にかけて円形スモッグ。瘴気フロアは狭く紫色）──
     this.fogGraphics.clear()
     if (this.state.floorType !== 'lucky' && !this.isEventFloor) {
-      const { fogInner, fogOuter, fogColor } = this.vision()
+      const { fogInner, fogOuter, fogColor, fogMaxAlpha } = this.vision()
       for (let fy = 0; fy < MAP_HEIGHT; fy++) {
         for (let fx = 0; fx < MAP_WIDTH; fx++) {
           const dx   = fx - player.position.x
@@ -3126,7 +3158,7 @@ export class GameScene extends Phaser.Scene {
           const dist = Math.sqrt(dx * dx + dy * dy)
           if (dist > fogOuter) continue
           const t = Math.max(0, (dist - fogInner) / (fogOuter - fogInner))
-          const alpha = t * t  // 二次曲線で自然な霧立ち上がり
+          const alpha = t * t * fogMaxAlpha  // 二次曲線で自然な霧立ち上がり（瘴気は薄め）
           if (alpha <= 0) continue
           this.fogGraphics.fillStyle(fogColor, Math.min(1, alpha))
           this.fogGraphics.fillRect(fx * rts, fy * rts, rts, rts)

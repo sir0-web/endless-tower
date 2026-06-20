@@ -3,6 +3,42 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { MONSTER_REGISTRY } from '../game/dungeon'
 import { RichTextEditor, RichTextView } from './RichText'
 import type { Announcement } from '../game/announcements'
+import {
+  NORMAL_MONSTERS, MINI_BOSSES, MVP_BOSSES, AREA_BOSSES,
+  EQUIPMENT, SPELLS, EQUIP_BONUS_LABELS, EQUIP_SLOT_LABELS,
+} from '../game/catalog'
+import { HEAL_ITEMS, WING_ITEMS } from '../game/items'
+import type { OverrideCategory } from '../game/overrides'
+
+// 編集フォームのフィールド定義（カテゴリ別）。type: text=文字 / num=数値 / area=複数行
+const DB_SCHEMA: Record<OverrideCategory, { fields: { key: string; label: string; type: 'text' | 'num' | 'area' }[]; image: boolean }> = {
+  monster_normal: { image: true, fields: [
+    { key: 'name', label: '名前', type: 'text' }, { key: 'minFloor', label: '出現F(最小)', type: 'num' }, { key: 'maxFloor', label: '出現F(最大)', type: 'num' },
+    { key: 'hpBase', label: 'HP', type: 'num' }, { key: 'atkBase', label: 'ATK', type: 'num' }, { key: 'defBase', label: 'DEF', type: 'num' },
+    { key: 'str', label: 'STR', type: 'num' }, { key: 'vit', label: 'VIT', type: 'num' }, { key: 'agi', label: 'AGI', type: 'num' }, { key: 'luk', label: 'LUK', type: 'num' },
+  ] },
+  monster_mini: { image: true, fields: [
+    { key: 'name', label: '名前', type: 'text' }, { key: 'hpMult', label: 'HP倍率', type: 'num' }, { key: 'atkMult', label: 'ATK倍率', type: 'num' }, { key: 'defMult', label: 'DEF倍率', type: 'num' },
+  ] },
+  monster_mvp: { image: true, fields: [
+    { key: 'name', label: '名前', type: 'text' }, { key: 'hpMult', label: 'HP倍率', type: 'num' }, { key: 'atkMult', label: 'ATK倍率', type: 'num' }, { key: 'defMult', label: 'DEF倍率', type: 'num' },
+  ] },
+  monster_area: { image: true, fields: [
+    { key: 'name', label: '名前', type: 'text' }, { key: 'minFloor', label: '出現F(最小)', type: 'num' }, { key: 'maxFloor', label: '出現F(最大)', type: 'num' },
+  ] },
+  equip: { image: false, fields: [
+    { key: 'name', label: '名前', type: 'text' }, { key: 'minFloor', label: '最低F', type: 'num' },
+    { key: 'hpBonus', label: 'HP', type: 'num' }, { key: 'strBonus', label: 'STR', type: 'num' }, { key: 'agiBonus', label: 'AGI', type: 'num' },
+    { key: 'dexBonus', label: 'DEX', type: 'num' }, { key: 'intBonus', label: 'INT', type: 'num' }, { key: 'vitBonus', label: 'VIT', type: 'num' }, { key: 'lukBonus', label: 'LUK', type: 'num' },
+  ] },
+  item: { image: false, fields: [
+    { key: 'name', label: '名前', type: 'text' }, { key: 'healAmount', label: 'HP回復', type: 'num' }, { key: 'staminaPercent', label: 'スタミナ回復%', type: 'num' },
+    { key: 'cost', label: 'コイン枚数(羽)', type: 'num' }, { key: 'desc', label: '説明(羽)', type: 'text' },
+  ] },
+  spell: { image: false, fields: [
+    { key: 'name', label: '名前', type: 'text' }, { key: 'effect', label: '効果', type: 'area' },
+  ] },
+}
 
 const PROD_URL = import.meta.env.VITE_SUPABASE_URL as string
 const PROD_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -11,7 +47,8 @@ const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news'
+type Tab = 'maintenance' | 'message' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database'
+type DbTab = 'monster' | 'equip' | 'item' | 'spell'
 
 interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
 
@@ -526,6 +563,126 @@ export function AdminPanel() {
     })
   }
 
+  // ── データベース（参照＋編集）──
+  const [dbTab, setDbTab] = useState<DbTab>('monster')
+  const [dbRows, setDbRows] = useState<Record<string, unknown>[]>([])   // 上書き行（下書き含む）
+  const [dbEditing, setDbEditing] = useState<{ category: OverrideCategory; ref: string; defaults: Record<string, unknown> } | null>(null)
+  const [dbForm, setDbForm] = useState<Record<string, string>>({})
+  const [dbImage, setDbImage] = useState<string | null>(null)
+  const [dbMsg, setDbMsg] = useState('')
+  const [dbBusy, setDbBusy] = useState(false)
+
+  const loadDbRows = useCallback(async () => {
+    if (!ADMIN_KEY) return
+    try {
+      const res = await fetch('/api/admin-data', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: ADMIN_KEY, action: 'list' }),
+      })
+      if (res.ok) { const j = await res.json(); setDbRows((j.rows ?? []) as Record<string, unknown>[]) }
+    } catch { /* ローカル等でAPI不在 → 空のまま */ }
+  }, [])
+
+  const dbRowOf = (category: string, ref: string) =>
+    dbRows.find(r => r.category === category && r.ref === ref)
+
+  const dbStatusOf = (category: string, ref: string): '' | 'draft' | 'pub' => {
+    const r = dbRowOf(category, ref)
+    if (!r) return ''
+    return r.is_published ? 'pub' : 'draft'
+  }
+
+  const openDbEditor = (category: OverrideCategory, defaults: Record<string, unknown>) => {
+    const ref = String(defaults.name)
+    const row = dbRowOf(category, ref)
+    const draft = (row?.draft_patch ?? {}) as Record<string, unknown>
+    const form: Record<string, string> = {}
+    for (const f of DB_SCHEMA[category].fields) {
+      const v = draft[f.key] ?? defaults[f.key]
+      form[f.key] = v === undefined || v === null ? '' : String(v)
+    }
+    setDbForm(form)
+    setDbImage((row?.draft_image as string) ?? null)
+    setDbEditing({ category, ref, defaults })
+    setDbMsg('')
+  }
+
+  const dbApi = async (body: Record<string, unknown>): Promise<boolean> => {
+    if (!ADMIN_KEY) { setDbMsg('VITE_ADMIN_KEY 未設定'); return false }
+    setDbBusy(true)
+    try {
+      const res = await fetch('/api/admin-data', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: ADMIN_KEY, ...body }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setDbMsg(`エラー: ${j.error ?? res.status}`); return false }
+      return true
+    } catch (e) { setDbMsg(`エラー: ${String(e)}`); return false }
+    finally { setDbBusy(false) }
+  }
+
+  // フォーム → patch（デフォルトと異なるフィールドだけ）
+  const buildPatch = (): Record<string, unknown> => {
+    if (!dbEditing) return {}
+    const patch: Record<string, unknown> = {}
+    for (const f of DB_SCHEMA[dbEditing.category].fields) {
+      const raw = (dbForm[f.key] ?? '').trim()
+      if (raw === '') continue
+      const val: unknown = f.type === 'num' ? Number(raw) : raw
+      if (f.type === 'num' && Number.isNaN(val as number)) continue
+      const def = dbEditing.defaults[f.key]
+      if (String(def) === String(val)) continue   // デフォルトと同じなら上書き不要
+      patch[f.key] = val
+    }
+    return patch
+  }
+
+  const saveDb = async () => {
+    if (!dbEditing) return
+    const ok = await dbApi({ action: 'save', category: dbEditing.category, ref: dbEditing.ref, patch: buildPatch(), image: dbImage })
+    if (ok) { setDbMsg('下書き保存しました（公開でライブ反映）'); await loadDbRows() }
+  }
+  const publishDb = async () => {
+    if (!dbEditing) return
+    const ok = await dbApi({ action: 'save', category: dbEditing.category, ref: dbEditing.ref, patch: buildPatch(), image: dbImage })
+      && await dbApi({ action: 'publish', category: dbEditing.category, ref: dbEditing.ref })
+    if (ok) { setDbMsg('公開しました（全プレイヤーの次回読み込みから反映）'); await loadDbRows() }
+  }
+  const unpublishDb = async () => {
+    if (!dbEditing) return
+    if (await dbApi({ action: 'unpublish', category: dbEditing.category, ref: dbEditing.ref })) { setDbMsg('公開を停止しました（デフォルトに戻る）'); await loadDbRows() }
+  }
+  const deleteDb = async () => {
+    if (!dbEditing) return
+    if (!confirm('この上書きを削除してデフォルトに戻しますか？')) return
+    if (await dbApi({ action: 'delete', category: dbEditing.category, ref: dbEditing.ref })) { setDbMsg('削除しました'); setDbEditing(null); await loadDbRows() }
+  }
+
+  const dbStatusCell = (cat: OverrideCategory, ref: string) => {
+    const s = dbStatusOf(cat, ref)
+    return <td style={S.td}>{s === 'pub' ? <span style={S.dbPub}>公開</span> : s === 'draft' ? <span style={S.dbDraft}>下書</span> : <span style={{ color: '#444' }}>−</span>}</td>
+  }
+  const dbRowStyle = (cat: OverrideCategory, ref: string): React.CSSProperties => ({
+    cursor: 'pointer',
+    background: dbEditing?.category === cat && dbEditing?.ref === ref ? 'rgba(79,70,229,0.12)' : 'transparent',
+  })
+
+  const uploadDbImage = async (file?: File) => {
+    if (!file || !dbEditing) return
+    if (file.size > 5 * 1024 * 1024) { setDbMsg('画像は5MB以下にしてください'); return }
+    setDbBusy(true)
+    try {
+      const ext = file.name.split('.').pop() ?? 'png'
+      const path = `${dbEditing.category}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+      const { data: up, error } = await db.storage.from('entity-images').upload(path, file, { contentType: file.type })
+      if (error || !up) { setDbMsg(`画像アップロード失敗: ${error?.message ?? '不明'}`); return }
+      const { data: pub } = db.storage.from('entity-images').getPublicUrl(up.path)
+      setDbImage(pub.publicUrl)
+      setDbMsg('画像をアップロードしました（保存/公開で反映）')
+    } finally { setDbBusy(false) }
+  }
+
   // ── お知らせ（NEWS）──
   const [news, setNews]             = useState<Announcement[]>([])
   const [newsLoading, setNewsLoading] = useState(false)
@@ -613,7 +770,8 @@ export function AdminPanel() {
     if (tab === 'stats')       loadStats()
     if (tab === 'event')       loadOnlinePlayers()
     if (tab === 'news')        loadNews()
-  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews])
+    if (tab === 'database')    loadDbRows()
+  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews, loadDbRows])
 
   const now = Date.now()
   const isOpen = windows.some(w => winActive(w, now))
@@ -634,7 +792,7 @@ export function AdminPanel() {
   const TAB_LABELS: Record<Tab, string> = {
     maintenance: 'メンテナンス', message: 'メッセージ配信', event: 'イベント',
     ranking: 'ランキング', worldlog: 'ワールドログ',
-    users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ',
+    users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ', database: 'データベース',
   }
 
   const REP_STATUS_COLOR: Record<string, string> = {
@@ -1414,6 +1572,189 @@ export function AdminPanel() {
           </div>
         )}
 
+        {/* ══ データベース（参照専用・ゲームデータを直接参照）══ */}
+        {tab === 'database' && (
+          <div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+              {([['monster', `モンスター (${NORMAL_MONSTERS.length + MINI_BOSSES.length + MVP_BOSSES.length + AREA_BOSSES.length})`],
+                 ['equip', `装備 (${EQUIPMENT.length})`],
+                 ['item', `アイテム (${HEAL_ITEMS.length + Object.keys(WING_ITEMS).length + 1})`],
+                 ['spell', `魔法の書 (${SPELLS.length})`]] as [DbTab, string][]).map(([key, label]) => (
+                <button key={key} onClick={() => { setDbTab(key); setDbEditing(null) }}
+                  style={{ ...S.btnSm, background: dbTab === key ? 'rgba(79,70,229,0.35)' : 'transparent', border: `1px solid ${dbTab === key ? '#6366f1' : '#2a2a4a'}`, color: dbTab === key ? '#a5b4fc' : '#888' }}>
+                  {label}
+                </button>
+              ))}
+              <button onClick={loadDbRows} style={S.btnSm}>再読込</button>
+            </div>
+            <p style={S.muted}>行をクリックすると編集できます。<b>保存</b>=下書き / <b>公開</b>=全プレイヤーの次回読み込みから反映。画像はモンスターのみ（自動透過＋主人公サイズ調整）。</p>
+
+            {/* 編集パネル */}
+            {dbEditing && (
+              <div style={{ ...S.card, margin: '12px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontWeight: 700 }}>
+                    編集：{dbEditing.ref}
+                    <span style={{ marginLeft: 8, fontSize: 11, color: '#888' }}>({dbEditing.category})</span>
+                    {dbStatusOf(dbEditing.category, dbEditing.ref) === 'pub' && <span style={{ ...S.dbPub, marginLeft: 8 }}>公開中</span>}
+                    {dbStatusOf(dbEditing.category, dbEditing.ref) === 'draft' && <span style={{ ...S.dbDraft, marginLeft: 8 }}>下書きあり</span>}
+                  </span>
+                  <button onClick={() => setDbEditing(null)} style={S.btnSm}>閉じる</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+                  {DB_SCHEMA[dbEditing.category].fields.map(f => (
+                    <div key={f.key}>
+                      <label style={S.label}>{f.label}</label>
+                      {f.type === 'area'
+                        ? <textarea value={dbForm[f.key] ?? ''} onChange={e => setDbForm(s => ({ ...s, [f.key]: e.target.value }))} rows={2} style={{ ...S.input, resize: 'vertical' }} />
+                        : <input type={f.type === 'num' ? 'number' : 'text'} value={dbForm[f.key] ?? ''} onChange={e => setDbForm(s => ({ ...s, [f.key]: e.target.value }))} style={S.input} />}
+                    </div>
+                  ))}
+                </div>
+                {DB_SCHEMA[dbEditing.category].image && (
+                  <div style={{ marginTop: 12 }}>
+                    <label style={S.label}>画像（アップロード→保存/公開で反映。自動透過＋可視部分を主人公サイズに調整）</label>
+                    <input type="file" accept="image/*" disabled={dbBusy} onChange={e => uploadDbImage(e.target.files?.[0])} style={{ fontSize: 13, color: '#aaa', display: 'block' }} />
+                    {dbImage && <div style={{ marginTop: 8 }}><img src={dbImage} alt="" style={{ maxWidth: 120, maxHeight: 120, borderRadius: 6, border: '1px solid #2a2a4a', background: '#222' }} /></div>}
+                  </div>
+                )}
+                {dbMsg && <div style={{ marginTop: 10, color: /エラー|失敗/.test(dbMsg) ? '#f87171' : '#4ade80', fontSize: 13 }}>{dbMsg}</div>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                  <button onClick={saveDb} disabled={dbBusy} style={S.btnSm}>下書き保存</button>
+                  <button onClick={publishDb} disabled={dbBusy} style={S.btnPrimary}>公開（ライブ反映）</button>
+                  <button onClick={unpublishDb} disabled={dbBusy} style={S.btnSm}>公開停止</button>
+                  <button onClick={deleteDb} disabled={dbBusy} style={S.btnDanger}>削除（デフォルトに戻す）</button>
+                </div>
+              </div>
+            )}
+
+            {dbTab === 'monster' && (
+              <>
+                <div style={S.dbHead}>通常モンスター（レアリティ：通常）</div>
+                <table style={S.table}>
+                  <thead><tr>
+                    <th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>出現F</th><th style={S.th}>HP</th><th style={S.th}>ATK</th><th style={S.th}>DEF</th>
+                    <th style={S.th}>STR</th><th style={S.th}>VIT</th><th style={S.th}>AGI</th><th style={S.th}>LUK</th>
+                  </tr></thead>
+                  <tbody>
+                    {NORMAL_MONSTERS.map(m => (
+                      <tr key={m.name} onClick={() => openDbEditor('monster_normal', m)} style={dbRowStyle('monster_normal', m.name)}>
+                        {dbStatusCell('monster_normal', m.name)}
+                        <td style={S.td}>{m.name}</td>
+                        <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{m.minFloor}〜{m.maxFloor}</td>
+                        <td style={S.td}>{m.hpBase}</td><td style={S.td}>{m.atkBase}</td><td style={S.td}>{m.defBase}</td>
+                        <td style={S.td}>{m.str}</td><td style={S.td}>{m.vit}</td><td style={S.td}>{m.agi}</td><td style={S.td}>{m.luk}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={S.muted}>※ HP/ATK/DEF はベース値。実際は出現フロアに応じてスケールします。</p>
+
+                <div style={S.dbHead}>MINIボス</div>
+                <table style={S.table}>
+                  <thead><tr><th style={S.th}>状態</th><th style={S.th}>出現F</th><th style={S.th}>名前</th><th style={S.th}>HP倍率</th><th style={S.th}>ATK倍率</th><th style={S.th}>DEF倍率</th></tr></thead>
+                  <tbody>
+                    {MINI_BOSSES.map(b => (
+                      <tr key={`mini-${b.floor}-${b.name}`} onClick={() => openDbEditor('monster_mini', b)} style={dbRowStyle('monster_mini', b.name)}>
+                        {dbStatusCell('monster_mini', b.name)}<td style={S.td}>B{b.floor}</td><td style={S.td}>{b.name}</td><td style={S.td}>×{b.hpMult}</td><td style={S.td}>×{b.atkMult}</td><td style={S.td}>×{b.defMult}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div style={S.dbHead}>MVPボス</div>
+                <table style={S.table}>
+                  <thead><tr><th style={S.th}>状態</th><th style={S.th}>出現F</th><th style={S.th}>名前</th><th style={S.th}>HP倍率</th><th style={S.th}>ATK倍率</th><th style={S.th}>DEF倍率</th></tr></thead>
+                  <tbody>
+                    {MVP_BOSSES.map(b => (
+                      <tr key={`mvp-${b.floor}-${b.name}`} onClick={() => openDbEditor('monster_mvp', b)} style={dbRowStyle('monster_mvp', b.name)}>
+                        {dbStatusCell('monster_mvp', b.name)}<td style={S.td}>B{b.floor}</td><td style={S.td}>{b.name}</td><td style={S.td}>×{b.hpMult}</td><td style={S.td}>×{b.atkMult}</td><td style={S.td}>×{b.defMult}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div style={S.dbHead}>エリアボス</div>
+                <table style={S.table}>
+                  <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>出現F</th></tr></thead>
+                  <tbody>
+                    {AREA_BOSSES.map(b => (
+                      <tr key={`area-${b.name}`} onClick={() => openDbEditor('monster_area', b)} style={dbRowStyle('monster_area', b.name)}>
+                        {dbStatusCell('monster_area', b.name)}<td style={S.td}>{b.name}</td><td style={S.td}>B{b.minFloor}〜B{b.maxFloor}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={S.muted}>※ ボスは通常モンスター基準値に倍率を掛けて生成されます。</p>
+              </>
+            )}
+
+            {dbTab === 'equip' && (
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>状態</th><th style={S.th}>スロット</th><th style={S.th}>名前</th><th style={S.th}>最低F</th>
+                  {EQUIP_BONUS_LABELS.map(b => <th key={b.key} style={S.th}>{b.label}</th>)}
+                </tr></thead>
+                <tbody>
+                  {EQUIPMENT.map(e => (
+                    <tr key={e.name} onClick={() => openDbEditor('equip', e)} style={dbRowStyle('equip', e.name)}>
+                      {dbStatusCell('equip', e.name)}
+                      <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{EQUIP_SLOT_LABELS[e.equipSlot] ?? e.equipSlot}</td>
+                      <td style={S.td}>{e.name}</td>
+                      <td style={S.td}>{e.minFloor ?? 1}</td>
+                      {EQUIP_BONUS_LABELS.map(b => {
+                        const v = e[b.key]
+                        return <td key={b.key} style={{ ...S.td, color: v ? '#4ade80' : '#444' }}>{v ? `+${v}` : '−'}</td>
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {dbTab === 'item' && (
+              <>
+                <div style={S.dbHead}>ポーション類</div>
+                <table style={S.table}>
+                  <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>HP回復</th><th style={S.th}>スタミナ回復</th></tr></thead>
+                  <tbody>
+                    {HEAL_ITEMS.map(h => (
+                      <tr key={h.name} onClick={() => openDbEditor('item', h)} style={dbRowStyle('item', h.name)}>
+                        {dbStatusCell('item', h.name)}<td style={S.td}>{h.name}</td><td style={S.td}>{h.healAmount ? `+${h.healAmount}` : '−'}</td><td style={S.td}>{h.staminaPercent ? `+${h.staminaPercent}%` : '−'}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={S.dbHead}>羽（行商人）</div>
+                <table style={S.table}>
+                  <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>コイン枚数</th><th style={S.th}>説明</th></tr></thead>
+                  <tbody>
+                    {Object.values(WING_ITEMS).map(w => (
+                      <tr key={w.name} onClick={() => openDbEditor('item', w)} style={dbRowStyle('item', w.name)}>
+                        {dbStatusCell('item', w.name)}<td style={S.td}>{w.name}</td><td style={S.td}>🪙{w.cost}</td><td style={S.td}>{w.desc}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={S.dbHead}>特殊</div>
+                <table style={S.table}>
+                  <thead><tr><th style={S.th}>名前</th><th style={S.th}>効果</th></tr></thead>
+                  <tbody>
+                    <tr><td style={S.td}>女神のコイン</td><td style={S.td}>使うとスロットを1回まわせる（編集対象外）</td></tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {dbTab === 'spell' && (
+              <table style={S.table}>
+                <thead><tr><th style={S.th}>状態</th><th style={S.th}>名前</th><th style={S.th}>効果</th></tr></thead>
+                <tbody>
+                  {SPELLS.map(s => (
+                    <tr key={s.name} onClick={() => openDbEditor('spell', s)} style={dbRowStyle('spell', s.name)}>
+                      {dbStatusCell('spell', s.name)}<td style={{ ...S.td, whiteSpace: 'nowrap' }}>{s.name}</td><td style={S.td}>{s.effect}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   )
@@ -1439,6 +1780,9 @@ const S: Record<string, React.CSSProperties> = {
   th:          { padding: '7px 10px', textAlign: 'left', color: '#8888cc', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', borderBottom: '1px solid #1e1e38' },
   td:          { padding: '6px 10px', borderBottom: '1px solid #12122a', fontSize: 13 },
   muted:       { color: '#666', fontSize: 13 },
+  dbHead:      { marginTop: 22, marginBottom: 2, color: '#a5b4fc', fontWeight: 700, fontSize: 14, borderLeft: '3px solid #6366f1', paddingLeft: 8 },
+  dbPub:       { padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700, background: 'rgba(20,83,45,0.5)', color: '#4ade80', border: '1px solid #22c55e' },
+  dbDraft:     { padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700, background: 'rgba(120,80,20,0.4)', color: '#fbbf24', border: '1px solid #a16207' },
   btnPrimary:  { padding: '7px 18px', background: '#4f46e5', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, flexShrink: 0 },
   btnGreen:    { padding: '6px 13px', background: 'rgba(20,83,45,0.6)', border: '1px solid #22c55e', borderRadius: 6, color: '#4ade80', cursor: 'pointer', fontWeight: 700, fontSize: 12 },
   btnRed:      { padding: '6px 13px', background: 'rgba(127,29,29,0.6)', border: '1px solid #ef4444', borderRadius: 6, color: '#f87171', cursor: 'pointer', fontWeight: 700, fontSize: 12 },

@@ -146,7 +146,7 @@ export function getPlayerStartPosition(map: TileType[][]): Position {
 }
 
 // 通常モンスターの基礎ステータス（旧テーブルの2倍値。フロアが上がるほど spawnEnemies 内の scale でさらに底上げされる）
-const ENEMY_TABLE = [
+export const ENEMY_TABLE = [
   //                                                                          str  vit  agi  luk
   { name: 'ぽり男',              minFloor: 1,  maxFloor: 99, hpBase: 12, atkBase: 4,  defBase: 0,  str:  4, vit:  0, agi: 10, luk:  4 },
   { name: 'ルナティック',        minFloor: 1,  maxFloor: 5,  hpBase: 10, atkBase: 6,  defBase: 0,  str:  2, vit:  0, agi: 20, luk:  6 },
@@ -169,7 +169,7 @@ const ENEMY_TABLE = [
   { name: '深淵の騎士',          minFloor: 45, maxFloor: 99, hpBase: 100, atkBase: 50, defBase: 20, str: 60, vit: 40, agi: 30, luk: 16 },
 ]
 
-const MINI_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkMult: number; defMult: number }> = {
+export const MINI_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkMult: number; defMult: number }> = {
   5:  { name: 'エクリプス',       hpMult: 1.8, atkMult: 1.2, defMult: 0.9 },
   10: { name: 'エンジェリング',   hpMult: 1.8, atkMult: 1.2, defMult: 0.9 },
   15: { name: 'デビルリング',     hpMult: 2.4, atkMult: 1.5, defMult: 1.2 },
@@ -185,7 +185,7 @@ const MINI_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkMult: n
   65: { name: 'ドラゴンフライ',   hpMult: 5.4, atkMult: 3.0, defMult: 2.1 },
 }
 
-const MVP_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkMult: number; defMult: number }> = {
+export const MVP_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkMult: number; defMult: number }> = {
   10: { name: 'フリオニ',       hpMult: 3.0, atkMult: 1.8, defMult: 1.2 },
   20: { name: 'オークヒーロー', hpMult: 3.6, atkMult: 2.1, defMult: 1.5 },
   30: { name: 'オークロード',   hpMult: 4.2, atkMult: 2.4, defMult: 1.8 },
@@ -195,7 +195,7 @@ const MVP_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkMult: nu
   70: { name: 'モロク',         hpMult: 7.2, atkMult: 3.6, defMult: 2.7 },
 }
 
-const AREA_BOSS_TABLE = [
+export const AREA_BOSS_TABLE = [
   { name: '黄金蟲',           minFloor: 1,  maxFloor: 10  },
   { name: 'ドレイク',         minFloor: 11, maxFloor: 20  },
   { name: 'オシリス',         minFloor: 21, maxFloor: 30  },

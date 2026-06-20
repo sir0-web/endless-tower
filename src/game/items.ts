@@ -1,11 +1,11 @@
 import type { Item, TileType, EquipSlot, SpellType } from '../types'
 
-export const SPELL_ITEMS: { name: string; spellType: SpellType }[] = [
-  { name: 'ファイアボルトの書',     spellType: 'firebolt'      },
-  { name: 'ブレッシングの書',       spellType: 'blessing'      },
-  { name: 'ライトブレッシングの書', spellType: 'lightblessing' },
-  { name: 'クァグマイアの書',       spellType: 'quagmire'      },
-  { name: 'メテオストームの書',     spellType: 'meteostorm'    },
+export const SPELL_ITEMS: { name: string; spellType: SpellType; effect: string }[] = [
+  { name: 'ファイアボルトの書',     spellType: 'firebolt',      effect: '最寄りの敵1体に INT×3＋10 のダメージ' },
+  { name: 'ブレッシングの書',       spellType: 'blessing',      effect: 'STR・INT・DEX・AGI を10ターン +5' },
+  { name: 'ライトブレッシングの書', spellType: 'lightblessing', effect: '10ターンの間HPが継続回復' },
+  { name: 'クァグマイアの書',       spellType: 'quagmire',      effect: '全ての敵を3ターン鈍足にする' },
+  { name: 'メテオストームの書',     spellType: 'meteostorm',    effect: '全ての敵に INT×2＋5 のダメージ' },
 ]
 
 export const HEAL_ITEMS = [

@@ -20,6 +20,7 @@ import { ArcanaRoulette } from './components/ArcanaRoulette'
 import { ReportModal } from './components/ReportModal'
 import { NewsModal } from './components/NewsModal'
 import { SkulporinReward } from './components/SkulporinReward'
+import { applyOverrides } from './game/overrides'
 import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
@@ -66,36 +67,44 @@ function App() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Phaser 初期化
+  // Phaser 初期化（ADMIN編集の上書きを反映してから起動する）
   useEffect(() => {
-    const mobile = isMobileViewport()
-    const config: Phaser.Types.Core.GameConfig = {
-      type: Phaser.AUTO,
-      parent: canvasAreaRef.current!,
-      backgroundColor: '#000000',
-      scene: [TitleScene, GameScene, GameOverScene, RankingScene],
-      scale: {
-        // PC: 外側ラッパーの transform:scale が全体を拡縮するため、Phaserは等倍(NONE)の
-        //     固定サイズで描画する。FITだと transform後に縮んだ親サイズを測って二重スケールし、
-        //     大画面でマップだけ肥大化してEventMsgBarと被り、ブラウザズームで反転する不具合になる。
-        // スマホ: transformを掛けないので、実DOMサイズへ合わせるFITが正しい。
-        mode: mobile ? Phaser.Scale.FIT : Phaser.Scale.NONE,
-        autoCenter: mobile ? Phaser.Scale.CENTER_BOTH : Phaser.Scale.CENTER_HORIZONTALLY,
-        zoom: mobile ? 1 : PC_GAME_ZOOM,   // PCは縮小して上寄せ（下部にEMBの余白を確保）
-        width: GAME_W,
-        height: GAME_H,
-      },
-    }
-    gameRef.current = new Phaser.Game(config)
+    let cancelled = false
+    let obs: ResizeObserver | null = null
+    void (async () => {
+      // データベース編集の公開分をハードコード表へマージ（失敗してもデフォルトで続行）
+      await applyOverrides()
+      if (cancelled) return
 
-    // 初期レイアウト確定後にスケールを再計算し、コンテナとのズレ（隙間）を解消する
-    requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
+      const mobile = isMobileViewport()
+      const config: Phaser.Types.Core.GameConfig = {
+        type: Phaser.AUTO,
+        parent: canvasAreaRef.current!,
+        backgroundColor: '#000000',
+        scene: [TitleScene, GameScene, GameOverScene, RankingScene],
+        scale: {
+          // PC: 外側ラッパーの transform:scale が全体を拡縮するため、Phaserは等倍(NONE)の
+          //     固定サイズで描画する。FITだと transform後に縮んだ親サイズを測って二重スケールし、
+          //     大画面でマップだけ肥大化してEventMsgBarと被り、ブラウザズームで反転する不具合になる。
+          // スマホ: transformを掛けないので、実DOMサイズへ合わせるFITが正しい。
+          mode: mobile ? Phaser.Scale.FIT : Phaser.Scale.NONE,
+          autoCenter: mobile ? Phaser.Scale.CENTER_BOTH : Phaser.Scale.CENTER_HORIZONTALLY,
+          zoom: mobile ? 1 : PC_GAME_ZOOM,   // PCは縮小して上寄せ（下部にEMBの余白を確保）
+          width: GAME_W,
+          height: GAME_H,
+        },
+      }
+      gameRef.current = new Phaser.Game(config)
 
-    // game-canvas-area のサイズが変わったとき（ステータスバー出現/消滅など）スケールを再計算
-    const obs = new ResizeObserver(() => { gameRef.current?.scale.refresh() })
-    if (canvasAreaRef.current) obs.observe(canvasAreaRef.current)
+      // 初期レイアウト確定後にスケールを再計算し、コンテナとのズレ（隙間）を解消する
+      requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
 
-    return () => { obs.disconnect(); gameRef.current?.destroy(true); gameRef.current = null }
+      // game-canvas-area のサイズが変わったとき（ステータスバー出現/消滅など）スケールを再計算
+      obs = new ResizeObserver(() => { gameRef.current?.scale.refresh() })
+      if (canvasAreaRef.current) obs.observe(canvasAreaRef.current)
+    })()
+
+    return () => { cancelled = true; obs?.disconnect(); gameRef.current?.destroy(true); gameRef.current = null }
   }, [])
 
   // appScale 変更後（React re-render → CSS transform 適用後）に Phaser の入力座標を再同期する。
