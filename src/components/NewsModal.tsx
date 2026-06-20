@@ -113,7 +113,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   rowDate: { fontSize: 12, color: '#9a7b3d', flexShrink: 0, minWidth: 78, fontVariantNumeric: 'tabular-nums' },
   rowTitle: { fontSize: 15, flex: 1, fontWeight: 600 },
-  newTag: { fontSize: 10, fontWeight: 700, color: '#fff', background: '#c0392b', borderRadius: 4, padding: '2px 6px', flexShrink: 0 },
+  newTag: { fontSize: 13, fontWeight: 800, color: '#fff', background: '#e23b2e', borderRadius: 5, padding: '3px 10px', flexShrink: 0, letterSpacing: 0.5, boxShadow: '0 1px 3px rgba(0,0,0,0.4)' },
 
   detailDate: { fontSize: 12, color: '#9a7b3d', marginBottom: 4 },
   detailTitle: { fontSize: 20, fontWeight: 700, color: '#5a3d12', margin: '0 0 10px' },

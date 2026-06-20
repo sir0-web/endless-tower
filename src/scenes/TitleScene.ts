@@ -173,13 +173,19 @@ export class TitleScene extends Phaser.Scene {
     const small = W < 500
     const bw = small ? 268 : 332
     const bh = small ? 54 : 66
-    const tag = this.add.text(bw / 2 - 26, -bh / 2 + 4, 'NEW', {
-      fontFamily: PIXEL_FONT, fontSize: `${small ? 9 : 11}px`, color: '#ffffff',
-      backgroundColor: '#c0392b', padding: { x: 5, y: 3 },
+    // 右上の角に大きめのバッジを配置（視認性重視）
+    const tag = this.add.text(bw / 2 - (small ? 14 : 18), -bh / 2 + (small ? 0 : 2), 'NEW', {
+      fontFamily: PIXEL_FONT, fontSize: `${small ? 13 : 16}px`, color: '#ffffff',
+      backgroundColor: '#e23b2e', padding: { x: 9, y: 6 },
     }).setOrigin(0.5).setVisible(false)
-    tag.setShadow(1, 1, '#000000', 2, true, true)
+    tag.setStroke('#5a0e08', 4)
+    tag.setShadow(2, 2, '#000000', 4, true, true)
     btn.add(tag)
-    void hasNewAnnouncement().then(n => tag.setVisible(n)).catch(() => {})
+    void hasNewAnnouncement().then(n => {
+      tag.setVisible(n)
+      // 目立たせるため軽く脈動
+      if (n) this.tweens.add({ targets: tag, scale: 1.18, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+    }).catch(() => {})
   }
 
   private closeOverlay() { this.overlay?.destroy(); this.overlay = null }
