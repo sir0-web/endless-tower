@@ -146,27 +146,72 @@ export function getPlayerStartPosition(map: TileType[][]): Position {
 }
 
 // 通常モンスターの基礎ステータス（旧テーブルの2倍値。フロアが上がるほど spawnEnemies 内の scale でさらに底上げされる）
+// 通常モンスター表。出現フロアは帯（band）ごとに重ね、各フロアで複数種が出るようにしてある。
+// ステータスは実フロアに応じて scale 倍される（spawnEnemies 参照）。戦闘で効くのは
+//   hpBase（耐久）/ defBase（被ダメ軽減）/ atkBase + str*0.5（与ダメ）/ luk（会心率）
+// の4系統。agi・vit は現状の戦闘式では未使用＝表示用の飾り。
+// バランス目標：強運（高LUK）でやり込んだプレイヤーが「ぎりぎり100階を超える」あたりが壁になるよう、
+// 帯が深くなるほど base が滑らかに増える曲線で設計（深部ほど同一フロアでも敵プールが強くなる）。
 export const ENEMY_TABLE = [
-  //                                                                          str  vit  agi  luk
-  { name: 'ぽり男',              minFloor: 1,  maxFloor: 99, hpBase: 12, atkBase: 4,  defBase: 0,  str:  4, vit:  0, agi: 10, luk:  4 },
-  { name: 'ルナティック',        minFloor: 1,  maxFloor: 5,  hpBase: 10, atkBase: 6,  defBase: 0,  str:  2, vit:  0, agi: 20, luk:  6 },
-  { name: 'ビタタ',              minFloor: 1,  maxFloor: 6,  hpBase: 14, atkBase: 4,  defBase: 0,  str:  4, vit:  0, agi: 16, luk:  4 },
-  { name: 'ウィスパー',          minFloor: 3,  maxFloor: 10, hpBase: 20, atkBase: 8,  defBase: 2,  str: 10, vit:  6, agi: 16, luk:  2 },
-  { name: 'スモーキー',          minFloor: 4,  maxFloor: 12, hpBase: 16, atkBase: 10, defBase: 2,  str:  8, vit:  2, agi: 16, luk:  6 },
-  { name: '白蓮玉',              minFloor: 5,  maxFloor: 15, hpBase: 18, atkBase: 12, defBase: 2,  str:  6, vit:  2, agi: 24, luk:  8 },
-  { name: 'ソルジャースケルトン', minFloor: 6,  maxFloor: 15, hpBase: 28, atkBase: 10, defBase: 4,  str: 12, vit:  8, agi:  6, luk:  2 },
-  { name: 'ムナック',            minFloor: 7,  maxFloor: 16, hpBase: 24, atkBase: 12, defBase: 4,  str: 10, vit: 10, agi:  8, luk:  4 },
-  { name: 'デビルチ',            minFloor: 8,  maxFloor: 18, hpBase: 32, atkBase: 12, defBase: 6,  str: 14, vit:  8, agi: 10, luk:  4 },
-  { name: 'ゴーレム',            minFloor: 10, maxFloor: 22, hpBase: 36, atkBase: 16, defBase: 6,  str: 16, vit:  6, agi: 20, luk: 10 },
-  { name: 'マミー',              minFloor: 12, maxFloor: 25, hpBase: 32, atkBase: 20, defBase: 4,  str: 20, vit:  4, agi: 30, luk: 12 },
-  { name: 'アラーム',            minFloor: 15, maxFloor: 30, hpBase: 48, atkBase: 18, defBase: 10, str: 24, vit: 20, agi: 10, luk:  4 },
-  { name: 'フェンダーク',        minFloor: 15, maxFloor: 35, hpBase: 40, atkBase: 20, defBase: 8,  str: 20, vit: 12, agi: 10, luk:  6 },
-  { name: 'ミノタウロス',        minFloor: 18, maxFloor: 40, hpBase: 36, atkBase: 26, defBase: 6,  str: 28, vit:  6, agi: 20, luk:  8 },
-  { name: 'オットー',            minFloor: 22, maxFloor: 99, hpBase: 56, atkBase: 28, defBase: 10, str: 32, vit: 12, agi: 12, luk: 10 },
-  { name: 'チンピラ',            minFloor: 25, maxFloor: 99, hpBase: 60, atkBase: 32, defBase: 12, str: 36, vit: 10, agi: 28, luk: 14 },
-  { name: '半魚人',              minFloor: 30, maxFloor: 99, hpBase: 70, atkBase: 36, defBase: 14, str: 44, vit: 16, agi: 20, luk: 16 },
-  { name: 'ナイトメア',          minFloor: 35, maxFloor: 99, hpBase: 80, atkBase: 40, defBase: 16, str: 50, vit: 30, agi: 24, luk: 12 },
-  { name: '深淵の騎士',          minFloor: 45, maxFloor: 99, hpBase: 100, atkBase: 50, defBase: 20, str: 60, vit: 40, agi: 30, luk: 16 },
+  //                                                                              str  vit  agi  luk
+  // ── 1〜30：序盤（最弱フィラーのぽり男は全域に薄く出続ける）──
+  { name: 'ぽり男',              minFloor: 1,   maxFloor: 500, hpBase: 12,  atkBase: 4,  defBase: 0,  str:  4, vit:  0, agi: 10, luk:  4 },
+  { name: 'ルナティック',        minFloor: 1,   maxFloor: 30,  hpBase: 10,  atkBase: 6,  defBase: 0,  str:  2, vit:  0, agi: 20, luk:  6 },
+  { name: 'ビタタ',              minFloor: 1,   maxFloor: 30,  hpBase: 14,  atkBase: 4,  defBase: 0,  str:  4, vit:  0, agi: 16, luk:  4 },
+  { name: 'クリーミー',          minFloor: 1,   maxFloor: 30,  hpBase: 16,  atkBase: 6,  defBase: 0,  str:  5, vit:  2, agi: 12, luk:  5 },
+  // ── 10〜40 ──
+  { name: 'ウィスパー',          minFloor: 10,  maxFloor: 40,  hpBase: 20,  atkBase: 8,  defBase: 2,  str: 10, vit:  6, agi: 16, luk:  3 },
+  { name: 'スモーキー',          minFloor: 10,  maxFloor: 40,  hpBase: 18,  atkBase: 10, defBase: 2,  str:  8, vit:  4, agi: 16, luk:  6 },
+  { name: 'スポア',              minFloor: 10,  maxFloor: 40,  hpBase: 24,  atkBase: 8,  defBase: 3,  str:  8, vit:  8, agi:  8, luk:  4 },
+  { name: '白蓮玉',              minFloor: 10,  maxFloor: 40,  hpBase: 20,  atkBase: 12, defBase: 2,  str:  8, vit:  4, agi: 24, luk:  8 },
+  // ── 20〜50 ──
+  { name: 'ソルジャースケルトン', minFloor: 20,  maxFloor: 50,  hpBase: 32,  atkBase: 12, defBase: 5,  str: 16, vit: 10, agi:  6, luk:  3 },
+  { name: 'ヨーヨー',            minFloor: 20,  maxFloor: 50,  hpBase: 26,  atkBase: 13, defBase: 3,  str: 12, vit:  6, agi: 20, luk:  7 },
+  { name: 'ヒドラ',              minFloor: 20,  maxFloor: 50,  hpBase: 38,  atkBase: 11, defBase: 5,  str: 14, vit: 14, agi:  8, luk:  5 },
+  { name: 'ゾンビ',              minFloor: 20,  maxFloor: 50,  hpBase: 36,  atkBase: 10, defBase: 6,  str: 12, vit: 12, agi:  4, luk:  3 },
+  // ── 30〜60 ──
+  { name: 'ペコペコ',            minFloor: 30,  maxFloor: 60,  hpBase: 42,  atkBase: 16, defBase: 6,  str: 18, vit: 10, agi: 16, luk:  6 },
+  { name: 'ムナック',            minFloor: 30,  maxFloor: 60,  hpBase: 40,  atkBase: 17, defBase: 7,  str: 18, vit: 12, agi: 10, luk:  5 },
+  { name: 'ボンゴン',            minFloor: 30,  maxFloor: 60,  hpBase: 48,  atkBase: 15, defBase: 8,  str: 18, vit: 14, agi:  8, luk:  4 },
+  { name: 'フロッグ',            minFloor: 30,  maxFloor: 60,  hpBase: 36,  atkBase: 19, defBase: 5,  str: 20, vit:  8, agi: 20, luk:  8 },
+  // ── 40〜70 ──
+  { name: 'ボーカル',            minFloor: 40,  maxFloor: 70,  hpBase: 46,  atkBase: 21, defBase: 7,  str: 22, vit: 12, agi: 16, luk:  8 },
+  { name: 'フェン',              minFloor: 40,  maxFloor: 70,  hpBase: 42,  atkBase: 24, defBase: 6,  str: 26, vit: 10, agi: 22, luk:  9 },
+  { name: 'マリナ',              minFloor: 40,  maxFloor: 70,  hpBase: 50,  atkBase: 21, defBase: 8,  str: 22, vit: 14, agi: 14, luk:  7 },
+  { name: 'デビルチ',            minFloor: 40,  maxFloor: 70,  hpBase: 46,  atkBase: 23, defBase: 8,  str: 26, vit: 10, agi: 12, luk:  6 },
+  // ── 50〜80 ──
+  { name: 'ゴーレム',            minFloor: 50,  maxFloor: 80,  hpBase: 66,  atkBase: 25, defBase: 13, str: 30, vit: 20, agi: 10, luk:  6 },
+  { name: 'パイレーツスケルトン', minFloor: 50,  maxFloor: 80,  hpBase: 56,  atkBase: 27, defBase: 10, str: 30, vit: 12, agi: 14, luk:  8 },
+  { name: 'マンティス',          minFloor: 50,  maxFloor: 80,  hpBase: 50,  atkBase: 31, defBase: 8,  str: 34, vit: 10, agi: 24, luk: 10 },
+  { name: 'ガイアス',            minFloor: 50,  maxFloor: 80,  hpBase: 64,  atkBase: 26, defBase: 14, str: 30, vit: 20, agi: 10, luk:  7 },
+  // ── 60〜90 ──
+  { name: 'フローラ',            minFloor: 60,  maxFloor: 90,  hpBase: 68,  atkBase: 31, defBase: 11, str: 34, vit: 16, agi: 16, luk:  9 },
+  { name: 'アヌビス',            minFloor: 60,  maxFloor: 90,  hpBase: 66,  atkBase: 34, defBase: 12, str: 38, vit: 16, agi: 18, luk: 10 },
+  { name: 'サスカッチ',          minFloor: 60,  maxFloor: 90,  hpBase: 80,  atkBase: 30, defBase: 15, str: 36, vit: 24, agi: 12, luk:  7 },
+  { name: 'ハンマーコボルド',    minFloor: 60,  maxFloor: 90,  hpBase: 62,  atkBase: 37, defBase: 11, str: 42, vit: 14, agi: 16, luk:  9 },
+  { name: 'マミー',              minFloor: 60,  maxFloor: 90,  hpBase: 62,  atkBase: 35, defBase: 10, str: 38, vit: 10, agi: 30, luk: 14 },
+  // ── 70〜100 ──
+  { name: 'マリンスフィア',      minFloor: 70,  maxFloor: 100, hpBase: 82,  atkBase: 37, defBase: 13, str: 42, vit: 18, agi: 18, luk: 10 },
+  { name: 'ソフィー',            minFloor: 70,  maxFloor: 100, hpBase: 78,  atkBase: 39, defBase: 14, str: 44, vit: 18, agi: 20, luk: 11 },
+  { name: 'イシス',              minFloor: 70,  maxFloor: 100, hpBase: 86,  atkBase: 38, defBase: 15, str: 44, vit: 20, agi: 20, luk: 10 },
+  { name: 'マルデューク',        minFloor: 70,  maxFloor: 100, hpBase: 78,  atkBase: 43, defBase: 14, str: 50, vit: 18, agi: 20, luk: 11 },
+  // ── 80〜130 ──
+  { name: 'ジャック',            minFloor: 80,  maxFloor: 130, hpBase: 94,  atkBase: 45, defBase: 16, str: 50, vit: 24, agi: 22, luk: 12 },
+  { name: 'アラーム',            minFloor: 80,  maxFloor: 130, hpBase: 114, atkBase: 41, defBase: 21, str: 50, vit: 30, agi: 14, luk:  8 },
+  { name: 'フェンダーク',        minFloor: 80,  maxFloor: 130, hpBase: 98,  atkBase: 45, defBase: 17, str: 52, vit: 24, agi: 18, luk: 11 },
+  // ── 90〜140 ──
+  { name: 'ミノタウロス',        minFloor: 90,  maxFloor: 140, hpBase: 106, atkBase: 57, defBase: 18, str: 68, vit: 20, agi: 24, luk: 12 },
+  { name: 'ジルタス',            minFloor: 90,  maxFloor: 140, hpBase: 118, atkBase: 53, defBase: 20, str: 62, vit: 30, agi: 24, luk: 12 },
+  { name: 'クランプ',            minFloor: 90,  maxFloor: 140, hpBase: 138, atkBase: 49, defBase: 25, str: 60, vit: 42, agi: 18, luk: 10 },
+  // ── 100〜150 ──
+  { name: 'ジョーカー',          minFloor: 100, maxFloor: 150, hpBase: 138, atkBase: 63, defBase: 23, str: 72, vit: 30, agi: 28, luk: 14 },
+  { name: 'オットー',            minFloor: 100, maxFloor: 150, hpBase: 152, atkBase: 61, defBase: 25, str: 74, vit: 32, agi: 20, luk: 12 },
+  { name: 'ジェスター',          minFloor: 100, maxFloor: 150, hpBase: 130, atkBase: 67, defBase: 22, str: 80, vit: 28, agi: 30, luk: 15 },
+  // ── 110〜160 ──
+  { name: 'チンピラ',            minFloor: 110, maxFloor: 160, hpBase: 162, atkBase: 75, defBase: 28, str: 86, vit: 30, agi: 32, luk: 16 },
+  { name: '半魚人',              minFloor: 110, maxFloor: 160, hpBase: 172, atkBase: 73, defBase: 30, str: 88, vit: 40, agi: 24, luk: 16 },
+  { name: 'ナイトメア',          minFloor: 110, maxFloor: 160, hpBase: 178, atkBase: 79, defBase: 31, str: 90, vit: 44, agi: 28, luk: 14 },
+  { name: '深淵の騎士',          minFloor: 110, maxFloor: 160, hpBase: 204, atkBase: 85, defBase: 37, str: 98, vit: 56, agi: 30, luk: 16 },
 ]
 
 export const MINI_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkMult: number; defMult: number }> = {
@@ -218,7 +263,9 @@ export function generateAreaBossFloors(): Record<number, string> {
 }
 
 function makeBoss(name: string, floor: number, hpMult: number, atkMult: number, defMult: number, prefix: string) {
-  const scale = (1 + floor * 0.15) / (1 + floor * 0.015)
+  // 通常敵と同系の緩やかなスケールに変更（旧: 0.15/0.015 は中盤で飽和し、37階で即死級だった）。
+  // これで中盤のボスは「強いが対処可能な山場」になり、即死級の壁は深部(100階前後)へ寄る。
+  const scale = (1 + floor * 0.1) / (1 + floor * 0.02)
   const baseHp  = 30 + floor * 5
   const baseAtk = 10 + floor * 2
   const baseDef = 5  + floor

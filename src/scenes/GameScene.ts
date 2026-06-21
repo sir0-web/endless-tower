@@ -64,6 +64,10 @@ function floorMiasma(floor: number): { color: number; alpha: number } {
 
 // 敵名 → テクスチャキー のマッピング（/assets/enemy/<key>.png を想定）
 // 全ボスは画像なし → 色付きRectangleにフォールバック
+// 割合貫通率：攻防どちらの近接攻撃でも「攻撃力×この割合」は相手の防御を無視して必ず通る。
+// 防御(VIT+Lv/2)やVIT過積みによる完全無敵化を防ぎ、深部の敵・ボスが必ずチップダメージを与える。
+const PIERCE_RATE = 0.06
+
 const ENEMY_TEXTURE_MAP: Record<string, string> = {
   'ぽり男':              'pori',
   'ルナティック':        'lunatic',
@@ -914,7 +918,10 @@ export class GameScene extends Phaser.Scene {
       }
 
       const isCrit = Math.random() < critRate
-      const raw    = Math.max(1, effectiveAtk - enemy.defense)
+      // 敵のVITを防御に加算（VIT＝被ダメ軽減。プレイヤーのvitと対称）
+      const enemyDef = enemy.defense + enemy.vit
+      // 割合貫通：攻撃力の6%は防御を無視して必ず通る（防御の青天井による完全無敵化を防ぐ）
+      const raw    = Math.max(1, Math.round(effectiveAtk * PIERCE_RATE), effectiveAtk - enemyDef)
       const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
       enemy.hp = Math.max(0, enemy.hp - dmg)
 
@@ -1178,17 +1185,31 @@ export class GameScene extends Phaser.Scene {
           continue
         }
 
-        const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
-        const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
+        // 敵の多段攻撃（AGI由来。プレイヤーと対称だが上限は3回・90刻みで控えめ）
+        const attackCount  = Math.min(3, Math.floor(enemy.agi / 90) + 1)
         const effectiveDef = player.vit + Math.floor(player.level / 2)
-        const critRate = enemy.luk * 0.001
-        const isCrit = Math.random() < critRate
-        const raw = Math.max(1, effectiveAtk - effectiveDef)
-        const dmg = isCrit ? Math.floor(raw * 1.5) : raw
-        player.hp = Math.max(0, player.hp - dmg)
+        const eg = this.enemyGraphics.get(enemy.id)
+        let totalDmg = 0
+        let anyCrit  = false
+        for (let hit = 0; hit < attackCount; hit++) {
+          if (player.hp <= 0) break
+          const baseAtk      = enemy.attack + Math.floor(enemy.str * 0.5)
+          const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
+          const isCrit = Math.random() < enemy.luk * 0.001
+          // 割合貫通：攻撃力の6%は防御を無視して必ず通る（VIT+Lv/2の青天井で完全無敵化するのを防ぐ）
+          const raw    = Math.max(1, Math.round(effectiveAtk * PIERCE_RATE), effectiveAtk - effectiveDef)
+          const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
+          player.hp = Math.max(0, player.hp - dmg)
+          totalDmg += dmg
+          anyCrit = anyCrit || isCrit
+          // 多段は時間差でダメージ数字をポップ
+          const dShown = dmg, cShown = isCrit
+          this.time.delayedCall(hit * 90, () => {
+            this.popDamageNumber(player.position.x, player.position.y, dShown, { toPlayer: true, crit: cShown })
+          })
+        }
         playDamage()
         // 敵がプレイヤーへ小さく突進（誰に殴られたかが分かる）
-        const eg = this.enemyGraphics.get(enemy.id)
         if (eg && eg.visible) {
           this.tweens.add({
             targets: eg,
@@ -1199,18 +1220,18 @@ export class GameScene extends Phaser.Scene {
             ease: 'Quad.Out',
           })
         }
-        // 被ダメ演出：赤いダメージ数字＋プレイヤーフラッシュ＋画面シェイク
-        this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true, crit: isCrit })
+        // 被ダメ演出：プレイヤーフラッシュ＋画面シェイク
         this.flashPlayer()
-        this.cameras.main.shake(isCrit ? 200 : 110, isCrit ? 0.012 : 0.007)
+        this.cameras.main.shake(anyCrit ? 200 : 110, anyCrit ? 0.012 : 0.007)
         // HP残量が少ないほど強い赤フラッシュ（ピンチ演出）
         const hpRatio = player.hp / player.maxHp
         if (player.hp > 0 && hpRatio <= 0.25) {
           this.cameras.main.flash(180, 120, 0, 0)
         }
-        this.addMessage(isCrit
-          ? `${enemy.name}からクリティカル！${dmg}ダメージ！`
-          : `${enemy.name}から${dmg}ダメージ！`)
+        const hitLabel = attackCount > 1 ? `${attackCount}回攻撃 計` : ''
+        this.addMessage(anyCrit
+          ? `${enemy.name}からクリティカル！${hitLabel}${totalDmg}ダメージ！`
+          : `${enemy.name}から${hitLabel}${totalDmg}ダメージ！`)
         if (player.hp <= 0) { this.gameOver(); return }
 
       } else if (manhDist < 10) {
