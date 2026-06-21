@@ -304,6 +304,7 @@ export class GameScene extends Phaser.Scene {
     this.createLowHpVignette()
     document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.input.keyboard!.on('keydown', this.handleInput, this)
+    this.input.on('pointerdown', this.handlePointerMove, this)   // PC: クリックした方向へ1歩
     window.allocateStat = (stat: AllocStat) => this.doAllocateStat(stat)
     window.useSpell    = (itemId: string) => this.useSpellById(itemId)
     window.useHeal     = (itemId: string) => this.useHealById(itemId)
@@ -516,6 +517,31 @@ export class GameScene extends Phaser.Scene {
     window.showEventMessage?.(parts.join('\n'), color)
   }
 
+  // PC向け：ゲーム画面のクリックで、クリック先タイルの方向へ1歩進む（8方向）。
+  // タッチ（モバイル）は仮想ジョイスティック維持のため無視する。
+  private handlePointerMove(pointer: Phaser.Input.Pointer) {
+    if (pointer.wasTouch) return
+    if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
+    if (this.isPaused || this.inventoryOpen) return
+
+    const { player } = this.state
+    const tx = Math.floor(pointer.worldX / this.rts)
+    const ty = Math.floor(pointer.worldY / this.rts)
+    const dx = Math.sign(tx - player.position.x)
+    const dy = Math.sign(ty - player.position.y)
+    if (dx === 0 && dy === 0) return   // 自分のタイルをクリック → 何もしない
+
+    let key: string
+    if      (dx === 0)            key = dy === -1 ? 'MoveUp'  : 'MoveDown'
+    else if (dy === 0)            key = dx === -1 ? 'MoveLeft' : 'MoveRight'
+    else if (dx === -1 && dy === -1) key = 'DiagUL'
+    else if (dx ===  1 && dy === -1) key = 'DiagUR'
+    else if (dx === -1 && dy ===  1) key = 'DiagDL'
+    else                          key = 'DiagDR'
+
+    this.handleInput({ key } as KeyboardEvent)
+  }
+
   private handleInput(event: KeyboardEvent) {
     if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
     if (event.key === 'Escape') {
@@ -547,6 +573,11 @@ export class GameScene extends Phaser.Scene {
     else if (code === 'Numpad9' || k === 'DiagUR' || ((k === 'e' || k === 'E') && useWASD)) { dx =  1; dy = -1 }
     else if (code === 'Numpad1' || k === 'DiagDL' || ((k === 'z' || k === 'Z') && useWASD)) { dx = -1; dy =  1 }
     else if (code === 'Numpad3' || k === 'DiagDR' || ((k === 'c' || k === 'C') && useWASD)) { dx =  1; dy =  1 }
+    // クリック移動用（keyModeに依存しない上下左右トークン）
+    else if (k === 'MoveUp')    dy = -1
+    else if (k === 'MoveDown')  dy =  1
+    else if (k === 'MoveLeft')  dx = -1
+    else if (k === 'MoveRight') dx =  1
     // 通常移動
     else if ((k === 'ArrowUp'    && useArr) || ((k === 'w' || k === 'W') && useWASD)) dy = -1
     else if ((k === 'ArrowDown'  && useArr) || ((k === 's' || k === 'S') && useWASD)) dy = 1
@@ -2207,6 +2238,7 @@ export class GameScene extends Phaser.Scene {
     logEvent('death', { floor: this.state.player.floor, level: this.state.player.level })
     clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
     this.input.keyboard!.off('keydown', this.handleInput, this)
+    this.input.off('pointerdown', this.handlePointerMove, this)
     window.isGameSceneActive = false
     window.dispatchEvent(new Event('game-scene-changed'))
     // 少し間を置いてから暗転 → ゲームオーバー画面へ
