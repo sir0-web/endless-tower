@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AllocStat } from '../types'
+import { HoldRepeatButton } from './HoldRepeatButton'
 
 interface LocalStats {
   str: number; agi: number; dex: number
@@ -58,13 +59,13 @@ export function StatModal() {
             <div key={key} className="stat-alloc-row">
               <span className="sa-label">{label}</span>
               <span className="sa-val">{ls[key]}</span>
-              <button
+              <HoldRepeatButton
                 className="sa-btn"
-                onClick={() => window.allocateStat?.(key)}
+                onPress={() => window.allocateStat?.(key)}
                 disabled={ls.statPoints <= 0}
               >
                 +1
-              </button>
+              </HoldRepeatButton>
             </div>
           ))}
         </div>

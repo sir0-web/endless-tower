@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Equipment, Item, MinimapData, AllocStat } from '../types'
 import { SlotMachine } from './SlotMachine'
 import { BonusVideo } from './BonusVideo'
+import { HoldRepeatButton } from './HoldRepeatButton'
 import { getDisplayName } from '../game/playerName'
 import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
 
@@ -213,7 +214,7 @@ export function UIPanel() {
                   </span>
                 )}
                 {gs.statPoints > 0 && (
-                  <button className="stat-plus-btn" onClick={() => window.allocateStat?.(key)}>＋</button>
+                  <HoldRepeatButton className="stat-plus-btn" onPress={() => window.allocateStat?.(key)}>＋</HoldRepeatButton>
                 )}
               </div>
             )
