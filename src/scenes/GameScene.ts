@@ -1920,11 +1920,14 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // いいねされた側：保留報酬を受け取って付与する
+  // いいねされた側：保留報酬を受け取って付与する。
+  // 複数同時に届くと EventMsgBar が一瞬で上書きされ最後の1件しか見えないため、時間差で表示する。
   private handleLikeRewards(rewards: Array<{ reward_type: string; reward_name?: string | null; from_name?: string | null }>): void {
-    for (const r of rewards) {
-      this.grantLikeReward(r, `${r.from_name ?? '冒険者'}さんからいいねいただきました！`)
-    }
+    rewards.forEach((r, i) => {
+      this.time.delayedCall(i * 1900, () => {
+        this.grantLikeReward(r, `${r.from_name ?? '冒険者'}さんからいいねいただきました！`)
+      })
+    })
   }
 
   // いいね報酬を実際に付与する（押した本人＝messageは「〜にいいねしました」、される側＝「〜からいいね…」）
