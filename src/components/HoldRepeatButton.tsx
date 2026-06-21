@@ -39,10 +39,16 @@ export function HoldRepeatButton({
     <button
       className={className}
       disabled={disabled}
-      onPointerDown={(e) => { e.preventDefault(); start() }}
+      // ポインタを要素に固定。振るたびにUIがズレてもカーソル離脱扱いにならず、
+      // 離した場所に関わらず pointerup がこの要素に届く（連打が途切れない）。
+      onPointerDown={(e) => {
+        e.preventDefault()
+        try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* 未対応環境は無視 */ }
+        start()
+      }}
       onPointerUp={stop}
-      onPointerLeave={stop}
       onPointerCancel={stop}
+      onLostPointerCapture={stop}
       onClick={(e) => { if (e.detail === 0) onPressRef.current() }}  // キーボード操作のみ
       onContextMenu={(e) => e.preventDefault()}
     >
