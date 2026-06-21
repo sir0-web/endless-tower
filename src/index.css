@@ -1139,13 +1139,16 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   background: #000;
 }
 
-/* idle / bonus の2枚を absolute で重ねて表示切替（80%縮小・中央配置） */
+/* idle / 各結果動画を absolute で重ねて表示切替。
+   LCD(sc-lcd)の overflow:hidden でマスクされるので、はみ出させるほど外周がクロップされる。
+   外周のウォーターマークが見切れるよう拡大（120%/-10% ≒ 各辺8.3%クロップ）。
+   ※中央大型のアルカナ/ジャックポット(.bv-arcana / .bv-jackpot)はこの値を上書きするため非対象。 */
 .bv-video {
   position: absolute;
-  top: -4.72%;
-  left: -4.72%;
-  width: 109.44%;
-  height: 109.44%;
+  top: -10%;
+  left: -10%;
+  width: 120%;
+  height: 120%;
   object-fit: contain;
   opacity: 0;
   transition: opacity 0.2s;
@@ -1193,6 +1196,31 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 @keyframes bv-arcana-pop {
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.7, 0.875); }
   to   { opacity: 1; transform: translate(-50%, -50%) scale(1, 1.25); }
+}
+
+/* ── ジャックポット専用：アルカナと同じ中央大型＋暗転。
+   外周のウォーターマークが見切れるよう clip-path で外周をクロップ＋拡大して表示する。
+   --jp-crop = 各辺を切り落とす割合（大きくするほどウォーターマークが切れる）。
+   scale はクロップ後も枠を埋めるよう 1/(1-2*crop) ≒ 1.21（crop 8.5%）に合わせる。 ── */
+.bv-video.bv-jackpot.bv-active {
+  --jp-crop: 8.5%;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(90vw, 760px);
+  height: auto;
+  max-height: min(80vh, 660px);
+  z-index: 9101;
+  opacity: 1;
+  object-fit: contain;
+  clip-path: inset(var(--jp-crop) round 14px);
+  filter: drop-shadow(0 0 36px rgba(255, 205, 80, 0.65)) drop-shadow(0 16px 42px rgba(0, 0, 0, 0.7));
+  pointer-events: none;
+  animation: bv-jackpot-pop 0.45s cubic-bezier(0.18, 0.9, 0.3, 1.25) both;
+}
+@keyframes bv-jackpot-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1.21); }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2895,6 +2923,11 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   animation: emb-out 0.6s ease both;
 }
 
+/* 小サイズ表示（いいね等のコミュニケーション系メッセージ用） */
+.event-msg-bar.emb-small .emb-msg {
+  font-size: clamp(18px, 1.9vw, 26px);
+}
+
 @media (max-width: 767px) {
   /* スマホ: 固定高さに収めて画像を引き伸ばし（約8割サイズ・空いた分はプレイ枠へ） */
   .event-msg-bar {
@@ -2910,6 +2943,9 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   }
   .emb-msg {
     font-size: clamp(14px, 3.9vw, 19px);
+  }
+  .event-msg-bar.emb-small .emb-msg {
+    font-size: clamp(11px, 3vw, 15px);
   }
   /* PC専用ステータス上部バーはスマホでは非表示 */
   .pc-status-top {
@@ -2941,6 +2977,143 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 
 .floor-num-anim {
   animation: floor-num-zoom 0.50s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ══════════════════════════════════════════════════════════
+   全鯖共有ジャックポット（スロット筐体 最下段中央の豪華フレーム）
+   AUTOボタン(left)と 0/3 クレジット(right)の間に配置
+   ══════════════════════════════════════════════════════════ */
+.jackpot-plate {
+  position: absolute;
+  bottom: 1%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: clamp(118px, 46%, 232px);
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 10px;
+  /* 内側の深い漆黒パネル */
+  background:
+    radial-gradient(120% 140% at 50% 0%, rgba(255, 210, 90, 0.18), transparent 60%),
+    linear-gradient(180deg, #241803 0%, #0c0902 52%, #1a1204 100%);
+  /* 多層ゴールドの額縁（box-shadowを重ねて立体的な金枠に） */
+  box-shadow:
+    0 0 0 1px #7a5414,
+    0 0 0 3px #e6b53a,
+    0 0 0 4px #ffe9a8,
+    0 0 0 6px #9c6c1a,
+    0 3px 10px rgba(0, 0, 0, 0.55),
+    0 0 14px rgba(255, 200, 70, 0.55),
+    inset 0 1px 2px rgba(255, 240, 190, 0.35),
+    inset 0 0 12px rgba(255, 185, 55, 0.28);
+  transition: transform 0.12s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+/* 四隅の宝石（ダイヤ型） */
+.jackpot-plate .jp-gem {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  z-index: 3;
+  background: radial-gradient(circle at 34% 30%, #fffefb, #ffd24a 42%, #a9750f 100%);
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px rgba(255, 215, 90, 0.95), inset 0 0 2px rgba(120, 70, 0, 0.6);
+}
+.jackpot-plate .jp-gem-tl { top: -3px; left: -3px; }
+.jackpot-plate .jp-gem-tr { top: -3px; right: -3px; }
+.jackpot-plate .jp-gem-bl { bottom: -3px; left: -3px; }
+.jackpot-plate .jp-gem-br { bottom: -3px; right: -3px; }
+
+.jackpot-plate .jp-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  gap: 2px;
+}
+.jackpot-plate .jp-label {
+  font-size: clamp(7px, 1.4vw, 10px);
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  color: #ffe9a8;
+  text-shadow: 0 1px 1px #000, 0 0 6px rgba(255, 190, 60, 0.7);
+}
+.jackpot-plate .jp-value {
+  font-size: clamp(16px, 3.2vw, 26px);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  background: linear-gradient(180deg, #fff8de 0%, #ffe08a 45%, #ffc23d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 6px rgba(255, 200, 70, 0.7));
+}
+.jackpot-plate .jp-unit {
+  font-size: 0.5em;
+  margin-left: 2px;
+  -webkit-text-fill-color: #ffce5a;
+  color: #ffce5a;
+}
+
+/* 光沢スイープ */
+.jackpot-plate .jp-shine {
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 42%;
+  height: 100%;
+  z-index: 4;
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.55) 50%, transparent 100%);
+  transform: skewX(-18deg);
+  animation: jp-shine-sweep 3.4s ease-in-out infinite;
+}
+@keyframes jp-shine-sweep {
+  0%   { left: -60%; }
+  42%  { left: 135%; }
+  100% { left: 135%; }
+}
+
+/* 値が変わった瞬間の強調 */
+.jackpot-plate.jp-bump {
+  transform: translateX(-50%) scale(1.08);
+  filter: brightness(1.18);
+}
+
+/* 上限(100)到達時のアラート点滅（超ド派手：拡縮＋発光＋金枠→赤金の明滅） */
+.jackpot-plate.jp-maxed { animation: jp-maxed-pulse 0.55s ease-in-out infinite; }
+@keyframes jp-maxed-pulse {
+  0% {
+    transform: translateX(-50%) scale(1) rotate(-0.6deg);
+    filter: brightness(1.05) saturate(1.1);
+    box-shadow:
+      0 0 0 1px #7a5414, 0 0 0 3px #ffe27a, 0 0 0 5px #fff3cf, 0 0 0 7px #c98a1f,
+      0 0 22px rgba(255, 200, 70, 0.8), 0 0 40px rgba(255, 120, 40, 0.55),
+      inset 0 0 14px rgba(255, 200, 70, 0.45);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.14) rotate(0.6deg);
+    filter: brightness(1.55) saturate(1.5);
+    box-shadow:
+      0 0 0 1px #8a5f15, 0 0 0 4px #fff6d8, 0 0 0 6px #ff5a3c, 0 0 0 9px #ffd24a,
+      0 0 46px rgba(255, 220, 90, 1), 0 0 78px rgba(255, 70, 40, 0.95),
+      inset 0 0 22px rgba(255, 140, 50, 0.7);
+  }
+  100% {
+    transform: translateX(-50%) scale(1) rotate(-0.6deg);
+    filter: brightness(1.05) saturate(1.1);
+    box-shadow:
+      0 0 0 1px #7a5414, 0 0 0 3px #ffe27a, 0 0 0 5px #fff3cf, 0 0 0 7px #c98a1f,
+      0 0 22px rgba(255, 200, 70, 0.8), 0 0 40px rgba(255, 120, 40, 0.55),
+      inset 0 0 14px rgba(255, 200, 70, 0.45);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-interface MsgState { text: string; color: string; key: number }
+interface MsgState { text: string; color: string; key: number; small: boolean }
 
 export function EventMsgBar() {
   const [msg, setMsg] = useState<MsgState | null>(null)
@@ -9,11 +9,11 @@ export function EventMsgBar() {
   const t2 = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    window.showEventMessage = (text, color = '#ffdd44') => {
+    window.showEventMessage = (text, color = '#ffdd44', small = false) => {
       if (t1.current) clearTimeout(t1.current)
       if (t2.current) clearTimeout(t2.current)
       setFading(false)
-      setMsg({ text, color, key: Date.now() })
+      setMsg({ text, color, key: Date.now(), small })
       t1.current = setTimeout(() => setFading(true), 2800)
       t2.current = setTimeout(() => setMsg(null), 3500)
     }
@@ -25,7 +25,7 @@ export function EventMsgBar() {
   }, [])
 
   return (
-    <div className={`event-msg-bar${fading ? ' emb-fading' : ''}`}>
+    <div className={`event-msg-bar${fading ? ' emb-fading' : ''}${msg?.small ? ' emb-small' : ''}`}>
       <img className="emb-bg" src="/assets/ui/event_msg_bg.png" alt="" aria-hidden="true" />
       <div className="emb-content">
         {msg && msg.text.split('\n').map((line, i) => (

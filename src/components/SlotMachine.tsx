@@ -1,14 +1,20 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { logEvent } from '../game/supabase'
+import { incrementJackpot } from '../game/jackpot'
+import { JackpotCounter } from './JackpotCounter'
 
-const SYMBOLS    = 7
+const SYMBOLS    = 8   // リール絵柄総数（8番=ジャックポット絵柄slot8.png。回転アニメに登場し期待感を演出）
+const REEL_MAX   = 7   // 通常出目は1〜7のみ。8番はジャックポット成立時だけ揃う（確率を厳密に制御するため予約）
 const CREDIT_MAX = 3
 const STOCK_MAX  = 10
-function rand() { return Math.floor(Math.random() * SYMBOLS) + 1 }
+// ジャックポット当選確率。アルカナチャンス（1%＝GameScene applySlotEffect）より低く設定。
+const JACKPOT_CHANCE = 0.003
+function rand() { return Math.floor(Math.random() * REEL_MAX) + 1 }   // 1〜7
 type Triplet = [number, number, number]
 
 function evaluate(reels: Triplet): string {
   const [a, b, c] = reels
+  if (a === 8 && b === 8 && c === 8) return 'jackpot'
   if (a === 7 && b === 7 && c === 7) return '777'
   if (a === b && b === c)            return a === 3 ? 'skulls' : 'triple'
   if (a === c)                       return 'lr_match'
@@ -94,8 +100,15 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
       addTimer(() => {
         const result = evaluate(finalsRef.current)
         logEvent('slot_result', { slot_result: result })
-        if (['777', 'triple', 'skulls'].includes(result)) setGlowing(true)
-        window.playBonusVideo?.(result)
+        if (['jackpot', '777', 'triple', 'skulls'].includes(result)) setGlowing(true)
+        if (result === 'jackpot') {
+          // 当選 → 黒背景でJACKPOTの文字 → 文字が消えたらJACKPOT動画を再生
+          // （総取り額の付与・リザルト表示は動画終了後 applySlotEffect('jackpot') で行う）
+          window.showSlotAnnouncement?.('jackpot_start')
+          addTimer(() => window.playBonusVideo?.('jackpot'), 2600)
+        } else {
+          window.playBonusVideo?.(result)
+        }
       }, 500)
     }
   }, [addTimer])
@@ -134,7 +147,11 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     canStopRef.current = [false, false, false]
     setCanStop([false, false, false])
 
-    finalsRef.current = [rand(), rand(), rand()]
+    // ジャックポット当選は確率ロールで決め、当たれば8番を強制で揃える（通常出目1〜7に8は出ない）
+    finalsRef.current = Math.random() < JACKPOT_CHANCE
+      ? [8, 8, 8]
+      : [rand(), rand(), rand()]
+    incrementJackpot()   // 全鯖共有ジャックポットのプールに +1（回した回数）
     setSpinning([true, true, true])
 
     ;[0, 1, 2].forEach(i => {
@@ -239,6 +256,9 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
       <button className="sc-mode-btn" onClick={toggleMode}>
         {spinMode === 'auto' ? 'AUTO' : 'MANUAL'}
       </button>
+
+      {/* 全鯖共有ジャックポット（最下段中央・AUTOと0/3の間） */}
+      <JackpotCounter />
 
       {/* リール3本 */}
       <div className="sc-reels">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-type SlotResult = '777' | 'triple' | 'skulls' | 'lr_match' | 'adjacent' | 'sequential' | 'miss' | 'kakuhen' | 'kakuhen_start'
+type SlotResult = 'jackpot' | 'jackpot_start' | '777' | 'triple' | 'skulls' | 'lr_match' | 'adjacent' | 'sequential' | 'miss' | 'kakuhen' | 'kakuhen_start'
 
 interface Config {
   text: string
@@ -15,6 +15,30 @@ interface Config {
 }
 
 const CONFIGS: Record<SlotResult, Config> = {
+  // 当選直後（動画前）の黒背景JACKPOT演出。アルカナチャンス(kakuhen_start)と同じ作り
+  jackpot_start: {
+    text: '💰JACKPOT💰',
+    sub: '',
+    color: '#ffd24a',
+    fontSize: 'clamp(48px, 10vw, 84px)',
+    animClass: 'sa-anim-zoom',
+    holdMs: 2600,
+    overlay: true,
+    flash: false,
+    sparkles: 40,
+  },
+  // 動画終了後のリザルト表示。総取り額は applySlotEffect から subOverride で渡す
+  jackpot: {
+    text: '💰JACKPOT💰',
+    sub: '',
+    color: '#ffd24a',
+    fontSize: 'clamp(48px, 10vw, 84px)',
+    animClass: 'sa-anim-zoom',
+    holdMs: 3500,
+    overlay: true,
+    flash: false,
+    sparkles: 40,
+  },
   '777': {
     text: '👊阿修羅覇王拳👊',
     sub: 'Lv+10 ＋ HP/STA上限+10% ＋ SP+50 ＋ 全敵消滅！！',

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const RESULT_SRCS: Record<string, string> = {
+  'jackpot':    '/assets/slot/jack.mp4',
   '777':        '/assets/slot/777.mp4',
   'triple':     '/assets/slot/triple.mp4',
   'skulls':     '/assets/slot/skulls.mp4',
@@ -12,8 +13,10 @@ const RESULT_SRCS: Record<string, string> = {
   'kakuhen_miss': '/assets/slot/magicianlady.mp4',
 }
 
-// アルカナチャンス（2パターン）。この結果のときだけ画面中央に大きく＋周囲を暗転して魅せる
+// アルカナチャンス（2パターン）。動画終了後に専用ルーレットへ分岐する
 const ARCANA_RESULTS = new Set(['kakuhen', 'kakuhen_miss'])
+// 画面中央に大きく＋周囲を暗転して魅せる演出（アルカナチャンス＋ジャックポット）
+const CENTERED_RESULTS = new Set(['kakuhen', 'kakuhen_miss', 'jackpot'])
 
 export function BonusVideo() {
   const idleRef         = useRef<HTMLVideoElement>(null)
@@ -103,12 +106,12 @@ export function BonusVideo() {
     finish(false)
   }, [startBonus])
 
-  const isArcana = ARCANA_RESULTS.has(mode)
+  const isCentered = CENTERED_RESULTS.has(mode)
 
   return (
     <>
-      {/* アルカナチャンス中は周囲を暗転して中央の動画に注目させる */}
-      {isArcana && <div className="bv-arcana-backdrop" />}
+      {/* アルカナチャンス／ジャックポット中は周囲を暗転して中央の動画に注目させる */}
+      {isCentered && <div className="bv-arcana-backdrop" />}
 
       <video
         ref={idleRef}
@@ -124,7 +127,7 @@ export function BonusVideo() {
           muted
           playsInline
           onEnded={handleVideoEnded}
-          className={`bv-video ${mode === result ? 'bv-active' : ''}${ARCANA_RESULTS.has(result) ? ' bv-arcana' : ''}`}
+          className={`bv-video ${mode === result ? 'bv-active' : ''}${ARCANA_RESULTS.has(result) ? ' bv-arcana' : ''}${result === 'jackpot' ? ' bv-jackpot' : ''}`}
         />
       ))}
     </>

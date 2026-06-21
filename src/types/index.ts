@@ -189,7 +189,7 @@ declare global {
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
     showReport?: () => void
     triggerSkulporinCheck?: () => void
-    showEventMessage?: (message: string, color?: string) => void
+    showEventMessage?: (message: string, color?: string, small?: boolean) => void
     showSkulporinReward?: (
       equips: Item[],
       spells: Item[],

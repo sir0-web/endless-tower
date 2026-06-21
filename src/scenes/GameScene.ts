@@ -8,6 +8,7 @@ import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { logEvent, getPlayerId } from '../game/supabase'
 import { fireWorldNotification, resetWorldNotifyDedup } from '../game/worldNotify'
 import { getDisplayName } from '../game/playerName'
+import { claimJackpot } from '../game/jackpot'
 import { getMonsterTextureOverrides } from '../game/overrides'
 import { ENEMY_TEXTURE_MAP } from '../game/enemyTextures'
 
@@ -1881,6 +1882,12 @@ export class GameScene extends Phaser.Scene {
     reward: { reward_type: string; reward_name?: string | null },
     message: string,
   ): void {
+    // 報酬なし（1日上限超過）＝コミュニケーションとしての通知のみ
+    if (reward.reward_type === 'none') {
+      this.addLikeMessage(`💗 ${message}`)
+      this.updateWindowGameState()
+      return
+    }
     let detail: string
     if (reward.reward_type === 'point') {
       this.state.player.statPoints += 1
@@ -1912,8 +1919,15 @@ export class GameScene extends Phaser.Scene {
         detail = `${name}を獲得！`
       }
     }
-    this.addMessage(`💗 ${message} ${detail}`)
+    this.addLikeMessage(`💗 ${message} ${detail}`)
     this.updateWindowGameState()
+  }
+
+  // いいね系メッセージ：ログに残しつつ EventMsgBar は小さめサイズで表示（通常イベントより控えめに）
+  private addLikeMessage(msg: string) {
+    this.state.messages.unshift(msg)
+    if (this.state.messages.length > 50) this.state.messages.pop()
+    window.showEventMessage?.(msg, '#ff9ec4', true)
   }
 
   // ── ADMIN イベントコマンド処理（モンスターハウス強制 / モンスター強制ポップ）──
@@ -2261,6 +2275,28 @@ export class GameScene extends Phaser.Scene {
     const { player } = this.state
 
     switch (result) {
+      case 'jackpot': {
+        // 動画終了後にここへ到達。全鯖共有プールを総取り → ステータスポイントへ加算（取得は非同期）
+        void claimJackpot().then(won => {
+          if (won <= 0) {
+            // 直前に他プレイヤーが総取りした等でプールが空 → 空振りを伝える
+            this.addMessage('💰 JACKPOT！…だが共有プールは空っぽだった…')
+            window.showSlotAnnouncement?.('jackpot', '惜しくもプールは空でした…')
+            return
+          }
+          this.state.player.statPoints += won
+          this.addMessage(`💰 JACKPOT！！共有プール ${won}ポイントを総取り！！`)
+          window.showSlotAnnouncement?.('jackpot', `ポイント総取り ${won}ポイントゲット！`)
+          fireWorldNotification(
+            'achievement',
+            '【💰JACKPOT💰】',
+            `${getDisplayName()}さんがジャックポットを引き当て ${won}ポイントを総取りしました！`,
+          )
+          this.updateWindowGameState()
+        })
+        playLevelUp()
+        break
+      }
       case '777': {
         player.level      += 10
         player.statPoints += 50
