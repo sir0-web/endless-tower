@@ -41,7 +41,7 @@ const CONFIGS: Record<SlotResult, Config> = {
   },
   '777': {
     text: '👊阿修羅覇王拳👊',
-    sub: 'Lv+10 ＋ HP/STA上限+10% ＋ 全敵消滅！！',
+    sub: 'Lv+10 ＋ HP/STA上限+10% ＋ SP+50 ＋ 全敵消滅！！',
     color: '#ffdd00',
     fontSize: 'clamp(44px, 9vw, 76px)',
     animClass: 'sa-anim-zoom',
