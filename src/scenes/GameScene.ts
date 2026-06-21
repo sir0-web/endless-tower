@@ -1636,11 +1636,20 @@ export class GameScene extends Phaser.Scene {
         npcPool.push({ x: rx + 1 + dx, y: ry + 2 + dy })
     shuffleArr(npcPool)
     const npcPositions: { x: number; y: number }[] = []
+    const npcUsed = new Set<string>()
+    // 1stパス：他NPCと周囲1マス以内に被らない位置を選ぶ（見栄え優先で離す）
     for (const p of npcPool) {
       if (npcPositions.length >= 4) break
-      if (npcPositions.every(q => Math.abs(p.x - q.x) >= 2)) npcPositions.push(p)
+      if (npcUsed.has(`${p.x},${p.y}`)) continue
+      if (npcPositions.some(q => Math.abs(p.x - q.x) <= 1 && Math.abs(p.y - q.y) <= 1)) continue
+      npcPositions.push(p); npcUsed.add(`${p.x},${p.y}`)
     }
-    while (npcPositions.length < 4) npcPositions.push({ x: 6 + npcPositions.length * 2, y: 9 })
+    // 2ndパス：4体に満たなければ「タイル重複しないこと」だけを条件に補充（必ず別タイルになる）
+    for (const p of npcPool) {
+      if (npcPositions.length >= 4) break
+      if (npcUsed.has(`${p.x},${p.y}`)) continue
+      npcPositions.push(p); npcUsed.add(`${p.x},${p.y}`)
+    }
 
     // ── 回復の泉を部屋下半分にランダム配置（NPC・プレイヤー初期位置を除く）──
     const npcSet = new Set(npcPositions.map(p => `${p.x},${p.y}`))
