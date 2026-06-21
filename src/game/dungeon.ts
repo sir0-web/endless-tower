@@ -262,10 +262,22 @@ export function generateAreaBossFloors(): Record<number, string> {
   return result
 }
 
+// ── 深層スケール ──
+// 100F までは従来の緩いカーブ（中盤バランス維持）。100F 以降は深度で複利的に底上げし、
+// 「飽和して稼ぎ型プレイヤーに追い抜かれる」構造を撤廃する。DEEP_GROWTH を上げるほど壁が手前へ。
+// 校正: DEEP_GROWTH=1.025（AGI/DEX天井解放ぶんを織り込み）で、稼ぎ型(到達時 Lv1500〜2000級)が
+// 概ね 135〜145F で頭打ち。軽いプレイヤーはより手前＝スコア型として妥当。壁を動かすならこの1値を増減。
+export const DEEP_FLOOR  = 100
+export const DEEP_GROWTH = 1.025
+export function deepScale(floor: number): number {
+  const base = (1 + floor * 0.1) / (1 + floor * 0.02)
+  const deep = Math.pow(DEEP_GROWTH, Math.max(0, floor - DEEP_FLOOR))
+  return base * deep
+}
+
 function makeBoss(name: string, floor: number, hpMult: number, atkMult: number, defMult: number, prefix: string) {
-  // 通常敵と同系の緩やかなスケールに変更（旧: 0.15/0.015 は中盤で飽和し、37階で即死級だった）。
-  // これで中盤のボスは「強いが対処可能な山場」になり、即死級の壁は深部(100階前後)へ寄る。
-  const scale = (1 + floor * 0.1) / (1 + floor * 0.02)
+  // 100Fまでは緩いカーブ、100F超は深層で複利加速（deepScale）。
+  const scale = deepScale(floor)
   const baseHp  = 30 + floor * 5
   const baseAtk = 10 + floor * 2
   const baseDef = 5  + floor
@@ -293,11 +305,11 @@ function makeBoss(name: string, floor: number, hpMult: number, atkMult: number, 
 
 export function spawnBosses(floor: number, areaBossFloors: Record<number, string>) {
   const bosses = []
-  const isMini = floor % 5 === 0 && floor % 10 !== 0 && MINI_BOSS_TABLE[floor % 65 || 65]
+  // 100F以降はテーブルを“ループ”させず最強tierに張り付かせる（深層scaleで更に逓増＝再利用が毎回強くなる）
+  const miniKey = floor <= 65 ? (floor % 65 || 65) : 65
+  const mvpKey  = floor <= 70 ? (((Math.floor((floor - 1) / 10) % 7) + 1) * 10) : 70
+  const isMini = floor % 5 === 0 && floor % 10 !== 0 && !!MINI_BOSS_TABLE[miniKey]
   const isMvp = floor % 10 === 0
-
-  const miniKey = floor % 65 || 65
-  const mvpKey = ((Math.floor((floor - 1) / 10) % 7) + 1) * 10
 
   if (isMini) {
     const b = MINI_BOSS_TABLE[miniKey] ?? MINI_BOSS_TABLE[65]
@@ -310,6 +322,10 @@ export function spawnBosses(floor: number, areaBossFloors: Record<number, string
   if (areaBossFloors[floor]) {
     const name = areaBossFloors[floor]
     bosses.push(makeBoss(name, floor, 3.6, 2.1, 1.5, '【エリア】'))
+  }
+  // エリアボスは90Fで打ち止めだったため、91F以降は25F刻みで“深淵の主”をエリア級で再登場させる
+  if (floor > DEEP_FLOOR && floor % 25 === 0) {
+    bosses.push(makeBoss('深淵の主', floor, 3.6, 2.1, 1.5, '【深淵】'))
   }
 
   return bosses
@@ -363,7 +379,7 @@ export function makeNamedNormalEnemy(name: string, floor: number) {
   const base = ENEMY_TABLE.find(e => e.name === name)
     ?? { name, hpBase: 20, atkBase: 8, defBase: 2, str: 10, vit: 6, agi: 10, luk: 4 }
   const f1Mult = floor <= 3 ? 0.6 : 1.0
-  const scale = ((1 + floor * 0.1) / (1 + floor * 0.02)) * f1Mult
+  const scale = deepScale(floor) * f1Mult
   return {
     id: `admin_enemy_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
     position: { x: 0, y: 0 },
@@ -410,7 +426,10 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
     }
   }
 
-  const available = ENEMY_TABLE.filter(e => e.minFloor <= floor && e.maxFloor >= floor)
+  // 100F以降は maxFloor 上限を無視して全モンスターを抽選対象に（深層で全種類リユース・deepScaleで強化）
+  const available = ENEMY_TABLE.filter(e =>
+    e.minFloor <= floor && (floor > DEEP_FLOOR || e.maxFloor >= floor)
+  )
   const enemies = []
 
   // 1〜3Fは全ステータスを60%に抑えて初心者が序盤を乗り越えやすくする
@@ -419,7 +438,7 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
   for (let i = 0; i < count; i++) {
     const pos = floors[Math.floor(Math.random() * floors.length)]
     const base = available[Math.floor(Math.random() * available.length)]
-    const scale = ((1 + floor * 0.1) / (1 + floor * 0.02)) * f1Mult
+    const scale = deepScale(floor) * f1Mult
     enemies.push({
       id: `enemy_${i}_${Date.now()}`,
       position: { ...pos },

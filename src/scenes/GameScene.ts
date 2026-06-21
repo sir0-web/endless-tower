@@ -70,6 +70,18 @@ function floorMiasma(floor: number): { color: number; alpha: number } {
 // 防御(VIT+Lv/2)やVIT過積みによる完全無敵化を防ぎ、深部の敵・ボスが必ずチップダメージを与える。
 const PIERCE_RATE = 0.06
 
+// AGI：多段攻撃の閾値を逓増（2hit=50, 3hit=100, 4hit=200, 5hit=400, …＝倍々）。天井は8回。
+// 旧仕様(50刻み・5回上限)の「AGI200で打ち止め＝死にステ」を解消し、青天井で報われるように。
+function playerAttackCount(agi: number): number {
+  let hits = 1, need = 50
+  while (agi >= need && hits < 8) { hits++; need *= 2 }
+  return hits
+}
+// DEX：命中100%(DEX100)を超えたぶんを貫通へ変換。+100ごとに+2%、上限+16%（基礎6%と合算で最大22%）。
+function dexPierceBonus(dex: number): number {
+  return Math.min(0.16, Math.max(0, dex - 100) / 100 * 0.02)
+}
+
 export class GameScene extends Phaser.Scene {
   private state!: GameState
   private graphics!: Phaser.GameObjects.Graphics
@@ -900,9 +912,10 @@ export class GameScene extends Phaser.Scene {
 
     const { player } = this.state
     const effectiveAtk  = Math.floor(player.str * 1.5) + player.level
-    const attackCount   = Math.min(5, Math.floor(player.agi / 50) + 1)
-    const hitRate       = Math.min(0.99, 0.90 + player.dex * 0.001)
+    const attackCount   = playerAttackCount(player.agi)
+    const hitRate       = Math.min(1.00, 0.90 + player.dex * 0.001)
     const critRate      = player.luk * 0.001
+    const playerPierce  = PIERCE_RATE + dexPierceBonus(player.dex)
 
     for (let hit = 0; hit < attackCount; hit++) {
       if (enemy.hp <= 0) break
@@ -916,8 +929,8 @@ export class GameScene extends Phaser.Scene {
       const isCrit = Math.random() < critRate
       // 敵のVITを防御に加算（VIT＝被ダメ軽減。プレイヤーのvitと対称）
       const enemyDef = enemy.defense + enemy.vit
-      // 割合貫通：攻撃力の6%は防御を無視して必ず通る（防御の青天井による完全無敵化を防ぐ）
-      const raw    = Math.max(1, Math.round(effectiveAtk * PIERCE_RATE), effectiveAtk - enemyDef)
+      // 割合貫通：基礎6%＋DEX超過ぶんは防御を無視して必ず通る（防御の青天井による完全無敵化を防ぐ）
+      const raw    = Math.max(1, Math.round(effectiveAtk * playerPierce), effectiveAtk - enemyDef)
       const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
       enemy.hp = Math.max(0, enemy.hp - dmg)
 
@@ -1184,6 +1197,14 @@ export class GameScene extends Phaser.Scene {
         // 敵の多段攻撃（AGI由来。プレイヤーと対称だが上限は3回・90刻みで控えめ）
         const attackCount  = Math.min(3, Math.floor(enemy.agi / 90) + 1)
         const effectiveDef = player.vit + Math.floor(player.level / 2)
+        // 深層ペナルティ：100F以降は貫通率が逓増（防御の青天井を抑える）。最大20%。
+        const floorNow = player.floor
+        const pierce   = Math.min(0.20, PIERCE_RATE + Math.max(0, floorNow - 100) * 0.002)
+        // ボスのみ：防御無視の「最大HP割合ダメージ」を上乗せ。150Fで約12.5%（上限15%）。
+        // 無限タンク(青天井VIT)＋遅い最大HP成長(+5/Lv)を封じ、深層で耐久に上限を作る。
+        const trueDmg  = (enemy.isBoss && floorNow > 100)
+          ? Math.floor(player.maxHp * Math.min(0.15, (floorNow - 100) * 0.0025))
+          : 0
         const eg = this.enemyGraphics.get(enemy.id)
         let totalDmg = 0
         let anyCrit  = false
@@ -1192,9 +1213,9 @@ export class GameScene extends Phaser.Scene {
           const baseAtk      = enemy.attack + Math.floor(enemy.str * 0.5)
           const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
           const isCrit = Math.random() < enemy.luk * 0.001
-          // 割合貫通：攻撃力の6%は防御を無視して必ず通る（VIT+Lv/2の青天井で完全無敵化するのを防ぐ）
-          const raw    = Math.max(1, Math.round(effectiveAtk * PIERCE_RATE), effectiveAtk - effectiveDef)
-          const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
+          // 割合貫通(深層で逓増)は防御を無視して必ず通る。さらにボスは最大HP割合ダメージを加算。
+          const raw    = Math.max(1, Math.round(effectiveAtk * pierce), effectiveAtk - effectiveDef)
+          const dmg    = (isCrit ? Math.floor(raw * 1.5) : raw) + trueDmg
           player.hp = Math.max(0, player.hp - dmg)
           totalDmg += dmg
           anyCrit = anyCrit || isCrit

@@ -63,8 +63,8 @@ export function HowToPlay() {
             <p>レベルアップごとに<b>+5ポイント</b>を獲得し、好きな能力へ自由に割り振れます。何を伸ばすかが個性になります。</p>
             <ul className="htp-list htp-stats">
               <li><Tag c="str">STR</Tag> 攻撃力。1ポイントで火力が大きく伸びる基本ステータス。</li>
-              <li><Tag c="agi">AGI</Tag> 攻撃回数。50ごとに+1回（最大5回連撃）。</li>
-              <li><Tag c="dex">DEX</Tag> 命中率。基本90%から少しずつ上昇。</li>
+              <li><Tag c="agi">AGI</Tag> 攻撃回数。必要値が 50→100→200→400… と倍々で増え、<b>最大8連撃</b>まで伸びる。</li>
+              <li><Tag c="dex">DEX</Tag> 命中率（<b>DEX100で100%</b>）。超過分は<b>装甲貫通</b>に変わり、敵の防御を無視するダメージが増える。</li>
               <li><Tag c="vit">VIT</Tag> 防御力。被ダメージを軽減。</li>
               <li><Tag c="int">INT</Tag> 魔法の威力。魔法の書の効果が強まる。</li>
               <li><Tag c="luk">LUK</Tag> 会心率＋幸運。良いフロアやスロットの当たりやすさにも影響。</li>
