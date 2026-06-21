@@ -181,10 +181,10 @@ export function SlotAnnouncement() {
       const cfg = CONFIGS[typedResult]
 
       if (!cfg.overlay) {
-        // テキストは常にEventMsgBarへ（PC・スマホ共通）
+        // テキストは常にEventMsgBarへ（PC・スマホ共通）。いいね通知と同じ小サイズで表示。
         const subText = sub ?? cfg.sub
         const msg = subText ? `${cfg.text}\n${subText}` : cfg.text
-        window.showEventMessage?.(msg, cfg.color)
+        window.showEventMessage?.(msg, cfg.color, true)
         // エフェクト（flash/sparkles）がなければここで終了
         if (!cfg.flash && cfg.sparkles === 0) return
         // flash/sparklesがある場合はエフェクトのみSlotAnnouncementで継続（テキストなし）
