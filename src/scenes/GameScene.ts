@@ -2549,7 +2549,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 床タイルのバリアント（floor1/2/3）をフロア生成時にランダム決定・固定 */
-  // ── プレイヤー画像の背景色を透過（ロード済み PNG から実行） ──
+  // ── 画像の背景を透過（ロード済み PNG から実行。プレイヤー画像／ADMINアップロード画像の両方で使用） ──
+  // 単色背景だけでなく「青背景＋白い角」のような複数色背景や、ゆるいグラデーション背景にも対応する。
+  //   1) エッジ(外周1px)の不透明色を複数クラスタに分け、有意なものを全て背景シードとして採用
+  //   2) エッジから連結する「シード色に近い or 勾配で連続する」ピクセルだけをflood fillで透過
+  //      （外周連結のみ＝本体内部の同系色は守る。勾配追従はシードからの距離上限で本体への侵入を防ぐ）
+  //   3) 透明に隣接して残った薄い背景フリンジ(にじみ)を1px掃除
   private makeTransparent(key: string) {
     if (!this.textures.exists(key)) return
 
@@ -2567,53 +2572,106 @@ export class GameScene extends Phaser.Scene {
     const id = ctx.getImageData(0, 0, w, h)
     const d  = id.data
 
-    // 全エッジをスキャンして最頻出の不透明ピクセルを背景色として採用
-    const edgePixels: [number, number][] = []
-    for (let x = 0; x < w; x++) { edgePixels.push([x, 0]); edgePixels.push([x, h - 1]) }
-    for (let y = 1; y < h - 1; y++) { edgePixels.push([0, y]); edgePixels.push([w - 1, y]) }
+    // エッジ(外周1px)のピクセルインデックスを列挙
+    const edge: number[] = []
+    for (let x = 0; x < w; x++) { edge.push(x); edge.push((h - 1) * w + x) }
+    for (let y = 1; y < h - 1; y++) { edge.push(y * w); edge.push(y * w + w - 1) }
 
-    const colorCount = new Map<string, { r: number; g: number; b: number; count: number }>()
-    for (const [ex, ey] of edgePixels) {
-      const i = (ey * w + ex) * 4
+    // 背景色クラスタリング：白い角＋色背景など複数色の背景を取りこぼさない
+    const clusters: { r: number; g: number; b: number; count: number }[] = []
+    const CLU_TOL = 40          // 同一背景クラスタとみなすマンハッタン色距離（緩すぎると勾配背景が1色に潰れて取りこぼす）
+    let edgeOpaque = 0
+    for (const pi of edge) {
+      const i = pi * 4
       if (d[i + 3] < 200) continue
-      const key = `${d[i]},${d[i+1]},${d[i+2]}`
-      const entry = colorCount.get(key)
-      if (entry) entry.count++
-      else colorCount.set(key, { r: d[i], g: d[i+1], b: d[i+2], count: 1 })
-    }
-    if (colorCount.size === 0) return  // 全エッジが既に透過 → 処理不要
-
-    let bgR = -1, bgG = -1, bgB = -1, maxCount = 0
-    for (const { r, g, b, count } of colorCount.values()) {
-      if (count > maxCount) { maxCount = count; bgR = r; bgG = g; bgB = b }
-    }
-
-    // BFS flood fill: エッジから連続する背景色ピクセルを透過
-    const tol = 40
-    const visited = new Uint8Array(w * h)
-    const queue: number[] = []
-
-    const isBg = (idx: number) =>
-      d[idx + 3] >= 128 &&
-      Math.abs(d[idx]     - bgR) <= tol &&
-      Math.abs(d[idx + 1] - bgG) <= tol &&
-      Math.abs(d[idx + 2] - bgB) <= tol
-
-    for (const [ex, ey] of edgePixels) {
-      const pi = ey * w + ex
-      if (!visited[pi] && isBg(pi * 4)) { visited[pi] = 1; queue.push(pi) }
-    }
-
-    while (queue.length > 0) {
-      const pi = queue.pop()!
-      d[pi * 4 + 3] = 0
-      const px = pi % w, py = (pi / w) | 0
-      for (const [nx, ny] of [[px-1,py],[px+1,py],[px,py-1],[px,py+1]]) {
-        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue
-        const ni = ny * w + nx
-        if (!visited[ni] && isBg(ni * 4)) { visited[ni] = 1; queue.push(ni) }
+      edgeOpaque++
+      const r = d[i], g = d[i + 1], b = d[i + 2]
+      let best: typeof clusters[number] | null = null, bestD = Infinity
+      for (const c of clusters) {
+        const dd = Math.abs(c.r - r) + Math.abs(c.g - g) + Math.abs(c.b - b)
+        if (dd < bestD) { bestD = dd; best = c }
+      }
+      if (best && bestD <= CLU_TOL) {
+        const n = best.count + 1
+        best.r = (best.r * best.count + r) / n
+        best.g = (best.g * best.count + g) / n
+        best.b = (best.b * best.count + b) / n
+        best.count = n
+      } else {
+        clusters.push({ r, g, b, count: 1 })
       }
     }
+    if (edgeOpaque === 0) return  // 全エッジが既に透過 → 処理不要
+
+    // エッジの3%以上を占めるクラスタを背景シードに（少なくとも最頻の1つは採用）
+    const minCount = Math.max(2, edgeOpaque * 0.03)
+    let seeds = clusters.filter(c => c.count >= minCount)
+    if (seeds.length === 0) seeds = [clusters.reduce((a, b) => (b.count > a.count ? b : a))]
+
+    const SEED_TOL2  = 48 * 48   // シード色からの許容（二乗距離）
+    const GRAD_CAP2  = 96 * 96   // 勾配追従の上限（シードからの二乗距離）＝本体への侵入防止
+    const LOCAL_TOL  = 16        // 勾配追従：隣接ピクセル間のマンハッタン色差
+    const FRINGE2    = 70 * 70   // フリンジ掃除：背景寄りと判定する二乗距離
+
+    const nearestSeed2 = (r: number, g: number, b: number) => {
+      let m = Infinity
+      for (const s of seeds) {
+        const dr = s.r - r, dg = s.g - g, db = s.b - b
+        const dd = dr * dr + dg * dg + db * db
+        if (dd < m) m = dd
+      }
+      return m
+    }
+
+    const visited = new Uint8Array(w * h)   // 1 = 背景として透過した
+    const stack: number[] = []
+    for (const pi of edge) {
+      const i = pi * 4
+      if (!visited[pi] && d[i + 3] >= 128 && nearestSeed2(d[i], d[i + 1], d[i + 2]) <= SEED_TOL2) {
+        visited[pi] = 1; stack.push(pi)
+      }
+    }
+
+    while (stack.length > 0) {
+      const pi = stack.pop()!
+      const i = pi * 4
+      const cr = d[i], cg = d[i + 1], cb = d[i + 2]
+      d[i + 3] = 0
+      const px = pi % w, py = (pi / w) | 0
+      for (let k = 0; k < 4; k++) {
+        let nx = px, ny = py
+        if (k === 0) { if (px === 0) continue; nx = px - 1 }
+        else if (k === 1) { if (px === w - 1) continue; nx = px + 1 }
+        else if (k === 2) { if (py === 0) continue; ny = py - 1 }
+        else { if (py === h - 1) continue; ny = py + 1 }
+        const ni = ny * w + nx
+        if (visited[ni]) continue
+        const j = ni * 4
+        if (d[j + 3] < 128) { visited[ni] = 1; continue }
+        const nr = d[j], ng = d[j + 1], nb = d[j + 2]
+        const ns2 = nearestSeed2(nr, ng, nb)
+        const nearSeed  = ns2 <= SEED_TOL2
+        const gradFollow = ns2 <= GRAD_CAP2 &&
+          (Math.abs(nr - cr) + Math.abs(ng - cg) + Math.abs(nb - cb)) <= LOCAL_TOL
+        if (nearSeed || gradFollow) { visited[ni] = 1; stack.push(ni) }
+      }
+    }
+
+    // フリンジ掃除：透明に隣接して残った「背景寄りの薄いにじみ」を1pxだけ透過する
+    const fringe: number[] = []
+    for (let pi = 0; pi < w * h; pi++) {
+      const i = pi * 4
+      if (visited[pi] || d[i + 3] === 0) continue
+      if (nearestSeed2(d[i], d[i + 1], d[i + 2]) > FRINGE2) continue
+      const px = pi % w, py = (pi / w) | 0
+      const adjTransparent =
+        (px > 0     && visited[pi - 1]) ||
+        (px < w - 1 && visited[pi + 1]) ||
+        (py > 0     && visited[pi - w]) ||
+        (py < h - 1 && visited[pi + w])
+      if (adjTransparent) fringe.push(pi)
+    }
+    for (const pi of fringe) d[pi * 4 + 3] = 0
 
     ctx.putImageData(id, 0, 0)
     this.textures.remove(key)
