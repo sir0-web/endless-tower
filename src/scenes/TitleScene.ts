@@ -196,14 +196,14 @@ export class TitleScene extends Phaser.Scene {
     if (this.overlay) return
     const cx = W / 2, cy = H / 2
 
-    const panel = this.add.rectangle(cx, cy, Math.min(460, W * 0.88), 320, 0x0a0a22, 0.96)
+    const panel = this.add.rectangle(cx, cy, Math.min(460, W * 0.88), 388, 0x0a0a22, 0.96)
       .setStrokeStyle(2, 0x4455aa)
-    const title = this.add.text(cx, cy - 128, 'SETTINGS', {
+    const title = this.add.text(cx, cy - 162, 'SETTINGS', {
       fontFamily: PIXEL_FONT, fontSize: '16px', color: '#aaaaff',
     }).setOrigin(0.5)
 
     // ── ミュート トグル ──
-    const muteBtn = this.add.text(cx, cy - 60, this.muteLabel(), {
+    const muteBtn = this.add.text(cx, cy - 100, this.muteLabel(), {
       fontFamily: PIXEL_FONT, fontSize: '13px', color: '#00ff88',
       backgroundColor: '#003322', padding: { x: 16, y: 10 },
       fixedWidth: 260, align: 'center',
@@ -211,22 +211,30 @@ export class TitleScene extends Phaser.Scene {
     muteBtn.on('pointerdown', () => { toggleMute(); muteBtn.setText(this.muteLabel()) })
 
     // ── キー設定 トグル ──
-    const keyBtn = this.add.text(cx, cy + 10, this.keyLabel(), {
+    const keyBtn = this.add.text(cx, cy - 38, this.keyLabel(), {
       fontFamily: PIXEL_FONT, fontSize: '13px', color: '#88ddff',
       backgroundColor: '#002233', padding: { x: 16, y: 10 },
       fixedWidth: 260, align: 'center',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     keyBtn.on('pointerdown', () => { this.cycleKeyMode(); keyBtn.setText(this.keyLabel()) })
 
+    // ── オートセーブ トグル ──
+    const autoBtn = this.add.text(cx, cy + 24, this.autoSaveLabel(), {
+      fontFamily: PIXEL_FONT, fontSize: '13px', color: '#ffcc66',
+      backgroundColor: '#332200', padding: { x: 16, y: 10 },
+      fixedWidth: 260, align: 'center',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    autoBtn.on('pointerdown', () => { this.toggleAutoSave(); autoBtn.setText(this.autoSaveLabel()) })
+
     // ── 閉じる ──
-    const closeBtn = this.add.text(cx, cy + 108, 'CLOSE', {
+    const closeBtn = this.add.text(cx, cy + 130, 'CLOSE', {
       fontFamily: PIXEL_FONT, fontSize: '13px', color: '#ffffff',
       backgroundColor: '#330000', padding: { x: 16, y: 10 },
       fixedWidth: 140, align: 'center',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     closeBtn.on('pointerdown', () => this.closeOverlay())
 
-    this.overlay = this.add.container(0, 0, [panel, title, muteBtn, keyBtn, closeBtn]).setDepth(50)
+    this.overlay = this.add.container(0, 0, [panel, title, muteBtn, keyBtn, autoBtn, closeBtn]).setDepth(50)
   }
 
   private muteLabel()  { return isMuted() ? 'SOUND : OFF' : 'SOUND : ON ' }
@@ -240,6 +248,13 @@ export class TitleScene extends Phaser.Scene {
     const cur  = this.getKeyMode()
     const next = order[(order.indexOf(cur) + 1) % order.length]
     localStorage.setItem(KEY_STORAGE, next)
+  }
+
+  // オートセーブ（階層が上がるたびに自動保存）。未設定=ON（デフォルトON）。
+  private getAutoSave() { return (localStorage.getItem('autoSave') ?? 'on') !== 'off' }
+  private autoSaveLabel() { return this.getAutoSave() ? 'AUTO SAVE : ON ' : 'AUTO SAVE : OFF' }
+  private toggleAutoSave() {
+    localStorage.setItem('autoSave', this.getAutoSave() ? 'off' : 'on')
   }
 
 

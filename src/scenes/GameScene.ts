@@ -485,6 +485,15 @@ export class GameScene extends Phaser.Scene {
     this.createTileSprites(map)
   }
 
+  // オートセーブ（階層が上がるたびに保存。誤操作によるデータ消失を防ぐ保険。死亡時は clearSave() で消える）。
+  // TOPのSETTINGSで ON/OFF 切替（localStorage 'autoSave'。未設定=ON）。完了時はプレイ枠左上に薄く通知。
+  private autoSave() {
+    if ((localStorage.getItem('autoSave') ?? 'on') === 'off') return
+    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
+    const ok = saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor })
+    if (ok) window.showAutoSaveToast?.()
+  }
+
   // セーブ実行（プレイ中のセーブボタンから呼ばれる）
   private doSaveGame() {
     const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
@@ -1547,6 +1556,7 @@ export class GameScene extends Phaser.Scene {
       fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがB${floor}階に到達しました！`, `floor:${floor}`)
     }
     this.populateFloor()
+    this.autoSave()   // 階層が上がるたびにオートセーブ
   }
 
   /** 現在の player.floor の階を新規生成して配置・描画する（到達ログ/通知は呼び出し側の責務） */
@@ -2386,7 +2396,7 @@ export class GameScene extends Phaser.Scene {
         break
       }
       default: {
-        let missSub = 'ハズレ…'
+        let missSub = ''
         if (Math.random() < 0.3) {
           if (Math.random() < 0.5) {
             player.stamina = Math.max(0, player.stamina - 20)
@@ -2438,7 +2448,7 @@ export class GameScene extends Phaser.Scene {
     const equip = pool.find(i => i.type === 'equip')
     if (equip) {
       this.state.bag.push({ ...equip, position: { x: 0, y: 0 } })
-      this.addMessage(`🎰 1-2-3！ランダム装備品ゲット！`)
+      this.addMessage(`🎰 女神からのプレゼント！ランダム装備品ゲット！`)
       this.addMessage(`→ ${equip.name}をバッグに入れた`)
     }
   }

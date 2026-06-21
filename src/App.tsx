@@ -12,6 +12,7 @@ import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal, MerchantModal } from './components/EventFacilityModals'
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { GameToast } from './components/GameToast'
+import { AutoSaveToast } from './components/AutoSaveToast'
 import { EventMsgBar } from './components/EventMsgBar'
 import { WorldTelop } from './components/WorldTelop'
 import { WorldLog } from './components/WorldLog'
@@ -164,6 +165,7 @@ function App() {
           <MobileStatusBar />
           <div className="game-canvas-area" ref={canvasAreaRef}>
             <ScrollLockButton />
+            <AutoSaveToast />
             {!fullCanvas && (
               <button
                 className="report-float-btn"

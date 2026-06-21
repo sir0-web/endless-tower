@@ -190,6 +190,7 @@ declare global {
     showReport?: () => void
     triggerSkulporinCheck?: () => void
     showEventMessage?: (message: string, color?: string, small?: boolean) => void
+    showAutoSaveToast?: () => void
     showSkulporinReward?: (
       equips: Item[],
       spells: Item[],

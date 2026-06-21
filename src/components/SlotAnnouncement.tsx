@@ -41,7 +41,7 @@ const CONFIGS: Record<SlotResult, Config> = {
   },
   '777': {
     text: '👊阿修羅覇王拳👊',
-    sub: 'Lv+10 ＋ HP/STA上限+10% ＋ SP+50 ＋ 全敵消滅！！',
+    sub: 'Lv+10 ＋ HP/STA上限+10% ＋ 全敵消滅！！',
     color: '#ffdd00',
     fontSize: 'clamp(44px, 9vw, 76px)',
     animClass: 'sa-anim-zoom',
@@ -62,8 +62,8 @@ const CONFIGS: Record<SlotResult, Config> = {
     sparkles: 20,
   },
   skulls: {
-    text: '💀ゴスリンの呪い💀',
-    sub: '3・3・3 ── HP が半分になった…',
+    text: '👻ゴスリンの呪い👻',
+    sub: 'HP が半分になった…',
     color: '#ff3333',
     fontSize: 'clamp(36px, 7vw, 60px)',
     animClass: 'sa-anim-drop',
@@ -95,7 +95,7 @@ const CONFIGS: Record<SlotResult, Config> = {
     sparkles: 0,
   },
   sequential: {
-    text: '🎁運営からのプレゼント🎁',
+    text: '🎁女神からのプレゼント🎁',
     sub: 'ランダム装備品をバッグに追加！',
     color: '#ffcc00',
     fontSize: 'clamp(28px, 5vw, 48px)',
@@ -106,8 +106,8 @@ const CONFIGS: Record<SlotResult, Config> = {
     sparkles: 0,
   },
   miss: {
-    text: '😭何も揃わなかった😭',
-    sub: 'ハズレ…',
+    text: '💀痛恨の一撃を受けた💀',
+    sub: '',
     color: '#888899',
     fontSize: 'clamp(22px, 4.5vw, 38px)',
     animClass: 'sa-anim-fade',
