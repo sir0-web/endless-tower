@@ -9,6 +9,7 @@ import { logEvent, getPlayerId } from '../game/supabase'
 import { fireWorldNotification, resetWorldNotifyDedup } from '../game/worldNotify'
 import { getDisplayName } from '../game/playerName'
 import { getMonsterTextureOverrides } from '../game/overrides'
+import { ENEMY_TEXTURE_MAP } from '../game/enemyTextures'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
@@ -67,52 +68,6 @@ function floorMiasma(floor: number): { color: number; alpha: number } {
 // 割合貫通率：攻防どちらの近接攻撃でも「攻撃力×この割合」は相手の防御を無視して必ず通る。
 // 防御(VIT+Lv/2)やVIT過積みによる完全無敵化を防ぎ、深部の敵・ボスが必ずチップダメージを与える。
 const PIERCE_RATE = 0.06
-
-const ENEMY_TEXTURE_MAP: Record<string, string> = {
-  'ぽり男':              'pori',
-  'ルナティック':        'lunatic',
-  'ビタタ':              'bitata',
-  'ウィスパー':          'whisper',
-  'スモーキー':          'smokey',
-  '白蓮玉':              'hakurengoku',
-  'ソルジャースケルトン': 'soldierskeleton',
-  'ムナック':            'munack',
-  'デビルチ':            'devilchi',
-  'ゴーレム':            'golem',
-  'マミー':              'mummy',
-  'アラーム':            'alarm',
-  'フェンダーク':        'fendark',
-  'ミノタウロス':        'minotaur',
-  'オットー':            'otto',
-  'チンピラ':            'chinpira',
-  '半魚人':              'fishman',
-  'ナイトメア':          'nightmare',
-  '深淵の騎士':          'abyssalknight',
-  '黄金蟲':              'goldenbug',
-  'オシリス':            'osiris',
-  'エクリプス':          'eclipse',
-  'エンジェリング':      'angeling',
-  'デビルリング':        'deviling',
-  'マスターリング':      'masterring',
-  'ゴーストリング':      'ghostring',
-  'ドレイク':            'drake',
-  'トード':              'toad',
-  'キングドラモ':        'kingdramo',
-  'さすらい狼':          'wanderwolf',
-  'ダークプリースト':    'darkpriest',
-  'キメラ':              'chimera',
-  'ミステルテイン':      'misteltein',
-  'ネクロマンサー':      'necromancer',
-  'ドラゴンフライ':      'dragonfly',
-  'フリオニ':            'furioni',
-  'オークヒーロー':      'oakhero',
-  'オークロード':        'oaklord',
-  'アモンラー':          'amonra',
-  'ダークロード':        'darklord',
-  'ファラオ':            'pharaoh',
-  'モロク':              'molok',
-  'すかるぽりん':        'scullporin',
-}
 
 export class GameScene extends Phaser.Scene {
   private state!: GameState

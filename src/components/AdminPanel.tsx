@@ -9,6 +9,7 @@ import {
 } from '../game/catalog'
 import { HEAL_ITEMS, WING_ITEMS } from '../game/items'
 import type { OverrideCategory } from '../game/overrides'
+import { enemyImagePath, ENEMY_FALLBACK_COLOR } from '../game/enemyTextures'
 
 // 編集フォームのフィールド定義（カテゴリ別）。type: text=文字 / num=数値 / area=複数行
 const DB_SCHEMA: Record<OverrideCategory, { fields: { key: string; label: string; type: 'text' | 'num' | 'area' }[]; image: boolean }> = {
@@ -99,6 +100,42 @@ function fmtJst(ms: number): string { return new Date(ms + JST).toISOString().re
 function fmtJstDate(iso: string): string { return new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) }
 function winActive(w: MaintenanceWindow, now: number): boolean { return now >= w.from && (w.to === null || now < w.to) }
 function winPast(w: MaintenanceWindow, now: number): boolean { return w.to !== null && now >= w.to }
+
+// モンスター詳細パネル用：ゲーム内で実際に表示されている見た目をプレビューする。
+// 優先順位は「公開中の上書き画像 → 静的アセット → 代替表示（カテゴリ色の塗りブロック）」で、
+// ゲーム本体の解決順（ovr_* > enemies/<key>.png > 色矩形フォールバック）に一致させている。
+function GameAppearancePreview({ category, refName, pubImage }: { category: OverrideCategory; refName: string; pubImage: string | null }) {
+  const [imgError, setImgError] = useState(false)
+  const staticPath = enemyImagePath(refName)
+  const src = pubImage || staticPath
+  const fallbackColor = ENEMY_FALLBACK_COLOR[category] ?? '#ff4444'
+  const sourceLabel = !src || imgError
+    ? '代替表示（画像なし→色ブロック）'
+    : pubImage ? '公開中の上書き画像' : '静的アセット'
+  return (
+    <div style={{ marginTop: 12 }}>
+      <label style={S.label}>ゲーム内表示プレビュー（{sourceLabel}）</label>
+      {src && !imgError ? (
+        // 透過が見やすいよう市松模様の上に重ねる
+        <div style={{ display: 'inline-block', padding: 6, borderRadius: 6, border: '1px solid #2a2a4a',
+          backgroundColor: '#2a2a3a',
+          backgroundImage: 'linear-gradient(45deg,#3a3a4a 25%,transparent 25%,transparent 75%,#3a3a4a 75%),linear-gradient(45deg,#3a3a4a 25%,transparent 25%,transparent 75%,#3a3a4a 75%)',
+          backgroundSize: '16px 16px', backgroundPosition: '0 0,8px 8px' }}>
+          <img src={src} alt={refName} onError={() => setImgError(true)}
+            style={{ display: 'block', maxWidth: 120, maxHeight: 120, imageRendering: 'pixelated' }} />
+        </div>
+      ) : (
+        // 画像が無い敵をゲームが描画する代替表示（カテゴリ色の塗りつぶし矩形）を再現
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 64, height: 64, background: fallbackColor, borderRadius: 4, border: '1px solid #00000055' }} />
+          <span style={{ fontSize: 12, color: '#888' }}>
+            画像未登録のため、ゲーム内ではこの色の四角で表示されます。
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function AdminPanel() {
   const [authed, setAuthed] = useState(false)
@@ -1693,6 +1730,14 @@ export function AdminPanel() {
                   </span>
                   <button onClick={() => setDbEditing(null)} style={S.btnSm}>閉じる</button>
                 </div>
+                {dbEditing.category.startsWith('monster_') && (
+                  <GameAppearancePreview
+                    key={dbEditing.ref}
+                    category={dbEditing.category}
+                    refName={dbEditing.ref}
+                    pubImage={(dbRowOf(dbEditing.category, dbEditing.ref)?.pub_image as string | undefined) ?? null}
+                  />
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
                   {DB_SCHEMA[dbEditing.category].fields.map(f => (
                     <div key={f.key}>
