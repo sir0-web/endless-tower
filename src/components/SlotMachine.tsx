@@ -239,9 +239,21 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
     setSpinMode(prev => {
       const next = prev === 'auto' ? 'manual' : 'auto'
       spinModeRef.current = next
+      // スピン中に MANUAL→AUTO へ切り替えた場合の救済：
+      // MANUAL開始のスピンは自動停止タイマーが仕込まれていないため、そのままだと
+      // AUTOでもSTOPでも止められず固まる。未停止のリールに自動停止を仕込んで必ず止める。
+      if (next === 'auto' && busyRef.current) {
+        let delay = 200
+        for (let i = 0; i < 3; i++) {
+          if (!reelStoppedRef.current[i]) {
+            addTimer(() => stopReel(i), delay)
+            delay += 350
+          }
+        }
+      }
       return next
     })
-  }, [])
+  }, [addTimer, stopReel])
 
   const handleManualStop = useCallback((idx: number) => {
     if (spinModeRef.current !== 'manual') return
