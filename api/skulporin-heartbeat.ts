@@ -111,6 +111,12 @@ export default async function handler(req: any, res: any) {
       return res.json({ spawn: null, commands, rewards, _debug: 'daily limit reached' })
     }
 
+    // 5.5 挿入直前の最終ガード：await連鎖中に別リクエストがスポーン済みでないか再確認（レース窓を縮小）。
+    //     最終的な排他は uniq_skulporin_active（全鯖activeは常に1体）に依存するが、ここで弾ければ無駄INSERTを防げる。
+    const { data: active2 } = await db.from('skulporin_spawns')
+      .select('id').eq('status', 'active').gt('escapes_at', now.toISOString()).limit(1).maybeSingle()
+    if (active2) return res.json({ spawn: null, commands, rewards, _debug: 'guard: active spawn appeared during heartbeat' })
+
     // 6. スポーン
     const escapesAt = new Date(Date.now() + SPAWN_DURATION_MS)
 
