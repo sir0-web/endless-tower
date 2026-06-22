@@ -184,6 +184,7 @@ declare global {
     // ── グローバルUI ──
     showHowToPlay?: () => void
     showNews?: () => void
+    showMailBox?: () => void
     showGameToast?: (message: string) => void
     addWorldLogMessage?: (text: string) => void
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void

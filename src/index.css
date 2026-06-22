@@ -2928,6 +2928,53 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   font-size: clamp(18px, 1.9vw, 26px);
 }
 
+/* メールBOX：常駐の📧ボタン（画面右上・TOP/ゲーム中どちらでも）＋新着バッジ */
+.mailbox-fab {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 8000;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1.5px solid #9c7a33;
+  background: rgba(20, 16, 8, 0.78);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+.mailbox-fab:hover { transform: scale(1.08); box-shadow: 0 2px 12px rgba(255, 210, 120, 0.5); }
+.mailbox-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #e23b2e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  animation: mailbox-badge-pop 0.3s ease both;
+}
+@keyframes mailbox-badge-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+@media (max-width: 500px) {
+  .mailbox-fab { width: 34px; height: 34px; font-size: 17px; top: 8px; right: 8px; }
+}
+
 /* オートセーブ完了の薄いポップ（プレイ枠の左上・フェードイン→約3秒→フェードアウト） */
 .autosave-toast {
   position: absolute;

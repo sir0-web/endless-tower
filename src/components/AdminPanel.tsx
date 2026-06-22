@@ -48,7 +48,7 @@ const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database'
+type Tab = 'maintenance' | 'message' | 'dm' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database'
 type DbTab = 'monster' | 'equip' | 'item' | 'spell'
 
 interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
@@ -224,6 +224,19 @@ export function AdminPanel() {
   const [evMhTargetId, setEvMhTargetId] = useState('')   // モンスターハウス用ターゲット
   const [evMonster, setEvMonster]   = useState(MONSTER_REGISTRY[0]?.name ?? '')
   const [evFloor, setEvFloor]       = useState('')
+
+  // ── DM ──
+  const [dmTargetId, setDmTargetId]   = useState('')
+  const [dmManualId, setDmManualId]   = useState('')   // player_id 直接入力
+  const [dmTitle, setDmTitle]         = useState('')
+  const [dmBody, setDmBody]           = useState('')
+  const [dmMsg, setDmMsg]             = useState('')
+  const [dmSending, setDmSending]     = useState(false)
+  const [dmThreads, setDmThreads]     = useState<{ player_id: string; player_name: string | null; last_body: string; last_at: string; unread: number }[]>([])
+  const [dmUnread, setDmUnread]       = useState(0)
+  const [dmReply, setDmReply]         = useState('')                    // スレッド返信用（新規DM本文とは別）
+  const [dmOpenId, setDmOpenId]       = useState<string | null>(null)   // 開いているスレッドのplayer_id
+  const [dmThread, setDmThread]       = useState<{ id: number; sender: string; title: string | null; body: string; read: boolean; created_at: string }[]>([])
 
   // ゲームのグローバルCSSがhtml/body/#rootにoverflow:hidden+height:100%を設定しているためAdmin画面でスクロールを許可する
   useEffect(() => {
@@ -627,6 +640,63 @@ export function AdminPanel() {
     })
   }
 
+  // ── DM ──
+  const postMail = async (body: Record<string, unknown>): Promise<any | null> => {
+    try {
+      const res = await fetch('/api/admin-mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: ADMIN_KEY, ...body }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setDmMsg(`エラー: ${json.error ?? res.status}`); return null }
+      return json
+    } catch (e) {
+      setDmMsg(`エラー: ${String(e)}`); return null
+    }
+  }
+
+  const loadDmInbox = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin-mail', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: ADMIN_KEY, action: 'inbox' }),
+      })
+      const json = await res.json()
+      if (res.ok) { setDmThreads(json.threads ?? []); setDmUnread(json.unread ?? 0) }
+    } catch { /* ignore */ }
+  }, [])
+
+  const sendDm = async () => {
+    const targetId = (dmManualId.trim() || dmTargetId).trim()
+    if (!targetId) { setDmMsg('宛先（プレイヤー）を選択 or 入力してください'); return }
+    if (!dmTitle.trim() || !dmBody.trim()) { setDmMsg('件名・本文を入力してください'); return }
+    setDmSending(true); setDmMsg('')
+    const p = onlinePlayers.find(o => o.player_id === targetId)
+    const ok = await postMail({
+      action: 'send', to_player_id: targetId,
+      to_player_name: p?.player_name ?? dmThreads.find(t => t.player_id === targetId)?.player_name ?? null,
+      title: dmTitle.trim(), body: dmBody.trim(),
+    })
+    setDmSending(false)
+    if (ok) { setDmMsg('送信しました ✓'); setDmTitle(''); setDmBody('') }
+  }
+
+  const openDmThread = async (player_id: string) => {
+    setDmOpenId(player_id)
+    const json = await postMail({ action: 'thread', player_id })
+    if (json) { setDmThread(json.messages ?? []); void loadDmInbox() }   // 開くと既読化→受信箱更新
+  }
+
+  const replyToThread = async () => {
+    if (!dmOpenId || !dmReply.trim()) { setDmMsg('本文を入力してください'); return }
+    setDmSending(true); setDmMsg('')
+    const t = dmThreads.find(x => x.player_id === dmOpenId)
+    const ok = await postMail({ action: 'send', to_player_id: dmOpenId, to_player_name: t?.player_name ?? null, title: '運営より', body: dmReply.trim() })
+    setDmSending(false)
+    if (ok) { setDmReply(''); void openDmThread(dmOpenId) }
+  }
+
   // ── データベース（参照＋編集）──
   const [dbTab, setDbTab] = useState<DbTab>('monster')
   const [dbRows, setDbRows] = useState<Record<string, unknown>[]>([])   // 上書き行（下書き含む）
@@ -849,7 +919,8 @@ export function AdminPanel() {
     if (tab === 'event')       loadOnlinePlayers()
     if (tab === 'news')        loadNews()
     if (tab === 'database')    loadDbRows()
-  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews, loadDbRows])
+    if (tab === 'dm')          { loadOnlinePlayers(); loadDmInbox() }
+  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews, loadDbRows, loadDmInbox])
 
   const now = Date.now()
   const isOpen = windows.some(w => winActive(w, now))
@@ -868,7 +939,7 @@ export function AdminPanel() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    maintenance: 'メンテナンス', message: 'メッセージ配信', event: 'イベント',
+    maintenance: 'メンテナンス', message: 'メッセージ配信', dm: `DM${dmUnread > 0 ? `(${dmUnread})` : ''}`, event: 'イベント',
     ranking: 'ランキング', worldlog: 'ワールドログ',
     users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ', database: 'データベース',
   }
@@ -1052,6 +1123,91 @@ export function AdminPanel() {
         )}
 
         {/* ══ イベント ══ */}
+        {tab === 'dm' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <button onClick={() => { loadDmInbox(); loadOnlinePlayers() }} style={S.btnSm}>🔄 更新</button>
+              <span style={S.muted}>未読返信: {dmUnread} 件 / オンライン: {onlinePlayers.length} 人</span>
+            </div>
+            {dmMsg && <div style={{ color: dmMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 12 }}>{dmMsg}</div>}
+
+            {/* 受信箱（プレイヤー返信スレッド一覧） */}
+            <div style={S.section}>
+              <div style={S.sectionTitle}>受信箱（プレイヤーからの返信）</div>
+              {dmThreads.length === 0 && <p style={S.muted}>まだ返信はありません。</p>}
+              {dmThreads.map(t => (
+                <div key={t.player_id}
+                  onClick={() => void openDmThread(t.player_id)}
+                  style={{ ...S.card, marginTop: 8, cursor: 'pointer', borderColor: t.unread > 0 ? '#e23b2e' : undefined }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700 }}>{t.player_name ?? '（無名）'}</span>
+                    {t.unread > 0 && <span style={{ background: '#e23b2e', color: '#fff', borderRadius: 8, padding: '1px 8px', fontSize: 12, fontWeight: 800 }}>未読{t.unread}</span>}
+                    <span style={{ ...S.muted, marginLeft: 'auto', fontSize: 12 }}>{new Date(t.last_at).toLocaleString('ja-JP')}</span>
+                  </div>
+                  <div style={{ ...S.muted, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.last_body}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* スレッド表示＋返信 */}
+            {dmOpenId && (
+              <div style={S.section}>
+                <div style={S.sectionTitle}>
+                  会話：{dmThreads.find(t => t.player_id === dmOpenId)?.player_name ?? dmOpenId}
+                  <button onClick={() => { setDmOpenId(null); setDmThread([]) }} style={{ ...S.btnSm, marginLeft: 10 }}>閉じる</button>
+                </div>
+                <div style={{ ...S.card, marginTop: 0, maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {dmThread.map(m => (
+                    <div key={m.id} style={{
+                      alignSelf: m.sender === 'admin' ? 'flex-end' : 'flex-start',
+                      maxWidth: '85%', padding: '6px 10px', borderRadius: 8,
+                      background: m.sender === 'admin' ? 'rgba(80,120,200,0.25)' : 'rgba(120,160,90,0.25)',
+                    }}>
+                      <div style={{ fontSize: 11, opacity: 0.7 }}>{m.sender === 'admin' ? '運営' : 'プレイヤー'}・{new Date(m.created_at).toLocaleString('ja-JP')}{m.title ? `・${m.title}` : ''}</div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'flex-end' }}>
+                  <textarea value={dmReply} onChange={e => setDmReply(e.target.value)} placeholder="返信を入力…" rows={2} style={{ ...S.input, flex: 1, resize: 'none' }} />
+                  <button onClick={() => void replyToThread()} disabled={dmSending || !dmReply.trim()} style={S.btnPrimary}>{dmSending ? '送信中…' : '返信'}</button>
+                </div>
+              </div>
+            )}
+
+            {/* 新規DM送信 */}
+            <div style={S.section}>
+              <div style={S.sectionTitle}>新規DM送信</div>
+              <div style={{ ...S.card, marginTop: 0 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label style={S.label}>宛先（オンライン中）</label>
+                    <select value={dmTargetId} onChange={e => { setDmTargetId(e.target.value); setDmManualId('') }} style={S.input}>
+                      <option value="">― 選択 ―</option>
+                      {onlinePlayers.map(p => (
+                        <option key={p.player_id} value={p.player_id}>{p.player_name}（B{p.floor}F）</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label style={S.label}>or player_id 直接入力</label>
+                    <input value={dmManualId} onChange={e => { setDmManualId(e.target.value); if (e.target.value) setDmTargetId('') }} placeholder="et_player_id" style={S.input} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <label style={S.label}>件名</label>
+                  <input value={dmTitle} onChange={e => setDmTitle(e.target.value)} placeholder="運営からのお知らせ" style={S.input} />
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <label style={S.label}>本文</label>
+                  <textarea value={dmBody} onChange={e => setDmBody(e.target.value)} rows={4} placeholder="本文" style={{ ...S.input, resize: 'vertical' }} />
+                </div>
+                <button onClick={() => void sendDm()} disabled={dmSending} style={{ ...S.btnPrimary, marginTop: 10 }}>{dmSending ? '送信中…' : '✉️ DMを送信'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {tab === 'event' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>

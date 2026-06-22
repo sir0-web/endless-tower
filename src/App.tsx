@@ -13,6 +13,7 @@ import { RefineModal, ShadowEquipModal, SpellbookModal, MerchantModal } from './
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { GameToast } from './components/GameToast'
 import { AutoSaveToast } from './components/AutoSaveToast'
+import { MailBox } from './components/MailBox'
 import { EventMsgBar } from './components/EventMsgBar'
 import { WorldTelop } from './components/WorldTelop'
 import { WorldLog } from './components/WorldLog'
@@ -198,6 +199,7 @@ function App() {
     </div>
     <WorldTelop />
     <WorldLog />
+    <MailBox />
     <HowToPlay />
     <ArcanaRoulette />
     <SkulporinReward />
