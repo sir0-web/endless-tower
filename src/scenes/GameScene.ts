@@ -163,6 +163,9 @@ export class GameScene extends Phaser.Scene {
   // ── すかるぽりん ──
   private skulporinSpawnId: number | null = null
   private skulporinEscapeAt: number | null = null
+  // 討伐/逃走で決着済みのスポーンID。討伐通知(fire-and-forget)がサーバー反映される前に
+  // フロア入場 heartbeat が同じactiveを返して「倒した直後に再出現」するのを防ぐ。
+  private resolvedSkulporinIds = new Set<number>()
   private skulporinHeartbeatTimer: ReturnType<typeof setInterval> | null = null
   private skulporinEscapeTimer: ReturnType<typeof setInterval> | null = null
 
@@ -2138,6 +2141,9 @@ export class GameScene extends Phaser.Scene {
   } | null): void {
     if (!spawn || spawn.status !== 'active') return
 
+    // 既に倒した/逃した個体は無視（討伐通知のサーバー反映前に再表示されるのを防ぐ）
+    if (this.resolvedSkulporinIds.has(spawn.id)) return
+
     // ターゲットに指名された本人のフロアにのみ出現させる（全員には出さない）
     if (spawn.target_player_id !== getPlayerId()) return
 
@@ -2212,6 +2218,7 @@ export class GameScene extends Phaser.Scene {
     // API に討伐を通知（fire-and-forget）
     const spawnId = this.skulporinSpawnId
     if (spawnId !== null) {
+      this.resolvedSkulporinIds.add(spawnId)   // 反映前の再出現を防ぐ
       void fetch('/api/skulporin-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2259,6 +2266,7 @@ export class GameScene extends Phaser.Scene {
     this.skulporinEscapeAt = null
 
     if (spawnId !== null) {
+      this.resolvedSkulporinIds.add(spawnId)   // 反映前の再出現を防ぐ
       void fetch('/api/skulporin-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
