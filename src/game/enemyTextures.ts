@@ -23,6 +23,7 @@ export const ENEMY_TEXTURE_MAP: Record<string, string> = {
   '深淵の騎士':          'abyssalknight',
   '黄金蟲':              'goldenbug',
   'オシリス':            'osiris',
+  'ストラウフ':          'stra',
   'エクリプス':          'eclipse',
   'エンジェリング':      'angeling',
   'デビルリング':        'deviling',

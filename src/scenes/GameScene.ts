@@ -70,6 +70,12 @@ function floorMiasma(floor: number): { color: number; alpha: number } {
 // 防御(VIT+Lv/2)やVIT過積みによる完全無敵化を防ぎ、深部の敵・ボスが必ずチップダメージを与える。
 const PIERCE_RATE = 0.06
 
+// モンスター別の表示サイズ係数（1.0=標準）。可視部分=主人公サイズ補正の上に掛かる。
+// 大きすぎ/小さすぎる個体をモンスター名で個別調整する（ADMIN上書き画像にも適用）。
+const ENEMY_SIZE_MULT: Record<string, number> = {
+  'ヨーヨー': 0.8,
+}
+
 // AGI：多段攻撃の閾値を逓増（2hit=50, 3hit=100, 4hit=200, 5hit=400, …＝倍々）。天井は8回。
 // 旧仕様(50刻み・5回上限)の「AGI200で打ち止め＝死にステ」を解消し、青天井で報われるように。
 function playerAttackCount(agi: number): number {
@@ -264,6 +270,7 @@ export class GameScene extends Phaser.Scene {
       ['kingdramo',       '/assets/characters/enemies/kingdramo.png'],
       ['oakhero',         '/assets/characters/enemies/oakhero.png'],
       ['osiris',          '/assets/characters/enemies/osiris.png'],
+      ['stra',            '/assets/characters/enemies/stra.png'],
       ['horu',            '/assets/characters/enemies/horu.png'],
       ['master',          '/assets/characters/enemies/master.png'],
       ['maho',            '/assets/characters/enemies/maho.png'],
@@ -3203,23 +3210,25 @@ export class GameScene extends Phaser.Scene {
         // 透過パディング補正でサイズ指定するテクスチャ
         // heroSized: 可視部分が主人公（1.25×1.38タイル）と同サイズになるよう補正
         const fracSized: Record<string, number> = { deviling: 1.25, masterring: 1.25 }
-        const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'wanderwolf', 'kingdramo', 'scullporin']
+        const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'stra', 'wanderwolf', 'kingdramo', 'scullporin']
+        // モンスター別の表示サイズ係数（ENEMY_SIZE_MULT、1.0=標準）。大きすぎる個体を個別に縮小。
+        const sizeMult = ENEMY_SIZE_MULT[baseName] ?? 1.0
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
-          // 上書き画像(ovr_*)も主人公サイズに合わせる（可視部分を計算して補正）
+          // 上書き画像(ovr_*)も主人公サイズに合わせる（可視部分を計算して補正）。係数で個別調整可。
           if (heroSized.includes(textureKey) || textureKey.startsWith('ovr_')) {
             const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
             g = this.add.image(ex, ey, textureKey)
-              .setDisplaySize(rts * 1.25 / wFrac, rts * 1.38 / hFrac).setDepth(5)
+              .setDisplaySize(rts * 1.25 * sizeMult / wFrac, rts * 1.38 * sizeMult / hFrac).setDepth(5)
           } else if (textureKey in fracSized) {
             const { wFrac, hFrac } = this.getVisibleFraction(textureKey)
-            const target = rts * fracSized[textureKey]
+            const target = rts * fracSized[textureKey] * sizeMult
             g = this.add.image(ex, ey, textureKey)
               .setDisplaySize(target / wFrac, target / hFrac).setDepth(5)
           } else {
-            const eSize = ['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3
+            const eSize = (['whisper', 'chinpira'].includes(textureKey) ? rts * 1.3
               : ['eclipse', 'angeling', 'goldenbug'].includes(textureKey) ? rts * 1.5
               : textureKey === 'furioni' ? rts * 2.0
-              : rts - 2
+              : rts - 2) * sizeMult
             g = this.add.image(ex, ey, textureKey)
               .setDisplaySize(eSize, eSize).setDepth(5)
           }
