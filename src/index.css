@@ -159,6 +159,8 @@ html, body {
   line-height: 1;
   flex-shrink: 0;
 }
+/* 📧(MailButton)を右端アンカーにし、続く🔊は隙間なく左隣へ */
+.mob-mute-btn + .mob-mute-btn { margin-left: 6px; }
 
 /* セーブボタン（サウンドボタンの隣） */
 .mob-save-btn {
@@ -517,6 +519,8 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 }
 .pc-mute-btn:hover { background: rgba(40, 40, 60, 0.7); }
 .pc-mute-btn:active { transform: translateY(1px); }
+/* 📧(MailButton)を右端アンカーにし、続く🔊は隙間なく左隣へ */
+.pc-mute-btn + .pc-mute-btn { margin-left: 6px; }
 
 .pc-save-btn {
   flex-shrink: 0;
