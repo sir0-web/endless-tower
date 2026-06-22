@@ -10,6 +10,15 @@ export interface Mail {
   created_at: string
 }
 
+// ── 未読数の共有ストア（MailBoxがポーリングで更新 → MailButtonがバッジ表示）──
+let _unread = 0
+const _subs = new Set<(n: number) => void>()
+export function setMailUnread(n: number): void { _unread = n; _subs.forEach(f => f(n)) }
+export function getMailUnread(): number { return _unread }
+export function subscribeMailUnread(f: (n: number) => void): () => void {
+  _subs.add(f); f(_unread); return () => { _subs.delete(f) }
+}
+
 // 会話(全件)＋未読(admin発)数を取得。失敗時は空（機能無効）として返す。
 export async function fetchMailbox(): Promise<{ mails: Mail[]; unread: number }> {
   try {

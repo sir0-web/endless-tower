@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchMailbox, markMailsRead, sendMailReply, type Mail } from '../game/mailbox'
+import { fetchMailbox, markMailsRead, sendMailReply, setMailUnread, type Mail } from '../game/mailbox'
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString('ja-JP', {
@@ -13,21 +13,20 @@ export function MailBox() {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [mails, setMails]     = useState<Mail[]>([])
-  const [unread, setUnread]   = useState(0)
   const [reply, setReply]     = useState('')
   const [sending, setSending] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const refreshUnread = useCallback(async () => {
     const { unread } = await fetchMailbox()
-    setUnread(unread)
+    setMailUnread(unread)
   }, [])
 
   const load = useCallback(async (markRead: boolean) => {
     setLoading(true)
     const { mails } = await fetchMailbox()
     setMails(mails); setLoading(false)
-    if (markRead && mails.some(m => m.sender === 'admin' && !m.read)) { void markMailsRead(); setUnread(0) }
+    if (markRead && mails.some(m => m.sender === 'admin' && !m.read)) { void markMailsRead(); setMailUnread(0) }
   }, [])
 
   const openBox = useCallback(async () => { setOpen(true); await load(true) }, [load])
@@ -54,13 +53,10 @@ export function MailBox() {
 
   const hasAdminMsg = mails.some(m => m.sender === 'admin')
 
+  if (!open) return null
+
   return (
     <>
-      <button className="mailbox-fab" onClick={() => void openBox()} aria-label="メールBOX" title="メールBOX（運営からのメッセージ）">
-        📧
-        {unread > 0 && <span className="mailbox-badge">{unread > 99 ? '99+' : unread}</span>}
-      </button>
-
       {open && (
         <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) setOpen(false) }}>
           <div style={S.panel}>

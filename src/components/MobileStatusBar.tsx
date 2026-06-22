@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
 import { getDisplayName } from '../game/playerName'
+import { MailButton } from './MailButton'
 
 interface StatusSnap {
   hp: number; maxHp: number
@@ -84,6 +85,7 @@ export function MobileStatusBar() {
         </span>
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
         <span className="badge name-badge mob-badge">{name}</span>
+        <MailButton className="mob-mute-btn" />
         <button className="mob-mute-btn" data-priority-tap onClick={toggleMute}>{mute ? '🔇' : '🔊'}</button>
         <button className="mob-save-btn" data-priority-tap onClick={handleSave}>セーブ</button>
       </div>

@@ -3,6 +3,7 @@ import type { Equipment, Item, MinimapData, AllocStat } from '../types'
 import { SlotMachine } from './SlotMachine'
 import { BonusVideo } from './BonusVideo'
 import { HoldRepeatButton } from './HoldRepeatButton'
+import { MailButton } from './MailButton'
 import { getDisplayName } from '../game/playerName'
 import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
 
@@ -153,6 +154,7 @@ export function UIPanel() {
           <span className="badge level-badge">Lv {gs.level}</span>
           <span className="badge name-badge">{name}</span>
           {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
+          <MailButton className="pc-mute-btn" />
           <button className="pc-mute-btn" onClick={toggleMute} title={mute ? 'ミュート中' : 'サウンドON'}>{mute ? '🔇' : '🔊'}</button>
           <button className="pc-save-btn" onClick={() => window.saveGame?.()}>セーブ</button>
         </div>
