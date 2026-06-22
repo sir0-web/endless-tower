@@ -86,7 +86,7 @@ export function MailBox() {
                 ) : (
                   <div key={m.id} style={S.playerMsg}>
                     <p style={S.msgBodyMine}>{m.body}</p>
-                    <span style={S.msgDateMine}>{fmtDate(m.created_at)}{m.read ? ' ・既読' : ''}</span>
+                    <span style={S.msgDateMine}>{fmtDate(m.created_at)} ・{m.read ? '既読' : '未読'}</span>
                   </div>
                 )
               ))}

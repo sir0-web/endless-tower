@@ -1163,7 +1163,10 @@ export function AdminPanel() {
                       maxWidth: '85%', padding: '6px 10px', borderRadius: 8,
                       background: m.sender === 'admin' ? 'rgba(80,120,200,0.25)' : 'rgba(120,160,90,0.25)',
                     }}>
-                      <div style={{ fontSize: 11, opacity: 0.7 }}>{m.sender === 'admin' ? '運営' : 'プレイヤー'}・{new Date(m.created_at).toLocaleString('ja-JP')}{m.title ? `・${m.title}` : ''}</div>
+                      <div style={{ fontSize: 11, opacity: 0.7 }}>
+                        {m.sender === 'admin' ? '運営' : 'プレイヤー'}・{new Date(m.created_at).toLocaleString('ja-JP')}{m.title ? `・${m.title}` : ''}
+                        {m.sender === 'admin' && <span style={{ color: m.read ? '#4ade80' : '#f0a020', fontWeight: 700 }}>・{m.read ? '既読' : '未読'}</span>}
+                      </div>
                       <div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div>
                     </div>
                   ))}
