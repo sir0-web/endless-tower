@@ -303,6 +303,21 @@ export class GameScene extends Phaser.Scene {
       ['joker',           '/assets/characters/enemies/joker.png'],
       ['kuranp',          '/assets/characters/enemies/kuranp.png'],
       ['jesta',           '/assets/characters/enemies/jesta.png'],
+      ['yafa',            '/assets/characters/enemies/yafa.png'],
+      ['dorakyura',       '/assets/characters/enemies/dorakyura.png'],
+      ['dark',            '/assets/characters/enemies/dark.png'],
+      ['oul',             '/assets/characters/enemies/oul.png'],
+      ['myutant',         '/assets/characters/enemies/myutant.png'],
+      ['darkpri',         '/assets/characters/enemies/darkpri.png'],
+      ['kimera',          '/assets/characters/enemies/kimera.png'],
+      ['mistel',          '/assets/characters/enemies/mistel.png'],
+      ['nekuro',          '/assets/characters/enemies/nekuro.png'],
+      ['amon',            '/assets/characters/enemies/amon.png'],
+      ['farao',           '/assets/characters/enemies/farao.png'],
+      ['moroku',          '/assets/characters/enemies/moroku.png'],
+      ['dragonfly',       '/assets/characters/enemies/dragonfly.png'],
+      ['deviling',        '/assets/characters/enemies/deviling.png'],
+      ['masterring',      '/assets/characters/enemies/masterring.png'],
     ]
     for (const [key, path] of enemyImages) this.load.image(key, path)
 
@@ -3237,7 +3252,8 @@ export class GameScene extends Phaser.Scene {
         // 透過パディング補正でサイズ指定するテクスチャ
         // heroSized: 可視部分が主人公（1.25×1.38タイル）と同サイズになるよう補正
         const fracSized: Record<string, number> = { deviling: 1.25, masterring: 1.25 }
-        const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'stra', 'wanderwolf', 'kingdramo', 'scullporin']
+        const heroSized = ['ghostring', 'drake', 'toad', 'oaklord', 'oakhero', 'osiris', 'stra', 'wanderwolf', 'kingdramo', 'scullporin',
+          'yafa', 'dorakyura', 'dark', 'oul', 'myutant', 'darkpri', 'kimera', 'mistel', 'nekuro', 'amon', 'farao', 'moroku', 'dragonfly']
         // モンスター別の表示サイズ係数（ENEMY_SIZE_MULT、1.0=標準）。大きすぎる個体を個別に縮小。
         const sizeMult = ENEMY_SIZE_MULT[baseName] ?? 1.0
         if (textureKey && !this.failedTextures.has(textureKey) && this.textures.exists(textureKey)) {
