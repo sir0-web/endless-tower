@@ -43,7 +43,7 @@ export class RankingScene extends Phaser.Scene {
 
     this.add.rectangle(cx, H / 2, W, H, 0x000000)
 
-    this.add.text(cx, H * 0.07, 'ランキング TOP10', {
+    this.add.text(cx, H * 0.07, 'ランキング TOP30', {
       fontSize: fs(36), color: '#ffdd00', fontStyle: 'bold',
     }).setOrigin(0.5)
 
@@ -74,10 +74,19 @@ export class RankingScene extends Phaser.Scene {
     line.lineBetween(W * 0.02, lineY, W * 0.98, lineY)
 
     // ランキング表示
-    const rowH = Math.max(22, Math.round(36 * sc))
-    const listTop = H * 0.28
+    const listTop    = H * 0.28
+    const listBottom = H * 0.84
+    const count      = this.ranking.length
+    // 件数が多いと収まらないため、利用可能な高さに合わせて行高を圧縮する
+    const rowH = Math.min(
+      Math.max(22, Math.round(36 * sc)),
+      (listBottom - listTop) / Math.max(count, 1)
+    )
+    // 行高に応じてフォントを縮める（30件でも画面内に収める）
+    const rowFs = (base: number) =>
+      `${Math.max(9, Math.min(Math.round(base * sc), Math.round(rowH * (base / 18) * 0.9)))}px`
 
-    if (this.ranking.length === 0) {
+    if (count === 0) {
       this.add.text(cx, H * 0.50, 'まだ記録がありません', {
         fontSize: fs(18), color: '#aaaaaa',
       }).setOrigin(0.5)
@@ -86,11 +95,11 @@ export class RankingScene extends Phaser.Scene {
         const y     = listTop + i * rowH
         const color = i === 0 ? '#ffdd00' : i === 1 ? '#cccccc' : i === 2 ? '#cc8844' : '#ffffff'
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
-        const entryFs = fs(18)
+        const entryFs = rowFs(18)
 
         this.add.text(colRank,  y, medal,             { fontSize: entryFs, color })
         this.add.text(colName,  y, entry.player_name, { fontSize: entryFs, color })
-        this.add.text(colFloor, y, floorLabel(entry.floor),       { fontSize: fs(14), color }).setOrigin(0.5, 0)
+        this.add.text(colFloor, y, floorLabel(entry.floor),       { fontSize: rowFs(14), color }).setOrigin(0.5, 0)
         this.add.text(colLevel, y, `${entry.level ?? '─'}`,       { fontSize: entryFs, color }).setOrigin(0.5, 0)
       })
     }

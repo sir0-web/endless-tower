@@ -52,7 +52,7 @@ export async function fetchRanking() {
     .from('ebt_rankings')
     .select('*')
     .order('floor', { ascending: false })
-    .limit(10)
+    .limit(30)
   
   if (error) {
     console.error('ランキング取得エラー:', error)
