@@ -118,6 +118,7 @@ export function dedupeEnemyPositions(
     [freeTiles[i], freeTiles[j]] = [freeTiles[j], freeTiles[i]]
   }
 
+  const playerKey = `${playerPos.x},${playerPos.y}`
   let fi = 0
   for (const e of enemies) {
     const key = `${e.position.x},${e.position.y}`
@@ -131,8 +132,13 @@ export function dedupeEnemyPositions(
       const t = freeTiles[fi++]
       e.position = { x: t.x, y: t.y }
       occupied.add(`${t.x},${t.y}`)
+    } else if (key === playerKey && freeTiles.length > 0) {
+      // 最後の保険：空きが尽きても「プレイヤーと同じマス」にだけは絶対残さない。
+      // 敵が他の床へ重なるのは許容（プレイヤー被りより遥かに害が小さい）。
+      const t = freeTiles[freeTiles.length - 1]
+      e.position = { x: t.x, y: t.y }
     }
-    // 空きが尽きた極端なケースはそのまま（実質発生しない）
+    // それ以外で空きが尽きた極端なケースはそのまま（countに上限があるため実質発生しない）
   }
 }
 

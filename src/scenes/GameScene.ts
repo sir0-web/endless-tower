@@ -1435,7 +1435,10 @@ export class GameScene extends Phaser.Scene {
       player.stamina = Math.min(player.maxStamina, player.stamina + recover)
       this.addMessage(`${item.name}を使った！スタミナ+${recover}`)
     } else {
-      const heal = item.healAmount ?? 10
+      // 割合回復（青ポーション）は最大HP×割合とhealAmountの大きい方。通常は固定値healAmount。
+      const flat    = item.healAmount ?? 10
+      const percent = item.healPercent ? Math.floor(player.maxHp * item.healPercent) : 0
+      const heal    = Math.max(flat, percent)
       player.hp = Math.min(player.maxHp, player.hp + heal)
       this.addMessage(`${item.name}を使った！HP+${heal}`)
     }
@@ -1649,9 +1652,11 @@ export class GameScene extends Phaser.Scene {
       floorType = 'chaos'
       this.forceMonsterHouseNextFloor = false
     }
+    // 通常フロアの敵数。LUKで増えるが過剰にならないよう係数を大幅に下げ、上限も設ける。
+    // （旧: luk*0.5 だとLUK2000で約1000体湧き、空きマス不足で重なり・プレイヤー被り＆描画フリーズを誘発していた）
     const base     = 5
-    const lukBonus = Math.floor(this.state.player.luk * 0.5)
-    const count    = base + Math.floor(Math.random() * (base + lukBonus))
+    const lukBonus = Math.min(Math.floor(this.state.player.luk * 0.04), 12)
+    const count    = Math.min(base + Math.floor(Math.random() * (base + lukBonus)), 24)
     const normalEnemies = floorType === 'chaos'
       ? spawnMonsterHouseEnemies(map, floor, playerPos)
       : spawnEnemies(map, count, floor)

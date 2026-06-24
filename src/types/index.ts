@@ -31,6 +31,7 @@ export interface Item {
   // 回復アイテム
   healAmount?: number
   staminaPercent?: number
+  healPercent?: number   // 最大HPに対する割合回復（青ポーション。healAmountを下限として併用）
   // 装備アイテム
   equipSlot?: EquipSlot
   hpBonus?: number

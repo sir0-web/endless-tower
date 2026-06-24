@@ -15,7 +15,14 @@ export const HEAL_ITEMS = [
   { name: 'スタミナポーション', healAmount: 0, staminaPercent: 30 },
 ]
 
-// いいね報酬で配るポーション名（色ランダム抽選用）
+// ── 上位の割合回復ポーション（白ポーションの1つ上）──
+// 最大HPの50%を回復し、深層ほど価値が高い。早期でも白(30)を必ず上回るよう下限40を併用。
+// ドロップは低め：回復枠が出たときのみ RARE_POTION_DROP_RATE で抽選、かつ序盤には出さない。
+export const RARE_HEAL_ITEM = { name: '青ポーション', healAmount: 40, healPercent: 0.5 }
+export const RARE_POTION_DROP_RATE = 0.05   // 回復ドロップのうち約5%が青ポーション
+export const RARE_POTION_MIN_FLOOR = 5      // この階以降でのみ出現
+
+// いいね報酬で配るポーション名（色ランダム抽選用。青ポーションは特別枠なので含めない）
 export const POTION_NAMES = HEAL_ITEMS.map(h => h.name)
 
 // ── 羽アイテム（行商人で女神のコインと交換。各10個まで）。cost=必要コイン枚数 ──
@@ -138,14 +145,19 @@ export function spawnItems(
         spellType: base.spellType,
       })
     } else {
-      const base = HEAL_ITEMS[Math.floor(Math.random() * HEAL_ITEMS.length)]
+      // 低確率で上位の青ポーション（割合回復）。それ以外は通常の回復4種から均等抽選。
+      const rare = floor >= RARE_POTION_MIN_FLOOR && Math.random() < RARE_POTION_DROP_RATE
+      const base = rare
+        ? RARE_HEAL_ITEM
+        : HEAL_ITEMS[Math.floor(Math.random() * HEAL_ITEMS.length)]
       items.push({
         id: `item_${i}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         name: base.name,
         type: 'heal',
         position: { ...pos },
         healAmount: base.healAmount,
-        staminaPercent: base.staminaPercent,
+        staminaPercent: (base as { staminaPercent?: number }).staminaPercent,
+        healPercent: (base as { healPercent?: number }).healPercent,
       })
     }
   }
