@@ -579,7 +579,7 @@ export class GameScene extends Phaser.Scene {
     const bossMsg = getFloorTelopMessage(player.floor, areaBossFloors)
 
     const parts: string[] = []
-    if (this.floorIsCleared)   parts.push('このフロアは踏破済み。経験値は大幅減少・ドロップなし。')
+    if (this.floorIsCleared)   parts.push('このフロアは踏破済み。経験値・ドロップなし。')
     if (floorType === 'chaos') parts.push('このフロアは混沌とした気配に満ちている！')
     if (floorType === 'lucky') parts.push('このフロアは不思議な光に包まれている・・・')
     if (miasmaFloor)           parts.push('瘴気が強いフロアだ！目の前がとても見えにくい！')
@@ -1035,10 +1035,14 @@ export class GameScene extends Phaser.Scene {
       }
     }
     const baseExp = enemy.isBoss ? (50 + enemy.maxHp) : (5 + enemy.maxHp)
-    // 踏破済みフロアでは経験値を大幅減（1/10・最低1）にして周回レベリングを無効化
-    const expGain = this.floorIsCleared ? Math.max(1, Math.floor(baseExp * 0.1)) : baseExp
+    // 踏破済みフロアでは経験値ゼロにして周回レベリングを無効化
+    const expGain = this.floorIsCleared ? 0 : baseExp
     player.exp += expGain
-    this.addMessage(`${enemy.name}を倒した！経験値+${expGain}`)
+    this.addMessage(
+      this.floorIsCleared
+        ? `${enemy.name}を倒した！（踏破済み：経験値なし）`
+        : `${enemy.name}を倒した！経験値+${expGain}`
+    )
 
     // 女神のコイン：撃破時20%でその場にドロップ（踏破済みフロアではドロップなし）
     if (!this.floorIsCleared && Math.random() < 0.20) {
