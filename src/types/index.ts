@@ -98,6 +98,8 @@ export interface Player {
   statPoints: number
   // 自己最高到達階。これ未満のフロア（蝶の羽で戻った踏破済み階）はXP大幅減＆ドロップなし
   maxFloorReached?: number
+  // このプレイでのジャックポット当選回数（ランキング表示用。セーブに永続化）
+  jackpotWins?: number
   // エフェクト
   healingTurns: number
   // ブレッシングの書：残りターン数と、付与した分のみを記録（レベルアップ等の変動と区別するため）

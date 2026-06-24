@@ -5,14 +5,30 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-export async function submitRanking(playerName: string, floor: number, level: number): Promise<string | null> {
+export async function submitRanking(
+  playerName: string,
+  floor: number,
+  level: number,
+  refineTotal = 0,
+  jackpotWins = 0,
+): Promise<string | null> {
+  // 精錬値合計・ジャックポット当選回数を含めて登録。
   const { error } = await supabase
     .from('ebt_rankings')
-    .insert({ player_name: playerName, floor, level })
+    .insert({ player_name: playerName, floor, level, refine_total: refineTotal, jackpot_wins: jackpotWins })
 
   if (error) {
-    console.error('ランキング登録エラー:', error)
-    return error.message
+    // 新カラム（refine_total / jackpot_wins）未追加の環境ではここで失敗するため、
+    // 基本項目のみで再送してランキング登録自体は止めない（マイグレーション前の保険）。
+    const { error: retryError } = await supabase
+      .from('ebt_rankings')
+      .insert({ player_name: playerName, floor, level })
+    if (retryError) {
+      console.error('ランキング登録エラー:', retryError)
+      return retryError.message
+    }
+    console.warn('ランキング: 新カラム未追加のため基本項目のみで登録しました', error.message)
+    return null
   }
   return null
 }

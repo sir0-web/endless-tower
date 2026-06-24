@@ -7,6 +7,8 @@ import { getDisplayName, setDisplayName } from '../game/playerName'
 export class GameOverScene extends Phaser.Scene {
   private floor: number = 1
   private level: number = 1
+  private refineTotal: number = 0
+  private jackpotWins: number = 0
   private playerName: string = ''
   private nameInput!: Phaser.GameObjects.Text
   private submitted: boolean = false
@@ -17,9 +19,11 @@ export class GameOverScene extends Phaser.Scene {
     super({ key: 'GameOverScene' })
   }
 
-  init(data: { floor: number; level: number }) {
+  init(data: { floor: number; level: number; refineTotal?: number; jackpotWins?: number }) {
     this.floor = data.floor
     this.level = data.level
+    this.refineTotal = data.refineTotal ?? 0
+    this.jackpotWins = data.jackpotWins ?? 0
     this.playerName = getDisplayName()   // 保存中の表示名を初期値に
     this.submitted = false
   }
@@ -204,7 +208,7 @@ export class GameOverScene extends Phaser.Scene {
     this.nameInput.setText('登録中...')
     this.nameInput.setColor('#aaaaaa')
     setDisplayName(this.playerName)   // 次回以降の表示名としても保存
-    const errMsg = await submitRanking(this.playerName, this.floor, this.level)
+    const errMsg = await submitRanking(this.playerName, this.floor, this.level, this.refineTotal, this.jackpotWins)
     if (errMsg) {
       this.submitted = false
       this.refreshNameInput()

@@ -499,6 +499,7 @@ export class GameScene extends Phaser.Scene {
         equipment: {},
         str: 3, agi: 1, dex: 1, int: 1, vit: 3, luk: 1,
         maxFloorReached: 1,
+        jackpotWins: 0,
         statPoints: 0,
         healingTurns: 0,
         blessingTurns: 0,
@@ -2367,8 +2368,17 @@ export class GameScene extends Phaser.Scene {
     window.dispatchEvent(new Event('game-scene-changed'))
     // 少し間を置いてから暗転 → ゲームオーバー画面へ
     this.time.delayedCall(700, () => this.cameras.main.fadeOut(500, 0, 0, 0))
+    // 全身の精錬値合計（装備中アイテムの refineLevel を合算）
+    const refineTotal = Object.values(this.state.player.equipment)
+      .reduce((sum, eq) => sum + (eq?.refineLevel ?? 0), 0)
+    const jackpotWins = this.state.player.jackpotWins ?? 0
     this.time.delayedCall(1250, () => {
-      this.scene.start('GameOverScene', { floor: this.state.player.floor, level: this.state.player.level })
+      this.scene.start('GameOverScene', {
+        floor: this.state.player.floor,
+        level: this.state.player.level,
+        refineTotal,
+        jackpotWins,
+      })
     })
   }
 
@@ -2432,6 +2442,8 @@ export class GameScene extends Phaser.Scene {
 
     switch (result) {
       case 'jackpot': {
+        // ジャックポット当選回数を記録（プールが空でも「当選」自体はカウント。ランキング表示用）
+        this.state.player.jackpotWins = (this.state.player.jackpotWins ?? 0) + 1
         // 動画終了後にここへ到達。全鯖共有プールを総取り → ステータスポイントへ加算（取得は非同期）
         void claimJackpot().then(won => {
           if (won <= 0) {

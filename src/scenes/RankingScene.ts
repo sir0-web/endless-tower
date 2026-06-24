@@ -7,6 +7,8 @@ interface RankingEntry {
   floor: number
   level: number
   created_at: string
+  refine_total?: number   // 全身の精錬値合計（DBに新カラム未追加の旧データでは undefined）
+  jackpot_wins?: number    // そのプレイでのジャックポット当選回数
 }
 
 export class RankingScene extends Phaser.Scene {
@@ -112,7 +114,7 @@ export class RankingScene extends Phaser.Scene {
 
     const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
 
-    const baseH   = Math.max(34, px(46))
+    const baseH   = Math.max(38, px(52))   // 精錬値/JPのサブ行ぶん少し高め
     const gap     = px(7)
     const radius  = px(10)
     const rowMid: number[] = []
@@ -152,15 +154,29 @@ export class RankingScene extends Phaser.Scene {
         }).setOrigin(0.5))
       }
 
-      // 名前
-      const nameT = this.add.text(cName, midY, trunc(entry.player_name ?? '', isTop ? 12 : 10), {
+      // 精錬値合計・ジャックポット当選回数（あれば名前の下に小さく表示。旧データは非表示）
+      const refine = entry.refine_total ?? 0
+      const jpWins = entry.jackpot_wins ?? 0
+      const subParts: string[] = []
+      if (refine > 0) subParts.push(`🔨精錬+${refine}`)
+      if (jpWins > 0) subParts.push(`💰JP${jpWins}回`)
+      const hasSub = subParts.length > 0
+
+      // 名前（サブ行がある時は少し上に寄せて2段組みにする）
+      const nameY = midY - (hasSub ? px(8) : 0)
+      const nameT = this.add.text(cName, nameY, trunc(entry.player_name ?? '', isTop ? 12 : 10), {
         fontSize: `${px((isTop ? 21 : 16) * (isTop ? 1 : m))}px`, color: t.name, fontStyle: isTop ? 'bold' : 'normal',
       }).setOrigin(0, 0.5)
       container.add(nameT)
       if (isYou) {
-        container.add(this.add.text(nameT.x + nameT.width + px(6), midY, 'YOU', {
+        container.add(this.add.text(nameT.x + nameT.width + px(6), nameY, 'YOU', {
           fontSize: `${px(11)}px`, color: '#00ff88', fontStyle: 'bold',
           backgroundColor: '#003a22', padding: { x: px(4), y: px(2) },
+        }).setOrigin(0, 0.5))
+      }
+      if (hasSub) {
+        container.add(this.add.text(cName, midY + px(9), subParts.join('  '), {
+          fontSize: `${px(isTop ? 13 : 11)}px`, color: '#8fa6c4',
         }).setOrigin(0, 0.5))
       }
 
