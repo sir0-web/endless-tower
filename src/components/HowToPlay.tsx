@@ -67,7 +67,7 @@ export function HowToPlay() {
               <li><Tag c="dex">DEX</Tag> 命中率（<b>DEX100で100%</b>）。超過分は<b>装甲貫通</b>に変わり、敵の防御を無視するダメージが増える。</li>
               <li><Tag c="vit">VIT</Tag> 防御力。被ダメージを軽減。</li>
               <li><Tag c="int">INT</Tag> 魔法の威力。魔法の書の効果が強まる。</li>
-              <li><Tag c="luk">LUK</Tag> 会心率＋幸運。良いフロアやスロットの当たりやすさにも影響。</li>
+              <li><Tag c="luk">LUK</Tag> 会心率＋幸運。会心の一撃や<b>幸運フロア</b>の出やすさが上がります。（スロットの<b>当選確率そのものは一定</b>ですが、会心で敵を早く倒せるぶん回せる回数は増えます）</li>
             </ul>
           </Section>
 
