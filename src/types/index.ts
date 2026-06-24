@@ -96,6 +96,8 @@ export interface Player {
   vit: number
   luk: number
   statPoints: number
+  // 自己最高到達階。これ未満のフロア（蝶の羽で戻った踏破済み階）はXP大幅減＆ドロップなし
+  maxFloorReached?: number
   // エフェクト
   healingTurns: number
   // ブレッシングの書：残りターン数と、付与した分のみを記録（レベルアップ等の変動と区別するため）

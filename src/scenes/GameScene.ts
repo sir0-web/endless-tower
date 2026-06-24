@@ -143,6 +143,7 @@ export class GameScene extends Phaser.Scene {
   // textureSourceがnullになり、再生時に "Cannot read properties of null (reading 'sourceSize')" でクラッシュする
   private playerTexturesTransparent = false
   private isEventFloor = false   // イベントフロア（ベースキャンプ「あるかなひろば」）滞在中フラグ
+  private floorIsCleared = false  // 現在のフロアが踏破済み（自己最高到達階未満）か。XP大幅減＆ドロップなし
   private eventFacilities: { id: string; kind: import('../types').FacilityKind; name: string; icon: string; texture?: string; position: import('../types').Position }[] = []
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
@@ -497,6 +498,7 @@ export class GameScene extends Phaser.Scene {
         mudSkipNext: false,
         equipment: {},
         str: 3, agi: 1, dex: 1, int: 1, vit: 3, luk: 1,
+        maxFloorReached: 1,
         statPoints: 0,
         healingTurns: 0,
         blessingTurns: 0,
@@ -531,7 +533,7 @@ export class GameScene extends Phaser.Scene {
     const map = saved.map
 
     this.state = {
-      player: { ...saved.player },
+      player: { ...saved.player, maxFloorReached: saved.player.maxFloorReached ?? floor },
       enemies: saved.enemies,
       items: saved.items,
       map,
@@ -545,6 +547,8 @@ export class GameScene extends Phaser.Scene {
       driedSprings: saved.driedSprings ?? [],
       miasmaFloor: saved.miasmaFloor ?? false,
     }
+    // 再開フロアはそのスナップショットを復元するだけなので踏破済みペナルティ対象にしない
+    this.floorIsCleared = false
     this.buildFloorVariants(map)
     this.createTileSprites(map)
   }
@@ -575,16 +579,18 @@ export class GameScene extends Phaser.Scene {
     const bossMsg = getFloorTelopMessage(player.floor, areaBossFloors)
 
     const parts: string[] = []
+    if (this.floorIsCleared)   parts.push('このフロアは踏破済み。経験値は大幅減少・ドロップなし。')
     if (floorType === 'chaos') parts.push('このフロアは混沌とした気配に満ちている！')
     if (floorType === 'lucky') parts.push('このフロアは不思議な光に包まれている・・・')
     if (miasmaFloor)           parts.push('瘴気が強いフロアだ！目の前がとても見えにくい！')
     if (bossMsg)               parts.push(bossMsg)
     if (parts.length === 0) return
 
-    // 瘴気は紫。chaos橙・lucky水色を優先しつつ、それ以外で瘴気があれば紫
+    // 瘴気は紫。chaos橙・lucky水色を優先しつつ、それ以外で瘴気があれば紫、踏破済みのみなら灰
     const color = floorType === 'chaos' ? '#ff6600'
       : floorType === 'lucky' ? '#aaddff'
       : miasmaFloor ? '#b066ff'
+      : this.floorIsCleared && !bossMsg ? '#9aa6b2'
       : '#ff4444'
 
     window.showEventMessage?.(parts.join('\n'), color)
@@ -1028,12 +1034,14 @@ export class GameScene extends Phaser.Scene {
         fireWorldNotification('boss', title, `${getDisplayName()}さんが${bossName}を討伐しました！`)
       }
     }
-    const expGain = enemy.isBoss ? (50 + enemy.maxHp) : (5 + enemy.maxHp)
+    const baseExp = enemy.isBoss ? (50 + enemy.maxHp) : (5 + enemy.maxHp)
+    // 踏破済みフロアでは経験値を大幅減（1/10・最低1）にして周回レベリングを無効化
+    const expGain = this.floorIsCleared ? Math.max(1, Math.floor(baseExp * 0.1)) : baseExp
     player.exp += expGain
     this.addMessage(`${enemy.name}を倒した！経験値+${expGain}`)
 
-    // 女神のコイン：撃破時20%でその場にドロップ
-    if (Math.random() < 0.20) {
+    // 女神のコイン：撃破時20%でその場にドロップ（踏破済みフロアではドロップなし）
+    if (!this.floorIsCleared && Math.random() < 0.20) {
       this.state.items.push({
         id: `coin_${enemy.id}_${Date.now()}`,
         name: '女神のコイン',
@@ -1627,6 +1635,8 @@ export class GameScene extends Phaser.Scene {
   private enterNormalFloor() {
     this.state.player.floor++
     const floor = this.state.player.floor
+    // 自己最高到達階を更新（フロンティア前進）。踏破済み判定の基準になる。
+    this.state.player.maxFloorReached = Math.max(this.state.player.maxFloorReached ?? floor, floor)
     logEvent('floor_reached', { floor, level: this.state.player.level })
     if (floor % 5 === 0) {
       fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんがB${floor}階に到達しました！`, `floor:${floor}`)
@@ -1641,6 +1651,8 @@ export class GameScene extends Phaser.Scene {
     this.eventFacilities = []
     this.state.driedSprings = []
     const floor = this.state.player.floor
+    // 踏破済みフロア（蝶の羽で自己最高到達階より下に戻ったケース）→ XP大幅減＆ドロップなし
+    this.floorIsCleared = floor < (this.state.player.maxFloorReached ?? floor)
     const map = generateDungeon()
     const playerPos = getPlayerStartPosition(map)
     this.state.map = map
@@ -1676,7 +1688,9 @@ export class GameScene extends Phaser.Scene {
 
     this.state.enemies = [...normalEnemies, ...bosses]
     dedupeEnemyPositions(this.state.enemies, map, playerPos)   // 敵が重なって始まらないように
-    this.state.items = floorType === 'lucky'
+    this.state.items = this.floorIsCleared
+      ? []   // 踏破済みフロアはアイテムドロップなし（周回ファーム対策）
+      : floorType === 'lucky'
       ? spawnItems(map, { countMult: 6, equipRate: 0.30, floor })
       : floorType === 'chaos'
       ? spawnItems(map, { countMult: 6, floor })
@@ -1706,6 +1720,7 @@ export class GameScene extends Phaser.Scene {
   // ── イベントフロア（ベースキャンプ「あるかなひろば」）──
   private enterEventFloor() {
     this.isEventFloor = true
+    this.floorIsCleared = false   // ベースキャンプはペナルティ対象外
     const map = this.generateEventFloorMap()
     const playerPos = { x: 9, y: 16 }
 
