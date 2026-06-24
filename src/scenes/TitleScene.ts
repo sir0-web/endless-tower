@@ -2,7 +2,8 @@ import Phaser from 'phaser'
 import { playBGM, isMuted, toggleMute } from '../game/sound'
 import { fetchRanking } from '../game/supabase'
 import { hasNewAnnouncement } from '../game/announcements'
-import { hasSave, clearSave } from '../game/save'
+import { hasSave, clearSave, saveGame } from '../game/save'
+import { cloudLoadGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { getDisplayName, setDisplayName } from '../game/playerName'
 
 const PIXEL_FONT  = '"Press Start 2P", monospace'
@@ -48,10 +49,10 @@ export class TitleScene extends Phaser.Scene {
       this.add.rectangle(cx, H / 2, W, H, 0x060610).setDepth(0)
     }
 
-    // ── ボタン（下部中央・縦並び・全幅統一）。NEWS を含め6つ収めるため詰める ──
+    // ── ボタン（下部中央・縦並び・全幅統一）。クラウド再開を含め7つ収めるため詰める ──
     const btnFont = W < 500 ? 15 : 22
-    const gap     = H * 0.078
-    const top     = H * 0.52
+    const gap     = H * 0.072
+    const top     = H * 0.49
 
     // ── 表示名（NEWS の上）。タップで変更可 ──
     this.makeNameBadge(cx, top - gap * 0.95, W)
@@ -60,15 +61,16 @@ export class TitleScene extends Phaser.Scene {
     const newsBtn  = this.makeBtn(cx, top,          'NEWS',        btnFont, () => { window.showNews?.() })
     const startBtn = this.makeBtn(cx, top + gap,    'GAME START',  btnFont, () => { this.startGame() })
     const b2 = this.makeBtn(cx, top + gap * 2,'RANKING',     btnFont, () => { void this.goRanking() })
-    const b3 = this.makeBtn(cx, top + gap * 3,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
-    const b4 = this.makeBtn(cx, top + gap * 4,'HOW TO PLAY', btnFont, () => { this.openHowTo() })
-    const b5 = this.makeBtn(cx, top + gap * 5,'REPORT',      btnFont, () => { window.showReport?.() })
+    const b6 = this.makeBtn(cx, top + gap * 3,'クラウド再開', btnFont, () => { this.resumeFromCloud() })
+    const b3 = this.makeBtn(cx, top + gap * 4,'SETTINGS',    btnFont, () => { this.openSettings(W, H) })
+    const b4 = this.makeBtn(cx, top + gap * 5,'HOW TO PLAY', btnFont, () => { this.openHowTo() })
+    const b5 = this.makeBtn(cx, top + gap * 6,'REPORT',      btnFont, () => { window.showReport?.() })
 
     // NEWS ボタンに NEW バッジ（24時間以内・このブラウザ未閲覧の投稿があれば点灯）
     this.attachNewsBadge(newsBtn, W)
 
     // ボタンを下から段階的にフェードイン
-    const btns = [newsBtn, startBtn, b2, b3, b4, b5]
+    const btns = [newsBtn, startBtn, b2, b6, b3, b4, b5]
     btns.forEach((btn, i) => {
       btn.setAlpha(0)
       const baseY = btn.y
@@ -109,12 +111,35 @@ export class TitleScene extends Phaser.Scene {
     if (hasSave()) {
       this.input.enabled = false
       window.showResumeConfirm?.(
-        () => { this.input.enabled = true; this.fadeToScene('GameScene') },
-        () => { this.input.enabled = true; clearSave(); this.fadeToScene('GameScene') }
+        // つづきから（ローカル）：ロード扱い＝クラウドの控えも消費する（二重の保険を残さない）
+        () => { this.input.enabled = true; void deleteOwnCloudSave(); this.fadeToScene('GameScene') },
+        // 最初から：ローカル中断データを削除。クラウドの控えも破棄する
+        () => { this.input.enabled = true; clearSave(); void deleteOwnCloudSave(); this.fadeToScene('GameScene') }
       )
     } else {
       this.fadeToScene('GameScene')
     }
+  }
+
+  // ── クラウド再開：名前＋パスワードでサーバーからセーブを取得し、ローカルへ展開して再開 ──
+  // 成功するとサーバー行は消費（削除）され、以降はローカル自動セーブが進行を持つ。
+  private resumeFromCloud() {
+    const name = window.prompt('再開する冒険者名を入力')?.trim()
+    if (!name) return
+    const password = window.prompt('パスワードを入力')?.trim()
+    if (!password) return
+
+    this.input.enabled = false
+    window.showGameToast?.('クラウドデータを確認中...')
+    void cloudLoadGame(name, password).then(data => {
+      this.input.enabled = true
+      if (!data) {
+        window.showGameToast?.('該当するクラウドデータが見つかりません。\n名前とパスワードをご確認ください。')
+        return
+      }
+      saveGame(data)   // ローカルへ展開 → GameScene が通常ロードで再開
+      this.fadeToScene('GameScene')
+    })
   }
 
   // ── 表示名バッジ（タップで prompt 変更。ワールド通知に使う名前）──

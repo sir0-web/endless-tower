@@ -5,6 +5,7 @@ import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingI
 import { floorLabel } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
+import { cloudSaveGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { logEvent, getPlayerId } from '../game/supabase'
 import { fireWorldNotification, resetWorldNotifyDedup } from '../game/worldNotify'
 import { getDisplayName } from '../game/playerName'
@@ -564,15 +565,35 @@ export class GameScene extends Phaser.Scene {
   }
 
   // セーブ実行（プレイ中のセーブボタンから呼ばれる）
+  // ローカル（この端末の中断データ）に保存しつつ、名前＋パスワードでクラウドにも保存し、
+  // 別端末でも「クラウド再開」から続けられるようにする。
   private doSaveGame() {
     const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
-    const ok = saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor })
-    if (ok) {
-      window.showGameToast?.('セーブしました。\nゲームを閉じても次回「GAMESTART」を\n押した際にここから再開します。')
-    } else {
-      // 保存できていないのに成功表示する不具合を防止（プライベートモード/容量制限等）
-      window.showGameToast?.('⚠️セーブに失敗しました。\nプライベートモードを解除し、\nブラウザのデータ保存を許可してください。')
-    }
+    const snapshot = { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor }
+    const localOk = saveGame(snapshot)
+
+    const localMsg = localOk
+      ? 'この端末には中断データを保存しました。\n（クラウド保存は行われていません）'
+      : '⚠️セーブに失敗しました。\nプライベートモードを解除し、\nブラウザのデータ保存を許可してください。'
+
+    // クラウド保存：名前＋パスワード（任意・キャンセル時はローカルのみ）
+    const name = window.prompt('クラウドに保存する冒険者名を入力\n（別端末での再開に使います）', getDisplayName())?.trim()
+    if (!name) { window.showGameToast?.(localMsg); return }
+    const password = window.prompt('パスワードを入力\n（再開時に必要。忘れないでください）')?.trim()
+    if (!password) { window.showGameToast?.(localMsg); return }
+
+    window.showGameToast?.('クラウドに保存中...')
+    void cloudSaveGame(name, password, { ...snapshot, savedAt: Date.now() }).then(res => {
+      if (res === 'ok') {
+        window.showGameToast?.('クラウドに保存しました。\n別の端末でもタイトルの「クラウド再開」から\n同じ名前とパスワードで続けられます。')
+      } else if (res === 'name_taken') {
+        window.showGameToast?.('そのセーブ名は別のパスワードで使用中です。\n別の名前にするか、正しいパスワードを\n入力してください。')
+      } else {
+        window.showGameToast?.(localOk
+          ? 'クラウド保存に失敗しました。\nこの端末には保存済みです。'
+          : '⚠️セーブに失敗しました。通信状況をご確認ください。')
+      }
+    })
   }
 
   private showTelopIfNeeded() {
@@ -2361,7 +2382,8 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
     this.isGameOver = true
     logEvent('death', { floor: this.state.player.floor, level: this.state.player.level })
-    clearSave()   // セーブデータがあった場合、ゲームオーバーで強制消滅させる
+    clearSave()              // ローカル中断データをゲームオーバーで強制消滅
+    void deleteOwnCloudSave() // クラウドセーブも削除（復活＝セーブスカミング防止・permadeath維持）
     this.input.keyboard!.off('keydown', this.handleInput, this)
     this.input.off('pointerdown', this.handlePointerMove, this)
     window.isGameSceneActive = false
