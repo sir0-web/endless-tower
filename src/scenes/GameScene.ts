@@ -1435,7 +1435,7 @@ export class GameScene extends Phaser.Scene {
       player.stamina = Math.min(player.maxStamina, player.stamina + recover)
       this.addMessage(`${item.name}を使った！スタミナ+${recover}`)
     } else {
-      // 割合回復（青ポーション）は最大HP×割合とhealAmountの大きい方。通常は固定値healAmount。
+      // 割合回復（灰ポーション）は最大HP×割合とhealAmountの大きい方。通常は固定値healAmount。
       const flat    = item.healAmount ?? 10
       const percent = item.healPercent ? Math.floor(player.maxHp * item.healPercent) : 0
       const heal    = Math.max(flat, percent)
