@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { EquipSlot, Item, RefineResult, ShadowResult, SpellbookResult } from '../types'
 import { WING_ITEMS } from '../game/items'
+import { refineSuccessPercent } from '../game/utils'
 
 const SLOT_LABELS: Record<EquipSlot, string> = {
   weapon: '武器', armor: '鎧', shoulder: '肩装備', boots: '靴',
@@ -60,6 +61,7 @@ export function RefineModal() {
               {equippedSlots.length === 0 && <p className="facility-empty">装備中のアイテムがありません</p>}
               {equippedSlots.map(s => {
                 const item = equipment[s] as Item
+                const level = item.refineLevel ?? 0
                 return (
                   <button
                     key={s}
@@ -69,10 +71,17 @@ export function RefineModal() {
                     <span className="fi-slot">{SLOT_LABELS[s]}</span>
                     <span className="fi-name">{item.name}</span>
                     {!!item.refineLevel && <span className="fi-refine">+{item.refineLevel}</span>}
+                    <span className="fi-chance">成功率 {refineSuccessPercent(level)}%</span>
                   </button>
                 )
               })}
             </div>
+            {slot && equipment[slot] && (
+              <p className="facility-chance">
+                次の精錬レベル（＋{(equipment[slot]!.refineLevel ?? 0) + 1}）の成功確率：
+                <b>{refineSuccessPercent(equipment[slot]!.refineLevel ?? 0)}%</b>
+              </p>
+            )}
 
             <p className="facility-sub">生贄にする未装備の武具</p>
             <div className="facility-list">

@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import type { GameState, AllocStat } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, type WingKey } from '../game/items'
-import { floorLabel } from '../game/utils'
+import { floorLabel, refineSuccessPercent } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { cloudSaveGame, deleteOwnCloudSave } from '../game/cloudSave'
@@ -1912,7 +1912,7 @@ export class GameScene extends Phaser.Scene {
     this.state.bag = bag.filter(b => b.id !== sacrificeId)
     this.addMessage(`${sacrifice.name}を精錬の生贄に捧げた...`)
 
-    const success = Math.random() < 0.3
+    const success = Math.random() * 100 < refineSuccessPercent(target.refineLevel ?? 0)
     let level = target.refineLevel ?? 0
     if (success) {
       this.adjustItemBonuses(target, 1.1)
