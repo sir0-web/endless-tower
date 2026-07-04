@@ -25,10 +25,11 @@ export const RARE_POTION_MIN_FLOOR = 5      // この階以降でのみ出現
 // いいね報酬で配るポーション名（色ランダム抽選用。灰ポーションは特別枠なので含めない）
 export const POTION_NAMES = HEAL_ITEMS.map(h => h.name)
 
-// ── 羽アイテム（行商人で女神のコインと交換。各10個まで）。cost=必要コイン枚数 ──
+// ── 羽アイテム（行商人で女神のコインと交換）。cost=必要コイン枚数／holdMax=所持上限 ──
+// ハエの羽は「階段のそばへ直行」できる強アイテムのため所持上限を低めに絞る
 export const WING_ITEMS = {
-  fly:       { name: 'ハエの羽', icon: '🪰', cost: 3, desc: '同じ階のどこかへランダムにワープする' },
-  butterfly: { name: '蝶の羽',   icon: '🦋', cost: 5, desc: '1〜3階ぶん前の階層へランダムに戻る' },
+  fly:       { name: 'ハエの羽', icon: '🪰', cost: 3, holdMax: 5,  desc: '同じ階の階段のそばへワープする' },
+  butterfly: { name: '蝶の羽',   icon: '🦋', cost: 5, holdMax: 10, desc: '今いる階を再生成して仕切り直す（敵や宝が再配置）' },
 } as const
 
 export type WingKey = keyof typeof WING_ITEMS

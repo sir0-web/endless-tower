@@ -47,8 +47,8 @@ const ALLOC_STATS: { key: AllocStat; label: string }[] = [
 
 function getHealInfo(item: Item): { icon: string; desc: string; effect: string } {
   if (item.coin) return { icon: '🪙', desc: 'スロットを1回スピンさせる特殊コイン', effect: '女神の加護（敵撃破時20%でドロップ）' }
-  if (item.wing === 'fly') return { icon: '🪰', desc: '同じ階のどこかへランダムにワープする', effect: 'フロア内ワープ（行商人で購入）' }
-  if (item.wing === 'butterfly') return { icon: '🦋', desc: '1〜3階ぶん前の階層へランダムに戻る', effect: '前の階層へ後退（行商人で購入）' }
+  if (item.wing === 'fly') return { icon: '🪰', desc: '同じ階の階段のそばへワープする', effect: '階段へ直行（行商人で購入）' }
+  if (item.wing === 'butterfly') return { icon: '🦋', desc: '今いる階を再生成して仕切り直す', effect: 'フロア再構築（行商人で購入）' }
   if ((item.staminaPercent ?? 0) > 0) return { icon: '💊', desc: 'スタミナを回復するポーション', effect: `スタミナ +${item.staminaPercent}%` }
   if (item.healPercent) return { icon: '🧪', desc: '最大HPの割合で回復する上位ポーション', effect: `HP +最大の${Math.round(item.healPercent * 100)}%（最低${item.healAmount ?? 0}）` }
   return { icon: '💊', desc: 'HPを回復するポーション', effect: `HP +${item.healAmount ?? 0}` }

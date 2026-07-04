@@ -5,10 +5,10 @@ import { JackpotCounter } from './JackpotCounter'
 
 const SYMBOLS    = 8   // リール絵柄総数（8番=ジャックポット絵柄slot8.png。回転アニメに登場し期待感を演出）
 const REEL_MAX   = 7   // 通常出目は1〜7のみ。8番はジャックポット成立時だけ揃う（確率を厳密に制御するため予約）
-const CREDIT_MAX = 3
-const STOCK_MAX  = 10
-// ジャックポット当選確率。アルカナチャンス（1%＝GameScene applySlotEffect）より低く設定。
-const JACKPOT_CHANCE = 0.003
+const CREDIT_MAX = 2   // 敵を何体倒すと1回転か
+const STOCK_MAX  = 13  // 連続消化待ちストック上限（敵数増に合わせて拡張。上限超過ぶんは切り捨て）
+// ジャックポット当選確率。アルカナチャンス（1.1%＝GameScene applySlotEffect）より低く設定。
+const JACKPOT_CHANCE = 0.0033
 function rand() { return Math.floor(Math.random() * REEL_MAX) + 1 }   // 1〜7
 type Triplet = [number, number, number]
 
@@ -46,6 +46,8 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
   const canStopRef      = useRef<[boolean,boolean,boolean]>([false,false,false])
   const reelStoppedRef  = useRef<[boolean,boolean,boolean]>([false,false,false])
   const stoppedCountRef = useRef(0)
+  const holdRef         = useRef(false)   // アルカナ演出中の自動消化ホールド
+  const holdSafetyRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearAllTimers = useCallback(() => {
     ivRef.current.forEach((iv, i) => {
@@ -119,7 +121,22 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
       clearTimeout(safetyTimerRef.current)
       safetyTimerRef.current = null
     }
+    if (holdRef.current) return   // アルカナ演出中はストックを消化しない（releaseSlotSpinsで再開）
     if (stockRef.current > 0) {
+      stockRef.current--
+      setSlotStock(stockRef.current)
+      addTimer(() => spinRef.current(), 300)
+    }
+  }, [addTimer])
+
+  // アルカナ演出中のホールド解除→ストック消化を再開
+  const resumeSpins = useCallback(() => {
+    holdRef.current = false
+    if (holdSafetyRef.current !== null) {
+      clearTimeout(holdSafetyRef.current)
+      holdSafetyRef.current = null
+    }
+    if (!busyRef.current && stockRef.current > 0) {
       stockRef.current--
       setSlotStock(stockRef.current)
       addTimer(() => spinRef.current(), 300)
@@ -128,8 +145,19 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
 
   useEffect(() => {
     window.onSlotEffectApplied = processAfterEffect
-    return () => { window.onSlotEffectApplied = undefined }
-  }, [processAfterEffect])
+    window.holdSlotSpins = () => {
+      holdRef.current = true
+      // 演出フローが途切れた場合の保険：60秒で自動再開
+      if (holdSafetyRef.current !== null) clearTimeout(holdSafetyRef.current)
+      holdSafetyRef.current = setTimeout(resumeSpins, 60000)
+    }
+    window.releaseSlotSpins = resumeSpins
+    return () => {
+      window.onSlotEffectApplied = undefined
+      window.holdSlotSpins = undefined
+      window.releaseSlotSpins = undefined
+    }
+  }, [processAfterEffect, resumeSpins])
 
   const executeSpin = useCallback(() => {
     if (busyRef.current) return
@@ -177,7 +205,7 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
   useEffect(() => { spinRef.current = executeSpin }, [executeSpin])
 
   const triggerSpin = useCallback(() => {
-    if (busyRef.current) {
+    if (busyRef.current || holdRef.current) {
       if (stockRef.current < STOCK_MAX) {
         stockRef.current++
         setSlotStock(stockRef.current)

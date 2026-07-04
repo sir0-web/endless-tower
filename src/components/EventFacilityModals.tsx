@@ -179,8 +179,8 @@ export function ShadowEquipModal() {
 
 // ── 行商人（羽の購入）。価格(cost)は WING_ITEMS を単一ソースとして参照 ──
 const MERCHANT_ITEMS = [
-  { key: 'fly'       as const, icon: WING_ITEMS.fly.icon,       name: WING_ITEMS.fly.name,       cost: WING_ITEMS.fly.cost,       desc: WING_ITEMS.fly.desc },
-  { key: 'butterfly' as const, icon: WING_ITEMS.butterfly.icon, name: WING_ITEMS.butterfly.name, cost: WING_ITEMS.butterfly.cost, desc: WING_ITEMS.butterfly.desc },
+  { key: 'fly'       as const, icon: WING_ITEMS.fly.icon,       name: WING_ITEMS.fly.name,       cost: WING_ITEMS.fly.cost,       desc: WING_ITEMS.fly.desc,       holdMax: WING_ITEMS.fly.holdMax },
+  { key: 'butterfly' as const, icon: WING_ITEMS.butterfly.icon, name: WING_ITEMS.butterfly.name, cost: WING_ITEMS.butterfly.cost, desc: WING_ITEMS.butterfly.desc, holdMax: WING_ITEMS.butterfly.holdMax },
 ]
 
 export function MerchantModal() {
@@ -205,7 +205,8 @@ export function MerchantModal() {
     } else if (r.reason === 'coin') {
       setMsg('女神のコインが足りません…')
     } else if (r.reason === 'limit') {
-      setMsg('これ以上は持てません（上限10個）')
+      const max = MERCHANT_ITEMS.find(i => i.key === key)!.holdMax
+      setMsg(`これ以上は持てません（上限${max}個）`)
     }
     setTick(t => t + 1)
   }
@@ -215,18 +216,18 @@ export function MerchantModal() {
       <div className="facility-modal">
         <p className="facility-title">🛒行商人とるいぬ🛒</p>
         <p className="facility-desc">
-          女神のコインと「羽」を交換するよ。羽は各10個まで持てるよ。
+          女神のコインと「羽」を交換するよ。羽は持てる数に上限があるよ。
         </p>
         <p className="facility-sub">所持コイン：🪙 {coins}</p>
         <div className="facility-list">
           {MERCHANT_ITEMS.map(it => {
             const held = heldCount(it.name)
-            const full = held >= 10
+            const full = held >= it.holdMax
             const disabled = full || coins < it.cost
             return (
               <div key={it.key} className="facility-item" style={{ alignItems: 'center', gap: 8 }}>
                 <span className="fi-name" style={{ flex: 1 }}>
-                  {it.icon} {it.name} <span style={{ opacity: 0.7 }}>（{held}/10・🪙{it.cost}）</span>
+                  {it.icon} {it.name} <span style={{ opacity: 0.7 }}>（{held}/{it.holdMax}・🪙{it.cost}）</span>
                   <br /><span className="facility-empty" style={{ fontSize: '0.8em' }}>{it.desc}</span>
                 </span>
                 <button className="facility-go-btn" disabled={disabled} onClick={() => buy(it.key)}>

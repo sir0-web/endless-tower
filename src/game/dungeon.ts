@@ -246,8 +246,9 @@ export const MVP_BOSS_TABLE: Record<number, { name: string; hpMult: number; atkM
   70: { name: 'モロク',         hpMult: 7.2, atkMult: 3.6, defMult: 2.7 },
 }
 
-export const AREA_BOSS_TABLE = [
-  { name: '黄金蟲',           minFloor: 1,  maxFloor: 10  },
+// atkMult 省略時は 2.1。黄金蟲のみ低層（初期HP50帯）で即死級にならないよう攻撃を抑える（HPは硬いまま）
+export const AREA_BOSS_TABLE: { name: string; minFloor: number; maxFloor: number; atkMult?: number }[] = [
+  { name: '黄金蟲',           minFloor: 1,  maxFloor: 10, atkMult: 1.4 },
   { name: 'ドレイク',         minFloor: 11, maxFloor: 20  },
   { name: 'オシリス',         minFloor: 21, maxFloor: 30  },
   { name: 'ストラウフ',       minFloor: 31, maxFloor: 40  },
@@ -311,11 +312,16 @@ function makeBoss(name: string, floor: number, hpMult: number, atkMult: number, 
 
 export function spawnBosses(floor: number, areaBossFloors: Record<number, string>) {
   const bosses = []
-  // 100F以降はテーブルを“ループ”させず最強tierに張り付かせる（深層scaleで更に逓増＝再利用が毎回強くなる）
-  const miniKey = floor <= 65 ? (floor % 65 || 65) : 65
-  const mvpKey  = floor <= 70 ? (((Math.floor((floor - 1) / 10) % 7) + 1) * 10) : 70
-  const isMini = floor % 5 === 0 && floor % 10 !== 0 && !!MINI_BOSS_TABLE[miniKey]
-  const isMvp = floor % 10 === 0
+  // 出現周期：MINI=10階ごと（15の倍数を除く）／MVP=15階ごと。最小公倍数30の階で両者が重複しないよう排他。
+  // MINIは10,20,40,50,70,80…／MVPは15,30,45,60…に出る。テーブルは出現順に弱→強を割り当て、
+  // 打ち止め後は最強tierに張り付かせる（深層scaleで更に逓増＝再利用が毎回強くなる）
+  const isMini = floor % 10 === 0 && floor % 15 !== 0
+  const isMvp  = floor % 15 === 0
+  // n体目のMINI（30階周期に2体：+10と+20）→ テーブルキー5,15,25…65へ順番にマップ
+  const miniOrdinal = Math.floor(floor / 30) * 2 + (floor % 30 === 20 ? 1 : 0)
+  const miniKey     = Math.min(5 + miniOrdinal * 10, 65)
+  // n体目のMVP → テーブルキー10,20,…70へ順番にマップ
+  const mvpKey      = Math.min(Math.floor(floor / 15) * 10, 70)
 
   if (isMini) {
     const b = MINI_BOSS_TABLE[miniKey] ?? MINI_BOSS_TABLE[65]
@@ -327,7 +333,8 @@ export function spawnBosses(floor: number, areaBossFloors: Record<number, string
   }
   if (areaBossFloors[floor]) {
     const name = areaBossFloors[floor]
-    bosses.push(makeBoss(name, floor, 3.6, 2.1, 1.5, '【エリア】'))
+    const atkMult = AREA_BOSS_TABLE.find(a => a.name === name)?.atkMult ?? 2.1
+    bosses.push(makeBoss(name, floor, 3.6, atkMult, 1.5, '【エリア】'))
   }
   // エリアボスは90Fで打ち止めだったため、91F以降は25F刻みで“深淵の主”をエリア級で再登場させる
   if (floor > DEEP_FLOOR && floor % 25 === 0) {
@@ -349,7 +356,7 @@ export function makeChaosBoss(floor: number) {
 
   const validArea = AREA_BOSS_TABLE
     .filter(a => a.minFloor <= floor)
-    .map(a => ({ name: a.name, hpMult: 3.6, atkMult: 2.1, defMult: 1.5, prefix: '【エリア】' }))
+    .map(a => ({ name: a.name, hpMult: 3.6, atkMult: a.atkMult ?? 2.1, defMult: 1.5, prefix: '【エリア】' }))
 
   const pool = [...validMini, ...validMvp, ...validArea]
   const pick = pool[Math.floor(Math.random() * pool.length)]

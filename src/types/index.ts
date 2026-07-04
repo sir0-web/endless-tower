@@ -47,7 +47,7 @@ export interface Item {
   refineLevel?: number
   // 女神のコイン：使うとスロットを1回回す消費アイテム
   coin?: boolean
-  // 羽アイテム：fly=同フロアワープ / butterfly=1〜3階前へ戻る
+  // 羽アイテム：fly=同じ階の階段そばへワープ / butterfly=今いる階を再生成
   wing?: 'fly' | 'butterfly'
 }
 
@@ -179,6 +179,9 @@ declare global {
     spinSlotOnce?: () => void
     showSlotAnnouncement?: (result: string, sub?: string) => void
     onSlotEffectApplied?: () => void
+    // アルカナ演出中のスロット自動消化ホールド／再開（SlotMachineが提供）
+    holdSlotSpins?: () => void
+    releaseSlotSpins?: () => void
     showArcanaRoulette?: (onComplete: () => void) => void
     applyArcanaResult?: (points: number) => void
     gameMove?: (key: string) => void
@@ -209,7 +212,7 @@ declare global {
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
     runShadowChallenge?: () => ShadowResult | null
     runSpellbookChallenge?: (spellId: string) => SpellbookResult | null
-    // ── 行商人：女神のコイン1枚で羽を購入（各10個まで）──
+    // ── 行商人：女神のコインで羽を購入（所持上限はWING_ITEMS.holdMax）──
     buyMerchantItem?: (key: 'fly' | 'butterfly') => { ok: boolean; reason?: 'coin' | 'limit' }
   }
 }

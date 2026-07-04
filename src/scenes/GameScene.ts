@@ -994,7 +994,7 @@ export class GameScene extends Phaser.Scene {
     const effectiveAtk  = Math.floor(player.str * 1.5) + player.level
     const attackCount   = playerAttackCount(player.agi)
     const hitRate       = Math.min(1.00, 0.90 + player.dex * 0.001)
-    const critRate      = player.luk * 0.001
+    const critRate      = player.luk * 0.0015
     const playerPierce  = PIERCE_RATE + dexPierceBonus(player.dex)
 
     for (let hit = 0; hit < attackCount; hit++) {
@@ -1066,8 +1066,9 @@ export class GameScene extends Phaser.Scene {
         : `${enemy.name}を倒した！経験値+${expGain}`
     )
 
-    // 女神のコイン：撃破時20%でその場にドロップ（踏破済みフロアではドロップなし）
-    if (!this.floorIsCleared && Math.random() < 0.20) {
+    // 女神のコイン：撃破時20%＋LUKで微増（上限30%）でその場にドロップ（踏破済みフロアではドロップなし）
+    const coinDropRate = Math.min(0.30, 0.20 + player.luk * 0.0002)
+    if (!this.floorIsCleared && Math.random() < coinDropRate) {
       this.state.items.push({
         id: `coin_${enemy.id}_${Date.now()}`,
         name: '女神のコイン',
@@ -1482,25 +1483,36 @@ export class GameScene extends Phaser.Scene {
     this.updateWindowGameState()
   }
 
-  /** ハエの羽：同じ階の床タイルのどこか（敵のいない場所）へワープ。成功でtrue＝消費 */
+  /** ハエの羽：同じ階の階段のそば（周囲8マスの空き床）へワープ。成功でtrue＝消費 */
   private useFlyWing(): boolean {
     if (this.isEventFloor) { this.addMessage('ここでは羽を使えない。'); return false }
     const { map, player, enemies } = this.state
     const occupied = new Set(enemies.map(e => `${e.position.x},${e.position.y}`))
-    const dest: import('../types').Position[] = []
-    for (let y = 0; y < map.length; y++) {
+
+    let stairs: import('../types').Position | null = null
+    for (let y = 0; y < map.length && !stairs; y++) {
       for (let x = 0; x < map[y].length; x++) {
-        if (map[y][x] !== 'floor') continue
+        if (map[y][x] === 'stairs') { stairs = { x, y }; break }
+      }
+    }
+    if (!stairs) { this.addMessage('この階には階段がない！'); return false }
+
+    const dest: import('../types').Position[] = []
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue
+        const x = stairs.x + dx, y = stairs.y + dy
+        if (map[y]?.[x] !== 'floor') continue
         if (x === player.position.x && y === player.position.y) continue
         if (occupied.has(`${x},${y}`)) continue
         dest.push({ x, y })
       }
     }
-    if (dest.length === 0) { this.addMessage('飛べる場所がない！'); return false }
+    if (dest.length === 0) { this.addMessage('階段のそばに降りられる場所がない！'); return false }
 
     const t = dest[Math.floor(Math.random() * dest.length)]
     player.position = { x: t.x, y: t.y }
-    this.addMessage('ハエの羽を使った！フロアのどこかへ飛ばされた！')
+    this.addMessage('ハエの羽を使った！階段のそばへ飛んだ！')
     this.cameras.main.flash(200, 180, 255, 180)
     this.snapNextRender = true
     this.renderMap()
@@ -1509,25 +1521,20 @@ export class GameScene extends Phaser.Scene {
     return true
   }
 
-  /** 蝶の羽：1〜3階ぶん前の階層へ戻る（新規生成）。戻れた場合のみtrue＝消費 */
+  /** 蝶の羽：今いる階を再生成して仕切り直す（敵・アイテム・地形が再配置）。成功でtrue＝消費 */
   private useButterflyWing(): boolean {
     if (this.isEventFloor) { this.addMessage('ここでは羽を使えない。'); return false }
     const cur = this.state.player.floor
-    const maxBack = Math.min(3, cur - 1)
-    if (maxBack <= 0) { this.addMessage('これ以上戻れる階層がない！'); return false }
-
-    const back = 1 + Math.floor(Math.random() * maxBack)   // 1〜maxBack
-    this.state.player.floor = cur - back
-    this.addMessage(`蝶の羽を使った！B${cur}階からB${cur - back}階へ引き戻された！`)
+    this.addMessage(`蝶の羽を使った！B${cur}階が再構築された！`)
     this.populateFloor()
     return true
   }
 
-  /** 行商人：女神のコインを cost 枚消費して羽を1個購入（各10個まで） */
+  /** 行商人：女神のコインを cost 枚消費して羽を1個購入（所持上限は WING_ITEMS.holdMax） */
   private buyMerchantItem(key: WingKey): { ok: boolean; reason?: 'coin' | 'limit' } {
-    const { name, cost } = WING_ITEMS[key]
+    const { name, cost, holdMax } = WING_ITEMS[key]
     const held = this.state.heals.filter(h => h.name === name).length
-    if (held >= 10) return { ok: false, reason: 'limit' }
+    if (held >= holdMax) return { ok: false, reason: 'limit' }
     const coins = this.state.heals.filter(h => h.coin)
     if (coins.length < cost) return { ok: false, reason: 'coin' }
 
@@ -1684,21 +1691,23 @@ export class GameScene extends Phaser.Scene {
     this.state.map = map
     this.state.player.position = { ...playerPos }
 
-    // ADMINがモンスターハウスを強制予約していたら、このフロアをchaos化（1回限り）
     let floorType = this.determineFloorType(this.state.player.luk, floor)
+    let bosses = spawnBosses(floor, this.state.areaBossFloors)
+    // スケジュールボス階（MINI/MVP/エリア/深淵）とモンスターハウスは重ねない（ボス体感密度の抑制）
+    if (floorType === 'chaos' && bosses.length > 0) floorType = 'normal'
+    // ADMINがモンスターハウスを強制予約していたら、このフロアをchaos化（1回限り・排他より優先）
     if (this.forceMonsterHouseNextFloor) {
       floorType = 'chaos'
       this.forceMonsterHouseNextFloor = false
     }
-    // 通常フロアの敵数。LUKで増えるが過剰にならないよう係数を大幅に下げ、上限も設ける。
+    // 通常フロアの敵数。LUKで増えるが過剰にならないよう係数を抑え、上限も設ける。
     // （旧: luk*0.5 だとLUK2000で約1000体湧き、空きマス不足で重なり・プレイヤー被り＆描画フリーズを誘発していた）
-    const base     = 5
-    const lukBonus = Math.min(Math.floor(this.state.player.luk * 0.04), 12)
-    const count    = Math.min(base + Math.floor(Math.random() * (base + lukBonus)), 24)
+    const base     = 7
+    const lukBonus = Math.min(Math.floor(this.state.player.luk * 0.08), 20)
+    const count    = Math.min(base + Math.floor(Math.random() * (base + lukBonus)), 36)
     const normalEnemies = floorType === 'chaos'
       ? spawnMonsterHouseEnemies(map, floor, playerPos)
       : spawnEnemies(map, count, floor)
-    let bosses = spawnBosses(floor, this.state.areaBossFloors)
     if (floorType === 'chaos') bosses = [...bosses, makeChaosBoss(floor)]
 
     const floors: { x: number; y: number }[] = []
@@ -2469,9 +2478,12 @@ export class GameScene extends Phaser.Scene {
         // 動画終了後にここへ到達。全鯖共有プールを総取り → ステータスポイントへ加算（取得は非同期）
         void claimJackpot().then(won => {
           if (won <= 0) {
-            // 直前に他プレイヤーが総取りした等でプールが空 → 空振りを伝える
-            this.addMessage('💰 JACKPOT！…だが共有プールは空っぽだった…')
-            window.showSlotAnnouncement?.('jackpot', '惜しくもプールは空でした…')
+            // 直前に他プレイヤーが総取りした等でプールが空 → 最低保証で「当たったのに0枚」を防ぐ
+            const guarantee = 20
+            this.state.player.statPoints += guarantee
+            this.addMessage(`💰 JACKPOT！プールは空だったが、最低保証 ${guarantee}ポイントを獲得！`)
+            window.showSlotAnnouncement?.('jackpot', `プールは空…最低保証 ${guarantee}ポイント獲得！`)
+            this.updateWindowGameState()
             return
           }
           this.state.player.statPoints += won
@@ -2532,6 +2544,7 @@ export class GameScene extends Phaser.Scene {
       case 'kakuhen_miss': {
         player.statPoints += 30
         window.showSlotAnnouncement?.('kakuhen')
+        window.releaseSlotSpins?.()   // アルカナ演出完了（ルーレット非表示のフォールバック経路）→ スロット再開
         break
       }
       default: {
@@ -2551,8 +2564,10 @@ export class GameScene extends Phaser.Scene {
 
     const isWin  = result !== 'miss' && result !== 'kakuhen' && result !== 'kakuhen_miss'
     const isMiss = result === 'miss'
-    if ((isWin || isMiss) && Math.random() < 0.01) {
+    if ((isWin || isMiss) && Math.random() < 0.011) {
       const kakuhenVideo = isWin ? 'kakuhen' : 'kakuhen_miss'
+      // アルカナ演出が終わるまでスロットの自動消化を止める（連続スピンに当たりが埋もれるのを防ぐ）
+      window.holdSlotSpins?.()
       // 当選/ハズレアナウンス（最長3000ms＋フェード500ms）が消えるのを待ってから演出開始
       this.time.delayedCall(3500, () => {
         this.addMessage('🌌 アルカナチャンス発動！')
@@ -2571,6 +2586,7 @@ export class GameScene extends Phaser.Scene {
 
   // アルカナチャンス専用ルーレットの結果ポイントを付与する
   private applyArcanaResult(points: number) {
+    window.releaseSlotSpins?.()   // アルカナ演出完了 → スロット自動消化を再開
     const p = Math.max(0, Math.floor(points))
     this.state.player.statPoints += p
     this.addMessage(`🌌 アルカナチャンス！ ステータスポイント +${p} 獲得！`)

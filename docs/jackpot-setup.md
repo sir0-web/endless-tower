@@ -4,7 +4,7 @@
 引いた人がプールを総取りする「プログレッシブ・ジャックポット」の DB セットアップ手順。
 
 - プール上限は **100**。100 到達時に全プレイヤーへ EVENT アナウンス（`world_notifications`）が1度だけ流れる。
-- 当選確率はクライアント側 `SlotMachine.tsx` の `JACKPOT_CHANCE`（既定 0.3%＝アルカナチャンス1%より低い）で制御。
+- 当選確率はクライアント側 `SlotMachine.tsx` の `JACKPOT_CHANCE`（既定 0.33%＝アルカナチャンス1.1%より低い）で制御。
   当選時のみリールが 8 番で揃う（通常出目は 1〜7、8 番は回転アニメ表示のみ）。
 
 > 依存: 上限到達 EVENT は `world_notifications` テーブルへ INSERT する。先に
@@ -90,11 +90,12 @@ grant execute on function claim_jackpot()            to anon, authenticated;
 ## 仕組みの要点
 
 - スロットが1回回るたび `incrementJackpot()` で pool += 1（全鯖共有・上限100）。
-- 当選は `JACKPOT_CHANCE`（0.3%）の確率ロールで決定。当選時のみリールを 8 番で揃え、
+- 当選は `JACKPOT_CHANCE`（0.33%）の確率ロールで決定。当選時のみリールを 8 番で揃え、
   `evaluate()` が `'jackpot'` を返す。演出フローは次の通り：
   1. 当選 → 黒背景で「💰JACKPOT💰」（`showSlotAnnouncement('jackpot_start')`、アルカナチャンスと同じ作り）
   2. `jack.mp4` を再生
   3. 動画終了後 `applySlotEffect('jackpot')` → `claimJackpot()` でプールを総取り→ステータスポイントへ加算、
      「ポイント総取り XX ポイントゲット！」を表示。pool は 0 にリセット。
+     直前に他プレイヤーが総取りした等でプールが空だった場合は最低保証20ポイントを付与（「当選したのに0枚」を防ぐ）。
 - プールが 100 に達すると（`increment_jackpot` RPC 内で）全鯖へ EVENT アナウンスが1度だけ流れる。
 - 777（7 が 3 つ揃い）は従来どおり阿修羅覇王拳のまま（ジャックポットとは別）。
