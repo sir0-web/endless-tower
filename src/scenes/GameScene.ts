@@ -2790,6 +2790,13 @@ export class GameScene extends Phaser.Scene {
     const id = ctx.getImageData(0, 0, w, h)
     const d  = id.data
 
+    // 既にアルファ透過済み（一定割合以上が完全透明）の画像は処理をスキップする。
+    // 触手や髪など本体の一部が画像の縁ギリギリに触れているだけで背景色クラスタと誤認識し、
+    // 本体色まで巻き込んで消してしまう事故（ヒドラ/ゾンビ/ボンゴン等で発生）を防ぐため。
+    let alreadyTransparent = 0
+    for (let i = 3; i < d.length; i += 4) if (d[i] === 0) alreadyTransparent++
+    if (alreadyTransparent / (w * h) > 0.02) return
+
     // エッジ(外周1px)のピクセルインデックスを列挙
     const edge: number[] = []
     for (let x = 0; x < w; x++) { edge.push(x); edge.push((h - 1) * w + x) }
