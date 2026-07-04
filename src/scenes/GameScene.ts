@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import type { GameState, AllocStat } from '../types'
+import type { GameState, AllocStat, Enemy, Player } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
@@ -71,6 +71,21 @@ function floorMiasma(floor: number): { color: number; alpha: number } {
 // 防御(VIT+Lv/2)やVIT過積みによる完全無敵化を防ぎ、深部の敵・ボスが必ずチップダメージを与える。
 const PIERCE_RATE = 0.06
 
+// 強敵判定：この敵の通常攻撃1発の実ダメージ(enemyTurn()と同じ式。クリティカル・鈍足debuffは除く
+// ＝敵本来の実力で判定)が3発でプレイヤーの最大HPを超えるなら「強敵」とみなす。
+function isDangerousEnemy(enemy: Enemy, player: Player): boolean {
+  if (enemy.isSkulporin) return false   // 固定で最大HPの3%ダメージのため対象外
+  const effectiveDef = player.vit + Math.floor(player.level / 2)
+  const floorNow = player.floor
+  const pierce   = Math.min(0.20, PIERCE_RATE + Math.max(0, floorNow - 100) * 0.002)
+  const trueDmg  = (enemy.isBoss && floorNow > 100)
+    ? Math.floor(player.maxHp * Math.min(0.15, (floorNow - 100) * 0.0025))
+    : 0
+  const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
+  const raw     = Math.max(1, Math.round(baseAtk * pierce), baseAtk - effectiveDef)
+  return (raw + trueDmg) * 3 >= player.maxHp
+}
+
 // モンスター別の表示サイズ係数（1.0=標準）。可視部分=主人公サイズ補正の上に掛かる。
 // 大きすぎ/小さすぎる個体をモンスター名で個別調整する（ADMIN上書き画像にも適用）。
 const ENEMY_SIZE_MULT: Record<string, number> = {
@@ -103,6 +118,8 @@ export class GameScene extends Phaser.Scene {
   private itemGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
   // 攻撃可能誘導マーク（今殴れる敵の頭上に⚔️）
   private attackMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
+  // 強敵警告マーク（3発で瀕死/即死級の攻撃力を持つ敵の頭上に💀）
+  private dangerMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // イベントフロアNPC（施設の話しかけ役）描画
   private facilityGraphics: Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Text> = new Map()
   // 施設NPC画像の可視領域割合キャッシュ（透過除き可視部分 / 画像全体）
@@ -186,6 +203,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyHpBars        = new Map()
     this.itemGraphics       = new Map()
     this.attackMarkers      = new Map()
+    this.dangerMarkers      = new Map()
     this.facilityGraphics   = new Map()
     this.tileSprites        = []
     this.floorVariantMap    = []
@@ -1087,6 +1105,8 @@ export class GameScene extends Phaser.Scene {
     // 攻撃可能マークも撤去（撃破時にマップから即削除するため描画ループのクリーンアップでは拾えない）
     const mk = this.attackMarkers.get(enemy.id)
     if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(enemy.id) }
+    const dk = this.dangerMarkers.get(enemy.id)
+    if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(enemy.id) }
     if (g) {
       this.tweens.killTweensOf(g)
       if (g.visible) {
@@ -3320,6 +3340,8 @@ export class GameScene extends Phaser.Scene {
         if (bar) { bar.bg.destroy(); bar.fg.destroy(); this.enemyHpBars.delete(id) }
         const mk = this.attackMarkers.get(id)
         if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(id) }
+        const dk = this.dangerMarkers.get(id)
+        if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(id) }
       }
     }
     for (const enemy of enemies) {
@@ -3431,6 +3453,22 @@ export class GameScene extends Phaser.Scene {
         mark.setVisible(true)
       } else if (mark) {
         mark.setVisible(false)
+      }
+
+      // 強敵警告マーク：3発以内でプレイヤーの最大HPを削り切る攻撃力を持つ敵の頭上に💀
+      const isDanger = vis && isDangerousEnemy(enemy, player)
+      let danger = this.dangerMarkers.get(enemy.id)
+      if (isDanger) {
+        if (!danger) {
+          danger = this.add.text(ex, ey, '💀', { fontSize: `${Math.round(rts * 0.55)}px` })
+            .setOrigin(0.5).setDepth(8)
+          this.tweens.add({ targets: danger, scale: 1.3, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+          this.dangerMarkers.set(enemy.id, danger)
+        }
+        danger.setPosition(ex, ey - rts * 0.95)
+        danger.setVisible(true)
+      } else if (danger) {
+        danger.setVisible(false)
       }
     }
 
