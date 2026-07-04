@@ -2728,6 +2728,7 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 .facility-modal {
   width: min(520px, 92vw);
   max-height: 86vh;
+  max-height: 86dvh;
   overflow-y: auto;
   background: #11112a;
   border: 1px solid #3a3a66;
@@ -2827,11 +2828,20 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   color: #ffe08a;
 }
 
+/* モーダル内容がスクロールしてもボタンは常に下部に見えるよう固定 */
 .facility-btns {
   display: flex;
   gap: 12px;
   justify-content: center;
-  margin-top: 18px;
+  position: sticky;
+  bottom: 0;
+  margin: 18px -24px -22px;
+  padding: 12px 24px 16px;
+  background: #11112a;
+}
+
+@media (max-height: 720px) {
+  .facility-list { max-height: 132px; }
 }
 
 .facility-go-btn,
