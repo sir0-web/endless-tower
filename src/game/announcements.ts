@@ -56,6 +56,32 @@ export async function hasNewAnnouncement(): Promise<boolean> {
   return list.some(isNew)
 }
 
+// ── GAME START時の「未読お知らせ」ゲート ──
+// isNew と違い24時間で消える一時的な目印ではなく、既読にするまで消えない「未読」状態を扱う。
+// この機能の導入前に掲載されていた記事まで遡って強制既読を求めないよう、導入以降の掲載分のみ対象にする。
+const GATE_SINCE_MS = Date.parse('2026-07-05T00:00:00+09:00')
+
+function isGateTarget(a: Announcement): boolean {
+  return Date.parse(a.published_at) >= GATE_SINCE_MS
+}
+
+/** GAME START時にモーダルで警告すべき「未読」があるか */
+export async function hasUnreadAnnouncement(): Promise<boolean> {
+  const list = await fetchPublishedAnnouncements()
+  return list.some(a => isGateTarget(a) && !isViewed(a.id))
+}
+
+/**
+ * 一覧に表示中の記事をまとめて既読にする（未読を1件ずつ開かず一気に解消するための機能）。
+ * 個別に開いていないため view_count（実際に開かれた回数の指標）は増やさず、
+ * このブラウザの既読状態だけをローカルで更新する。
+ */
+export function markAllAsRead(ids: number[]): void {
+  const viewed = new Set(getViewedIds())
+  for (const id of ids) viewed.add(id)
+  localStorage.setItem(VIEWED_KEY, JSON.stringify([...viewed]))
+}
+
 /** 詳細を開いたときに呼ぶ。未カウントの記事だけサーバーで view_count を+1する */
 export async function registerView(id: number): Promise<void> {
   const viewed = getViewedIds()

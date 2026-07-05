@@ -21,6 +21,7 @@ import { HowToPlay } from './components/HowToPlay'
 import { ArcanaRoulette } from './components/ArcanaRoulette'
 import { ReportModal } from './components/ReportModal'
 import { NewsModal } from './components/NewsModal'
+import { AnnouncementGateModal } from './components/AnnouncementGateModal'
 import { SkulporinReward } from './components/SkulporinReward'
 import { applyOverrides } from './game/overrides'
 import { releaseStuckPointers } from './game/phaserRecovery'
@@ -247,6 +248,7 @@ function App() {
         <SpellbookModal />
         <MerchantModal />
         <NewsModal />
+        <AnnouncementGateModal />
         <GameToast />
       </div>
     </div>

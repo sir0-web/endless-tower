@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  fetchPublishedAnnouncements, registerView, isNew,
+  fetchPublishedAnnouncements, registerView, isNew, isViewed, markAllAsRead,
   type Announcement,
 } from '../game/announcements'
 import { RichTextView } from './RichText'
@@ -16,6 +16,8 @@ export function NewsModal() {
   const [loading, setLoading] = useState(false)
   const [list, setList]       = useState<Announcement[]>([])
   const [selected, setSelected] = useState<Announcement | null>(null)
+  // isViewed() は localStorage を直接見るため、既読状態を変えた後に再描画するための空撃ちカウンタ
+  const [, forceUpdate] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -30,8 +32,11 @@ export function NewsModal() {
 
   const openDetail = (a: Announcement) => { setSelected(a); void registerView(a.id) }
   const close = () => { setOpen(false); setSelected(null) }
+  const readAll = () => { markAllAsRead(list.map(a => a.id)); forceUpdate(t => t + 1) }
 
   if (!open) return null
+
+  const hasUnread = list.some(a => !isViewed(a.id))
 
   return (
     <div className="news-overlay" style={S.overlay} onClick={e => { if (e.target === e.currentTarget) close() }}>
@@ -46,6 +51,10 @@ export function NewsModal() {
         {/* ── 本体 ── */}
         <div style={S.body}>
           {loading && <p style={S.dim}>読み込み中…</p>}
+
+          {!loading && !selected && hasUnread && (
+            <button onClick={readAll} style={S.readAllBtn}>すべて既読にする</button>
+          )}
 
           {!loading && !selected && (
             list.length === 0
@@ -105,6 +114,11 @@ const S: Record<string, React.CSSProperties> = {
   rule: { height: 2, margin: '0 16px', background: `linear-gradient(90deg, transparent, ${GOLD}, transparent)` },
   body: { padding: '12px 18px 18px', overflowY: 'auto' },
   dim: { color: '#8a7244', textAlign: 'center', padding: '24px 0' },
+  readAllBtn: {
+    display: 'block', marginLeft: 'auto', marginBottom: 8, padding: '6px 14px',
+    background: 'rgba(120,80,20,0.12)', border: `1px solid ${GOLD}`, borderRadius: 6,
+    color: '#5a3d12', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+  },
 
   row: {
     display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',

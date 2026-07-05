@@ -112,6 +112,15 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private startGame() {
+    // 未読のお知らせがあれば警告モーダルを挟む（無ければ即座にproceedへ進む）
+    if (window.checkAnnouncementGate) {
+      window.checkAnnouncementGate(() => this.proceedStartGame())
+    } else {
+      this.proceedStartGame()
+    }
+  }
+
+  private proceedStartGame() {
     if (hasSave()) {
       this.input.enabled = false
       window.showResumeConfirm?.(
