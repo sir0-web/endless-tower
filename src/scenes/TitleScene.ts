@@ -137,6 +137,15 @@ export class TitleScene extends Phaser.Scene {
   // ── クラウド再開：名前＋パスワードでサーバーからセーブを取得し、ローカルへ展開して再開 ──
   // 成功するとサーバー行は消費（削除）され、以降はローカル自動セーブが進行を持つ。
   private resumeFromCloud() {
+    // 未読のお知らせがあれば警告モーダルを挟む（無ければ即座にproceedへ進む）
+    if (window.checkAnnouncementGate) {
+      window.checkAnnouncementGate(() => this.proceedResumeFromCloud())
+    } else {
+      this.proceedResumeFromCloud()
+    }
+  }
+
+  private proceedResumeFromCloud() {
     // safePrompt: ダイアログでtouchendが飲まれてタッチ入力全体が固まる問題への対策
     const name = safePrompt(this, '再開する冒険者名を入力')?.trim()
     if (!name) return
