@@ -13,6 +13,7 @@ import { claimJackpot } from '../game/jackpot'
 import { getMonsterTextureOverrides } from '../game/overrides'
 import { ENEMY_TEXTURE_MAP } from '../game/enemyTextures'
 import { safePrompt } from '../game/phaserRecovery'
+import { fetchDoppelgangerCandidate, type DoppelgangerRecord } from '../game/doppelganger'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
@@ -105,15 +106,33 @@ function dexPierceBonus(dex: number): number {
   return Math.min(0.16, Math.max(0, dex - 100) / 100 * 0.02)
 }
 
+// プレイヤー/ドッペルゲンガー共通の8方向むき（プレイヤーの歩行・攻撃スプライトをそのまま流用するため）
+type FacingDir = 'down' | 'up' | 'right' | 'left' | 'down-right' | 'down-left' | 'up-right' | 'up-left'
+
+/** 移動量の符号(-1/0/1)から8方向を求める（プレイヤー移動・ドッペルゲンガー移動の両方で使う共通ロジック） */
+function dirFromSign(sx: number, sy: number): FacingDir {
+  if (sx > 0 && sy === 0) return 'right'
+  if (sx < 0 && sy === 0) return 'left'
+  if (sx === 0 && sy > 0) return 'down'
+  if (sx === 0 && sy < 0) return 'up'
+  if (sx > 0 && sy > 0)   return 'down-right'
+  if (sx > 0 && sy < 0)   return 'up-right'
+  if (sx < 0 && sy > 0)   return 'down-left'
+  if (sx < 0 && sy < 0)   return 'up-left'
+  return 'down'
+}
+
 export class GameScene extends Phaser.Scene {
   private state!: GameState
   private graphics!: Phaser.GameObjects.Graphics
   private fogGraphics!: Phaser.GameObjects.Graphics
   private playerGraphic: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite | null = null
-  private playerDir: 'down' | 'up' | 'right' | 'left' | 'down-right' | 'down-left' | 'up-right' | 'up-left' = 'down'
+  private playerDir: FacingDir = 'down'
   private isPlayerAttacking = false
   private hasPlayerAnims    = false
-  private enemyGraphics: Map<string, Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image> = new Map()
+  // ドッペルゲンガー用：プレイヤーと同じ歩行/攻撃スプライトを使うための敵ごとの向き記憶
+  private enemyDir = new Map<string, FacingDir>()
+  private enemyGraphics: Map<string, Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image | Phaser.GameObjects.Sprite> = new Map()
   private enemyHpBars:  Map<string, { bg: Phaser.GameObjects.Rectangle; fg: Phaser.GameObjects.Rectangle }> = new Map()
   // アイテム描画: Text（回復/魔法）または Image（装備品＝宝箱スプライト）
   private itemGraphics: Map<string, Phaser.GameObjects.GameObject> = new Map()
@@ -188,6 +207,11 @@ export class GameScene extends Phaser.Scene {
   private resolvedSkulporinIds = new Set<number>()
   private skulporinHeartbeatTimer: ReturnType<typeof setInterval> | null = null
   private skulporinEscapeTimer: ReturnType<typeof setInterval> | null = null
+
+  // このプレイ（この周回）中に撃破済みのドッペルゲンガー記録ID。DBの記録自体は削除しない
+  // （他プレイヤーや次回以降の自分には引き続き出現しうる）ため、同一周回内での再出現だけを防ぐ。
+  // 新規ゲーム開始時にリセットする（initGame()参照）。ロード再開時はリセットしない。
+  private defeatedDoppelgangerIds = new Set<number>()
 
   // ── ADMIN イベント（モンスターハウス強制・モンスター強制ポップ）──
   private forceMonsterHouseNextFloor = false
@@ -481,6 +505,7 @@ export class GameScene extends Phaser.Scene {
 
     // 新規ゲーム：マイルストーン通知の重複防止をリセット（ロード再開時は呼ばない）
     resetWorldNotifyDedup()
+    this.defeatedDoppelgangerIds = new Set<number>()
 
     const map = generateDungeon()
     const playerPos = getPlayerStartPosition(map)
@@ -524,6 +549,7 @@ export class GameScene extends Phaser.Scene {
         maxFloorReached: 1,
         jackpotWins: 0,
         statPoints: 0,
+        totalStatPointsEarned: 0,
         healingTurns: 0,
         blessingTurns: 0,
         blessingBonus: { str: 0, int: 0, dex: 0, agi: 0 },
@@ -557,7 +583,13 @@ export class GameScene extends Phaser.Scene {
     const map = saved.map
 
     this.state = {
-      player: { ...saved.player, maxFloorReached: saved.player.maxFloorReached ?? floor },
+      player: {
+        ...saved.player,
+        maxFloorReached: saved.player.maxFloorReached ?? floor,
+        // 本機能導入前のセーブ互換：生涯累計が未記録なら、現在の未消費ステータスポイントを
+        // 下限の概算値としてバックフィルする（0スタートだと以後の少量獲得だけで頭打ちになるため）
+        totalStatPointsEarned: saved.player.totalStatPointsEarned ?? saved.player.statPoints ?? 0,
+      },
       enemies: saved.enemies,
       items: saved.items,
       map,
@@ -715,14 +747,7 @@ export class GameScene extends Phaser.Scene {
     this.lastMoveAt = now
 
     // 移動方向を記録
-    if      (dx === 1  && dy === 0)  this.playerDir = 'right'
-    else if (dx === -1 && dy === 0)  this.playerDir = 'left'
-    else if (dx === 0  && dy === 1)  this.playerDir = 'down'
-    else if (dx === 0  && dy === -1) this.playerDir = 'up'
-    else if (dx === 1  && dy === -1) this.playerDir = 'up-right'
-    else if (dx === -1 && dy === -1) this.playerDir = 'up-left'
-    else if (dx === 1  && dy === 1)  this.playerDir = 'down-right'
-    else if (dx === -1 && dy === 1)  this.playerDir = 'down-left'
+    this.playerDir = dirFromSign(dx, dy)
 
     // 泥の沼スロー処理
     if (player.mudTurns > 0) {
@@ -1069,6 +1094,7 @@ export class GameScene extends Phaser.Scene {
 
   /** 敵を撃破：状態から除去し、撃破演出（縮小フェード＋破片）・経験値・レベルアップ処理を行う */
   private killEnemy(enemy: import('../types').Enemy) {
+    if (enemy.isDoppelganger) { this.killDoppelganger(enemy); return }
     const { player } = this.state
     this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
     if (enemy.isBoss) {
@@ -1171,7 +1197,7 @@ export class GameScene extends Phaser.Scene {
       player.level++
       player.maxHp += 5
       player.hp = player.maxHp
-      player.statPoints += 5
+      this.grantStatPoints(5)
       this.addMessage(`レベルアップ！Lv${player.level}  +5ステータスポイント！`)
       playLevelUp()
       this.playLevelUpEffect()
@@ -1239,6 +1265,19 @@ export class GameScene extends Phaser.Scene {
     player[stat]++
     player.statPoints--
     this.updateWindowGameState()
+  }
+
+  /**
+   * ステータスポイントを付与する共通ヘルパー。未消費分(statPoints)に加え、
+   * 生涯累計(totalStatPointsEarned)も同時に加算する。累計は消費しても減らず、
+   * 死亡時にドッペルゲンガーとして登録される際の撃破報酬の元データになるため、
+   * 新たな獲得経路を追加する際は必ずこれを経由すること（直接 statPoints += しない）。
+   */
+  private grantStatPoints(amount: number): void {
+    if (amount === 0) return
+    const { player } = this.state
+    player.statPoints += amount
+    player.totalStatPointsEarned = (player.totalStatPointsEarned ?? 0) + amount
   }
 
   private enemyTurn() {
@@ -1348,6 +1387,12 @@ export class GameScene extends Phaser.Scene {
             yoyo: true,
             ease: 'Quad.Out',
           })
+          // ドッペルゲンガー：プレイヤーと同じ攻撃アニメーションを、プレイヤーの向きで再生する
+          if (enemy.isDoppelganger && eg instanceof Phaser.GameObjects.Sprite) {
+            const dir = dirFromSign(Math.sign(edx), Math.sign(edy))
+            this.enemyDir.set(enemy.id, dir)
+            this.playEnemyAttackAnim(eg, dir)
+          }
         }
         // 被ダメ演出：プレイヤーフラッシュ＋画面シェイク
         this.flashPlayer()
@@ -1775,6 +1820,9 @@ export class GameScene extends Phaser.Scene {
     // フロア入場時にすかるぽりんチェック（heartbeatを即時実行）＋保留中のADMIN指定スポーン適用
     void this.sendSkulporinHeartbeat()
     this.flushPendingAdminSpawns()
+
+    // ドッペルゲンガー：踏破済み（周回済み）フロアは farming 対策で対象外にする
+    if (!this.floorIsCleared) void this.checkDoppelgangerSpawn()
   }
 
   // ── イベントフロア（ベースキャンプ「あるかなひろば」）──
@@ -2096,7 +2144,7 @@ export class GameScene extends Phaser.Scene {
     }
     let detail: string
     if (reward.reward_type === 'point') {
-      this.state.player.statPoints += 1
+      this.grantStatPoints(1)
       detail = 'ステータスポイント+1！'
     } else if (reward.reward_type === 'coin') {
       const coinCount = this.state.heals.filter(h => h.coin).length
@@ -2411,6 +2459,125 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ─────────────────────────────────────────────────────────
+  // ドッペルゲンガー
+  // ─────────────────────────────────────────────────────────
+
+  // フロア到達時：死亡階±10階（10階未満は対象外）に他プレイヤーの記録があれば30%で1体出現させる。
+  // この周回で既に撃破済みの記録は除外する（DB自体は削除しないため、他プレイヤーや次回の周回には
+  // 引き続き出現しうる＝10階バンドの保持上限に達するまで何度でも遭遇可能）。
+  private async checkDoppelgangerSpawn(): Promise<void> {
+    if (this.isGameOver || this.isEventFloor) return
+    if (this.state.enemies.some(e => e.isDoppelganger)) return
+    if (Math.random() >= 0.30) return
+    const floor = this.state.player.floor
+    const record = await fetchDoppelgangerCandidate(floor, this.defeatedDoppelgangerIds)
+    if (!record) return
+    // 非同期待ちの間にフロアを離れていたら出現させない
+    if (this.isGameOver || this.isEventFloor || this.state.player.floor !== floor) return
+    if (this.state.enemies.some(e => e.isDoppelganger)) return   // 1イベントにつき1体のみ
+    this.spawnDoppelganger(record)
+  }
+
+  private spawnDoppelganger(record: DoppelgangerRecord): void {
+    const { map, player } = this.state
+    const floors: { x: number; y: number }[] = []
+    for (let y = 0; y < map.length; y++) {
+      for (let x = 0; x < map[y].length; x++) {
+        if (map[y][x] === 'floor') floors.push({ x, y })
+      }
+    }
+    if (floors.length === 0) return
+    const pos = floors[Math.floor(Math.random() * floors.length)]
+
+    // 敵ステータス変換：既存の attackEnemy/enemyTurn の式（effectiveAtk=str*1.5+level、
+    // 防御=vit+level/2）と整合するよう、enemy.attack/defense を逆算する。
+    // enemyTurnはbaseAtk=enemy.attack+floor(str*0.5)を計算するため、その分を差し引いておく。
+    const str   = Math.max(0, Math.floor(record.str))
+    const level = Math.max(1, Math.floor(record.level))
+    const atkTotal = Math.floor(str * 1.5) + level
+    const attack   = Math.max(0, atkTotal - Math.floor(str * 0.5))
+    const defense  = Math.max(0, Math.floor(level / 2))
+    const maxHp    = Math.max(1, Math.floor(record.max_hp))
+
+    const enemy: Enemy = {
+      id: `doppel_${record.id}_${Date.now()}`,
+      position: { ...pos },
+      hp: maxHp,
+      maxHp,
+      attack,
+      defense,
+      str,
+      vit: Math.max(0, Math.floor(record.vit)),
+      agi: Math.max(0, Math.floor(record.agi)),
+      luk: Math.max(0, Math.floor(record.luk)),
+      slowedTurns: 0,
+      name: `ドッペルゲンガー「${record.player_name}」`,
+      isDoppelganger: true,
+      doppelStatReward: Math.max(0, Math.floor(record.stat_point_reward)),
+    }
+    this.state.enemies.push(enemy)
+    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    this.addMessage(`【ドッペルゲンガーが出現した！】「${record.player_name}」の魂が眠っていたようだ…`)
+    this.renderMap()
+    // populateFloor完了後の非同期出現のため、ボスBGMへの切り替えをここで再評価する
+    this.updateBGM()
+    fireWorldNotification(
+      'boss',
+      '【ドッペルゲンガー出現】',
+      `${getDisplayName()}さんがいる${floorLabel(this.state.player.floor)}にドッペルゲンガー「${record.player_name}」が出現しました！`,
+    )
+  }
+
+  /**
+   * ドッペルゲンガー撃破：ステータスポイント報酬を付与する。DBの記録は削除せず、
+   * この周回中だけ再出現しないよう defeatedDoppelgangerIds に記録する
+   * （他プレイヤーや次回以降の周回には引き続き出現しうる）。
+   */
+  private killDoppelganger(enemy: Enemy): void {
+    this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
+
+    const idMatch = enemy.id.match(/^doppel_(\d+)_/)
+    if (idMatch) this.defeatedDoppelgangerIds.add(Number(idMatch[1]))
+
+    const reward = enemy.doppelStatReward ?? 0
+    if (reward > 0) this.grantStatPoints(reward)
+    this.addMessage(`ドッペルゲンガーを倒した！生前のステータスポイント${reward}を引き継いだ！`)
+    window.showEventMessage?.(`ドッペルゲンガー討伐！ステータスポイント+${reward}`, '#cc88ff')
+
+    // 撃破演出・後片付け（通常のkillEnemyと同様。経験値・コインドロップは対象外）
+    const g   = this.enemyGraphics.get(enemy.id)
+    const bar = this.enemyHpBars.get(enemy.id)
+    this.enemyGraphics.delete(enemy.id)
+    this.enemyHpBars.delete(enemy.id)
+    if (bar) { bar.bg.destroy(); bar.fg.destroy() }
+    const mk = this.attackMarkers.get(enemy.id)
+    if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(enemy.id) }
+    const dk = this.dangerMarkers.get(enemy.id)
+    if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(enemy.id) }
+    if (g) {
+      this.tweens.killTweensOf(g)
+      if (g.visible) {
+        this.spawnBurst(g.x, g.y, { color: 0x9966ff, count: 10, speed: this.rts * 1.1 })
+        this.cameras.main.shake(200, 0.008)
+        this.tweens.add({
+          targets: g,
+          alpha: 0,
+          scaleX: g.scaleX * 0.2,
+          scaleY: g.scaleY * 0.2,
+          angle: 90,
+          duration: 240,
+          ease: 'Quad.In',
+          onComplete: () => g.destroy(),
+        })
+      } else {
+        g.destroy()
+      }
+    }
+    // 通常の敵撃破と同様、スロットのキル連動クレジット・討伐ログにも計上する
+    window.onEnemyKilled?.()
+    logEvent('kill', { floor: this.state.player.floor, enemy_name: enemy.name, is_boss: false })
+    this.updateWindowGameState()
+  }
 
   private gameOver() {
     if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
@@ -2430,12 +2597,15 @@ export class GameScene extends Phaser.Scene {
     const refineTotal = Object.values(this.state.player.equipment)
       .reduce((sum, eq) => sum + (eq?.refineLevel ?? 0), 0)
     const jackpotWins = this.state.player.jackpotWins ?? 0
+    // ドッペルゲンガー登録用スナップショット（GAME OVER画面での同意確認後に使う。ここでは登録しない）
+    const doppelSnapshot = this.state.player
     this.time.delayedCall(1250, () => {
       this.scene.start('GameOverScene', {
         floor: this.state.player.floor,
         level: this.state.player.level,
         refineTotal,
         jackpotWins,
+        doppelSnapshot,
       })
     })
   }
@@ -2480,7 +2650,7 @@ export class GameScene extends Phaser.Scene {
         tiles: this.state.map,
         playerPos: { ...player.position },
         enemies: this.state.enemies.map(e => ({
-          x: e.position.x, y: e.position.y, isBoss: e.isBoss ?? false,
+          x: e.position.x, y: e.position.y, isBoss: (e.isBoss || e.isDoppelganger) ?? false,
         })),
         items: this.state.items.map(i => ({ x: i.position.x, y: i.position.y })),
       },
@@ -2507,13 +2677,13 @@ export class GameScene extends Phaser.Scene {
           if (won <= 0) {
             // 直前に他プレイヤーが総取りした等でプールが空 → 最低保証で「当たったのに0枚」を防ぐ
             const guarantee = 20
-            this.state.player.statPoints += guarantee
+            this.grantStatPoints(guarantee)
             this.addMessage(`💰 JACKPOT！プールは空だったが、最低保証 ${guarantee}ポイントを獲得！`)
             window.showSlotAnnouncement?.('jackpot', `プールは空…最低保証 ${guarantee}ポイント獲得！`)
             this.updateWindowGameState()
             return
           }
-          this.state.player.statPoints += won
+          this.grantStatPoints(won)
           this.addMessage(`💰 JACKPOT！！共有プール ${won}ポイントを総取り！！`)
           window.showSlotAnnouncement?.('jackpot', `ポイント総取り ${won}ポイントゲット！`)
           fireWorldNotification(
@@ -2528,7 +2698,7 @@ export class GameScene extends Phaser.Scene {
       }
       case '777': {
         player.level      += 10
-        player.statPoints += 50
+        this.grantStatPoints(50)
         player.maxHp       = Math.floor(player.maxHp      * 1.1)
         player.maxStamina  = Math.floor(player.maxStamina * 1.1)
         player.hp          = player.maxHp
@@ -2569,7 +2739,7 @@ export class GameScene extends Phaser.Scene {
         break
       case 'kakuhen':
       case 'kakuhen_miss': {
-        player.statPoints += 30
+        this.grantStatPoints(30)
         window.showSlotAnnouncement?.('kakuhen')
         window.releaseSlotSpins?.()   // アルカナ演出完了（ルーレット非表示のフォールバック経路）→ スロット再開
         break
@@ -2615,7 +2785,7 @@ export class GameScene extends Phaser.Scene {
   private applyArcanaResult(points: number) {
     window.releaseSlotSpins?.()   // アルカナ演出完了 → スロット自動消化を再開
     const p = Math.max(0, Math.floor(points))
-    this.state.player.statPoints += p
+    this.grantStatPoints(p)
     this.addMessage(`🌌 アルカナチャンス！ ステータスポイント +${p} 獲得！`)
     fireWorldNotification(
       'achievement',
@@ -2636,7 +2806,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateBGM() {
-    const hasBoss = this.state.enemies.some(e => e.isBoss)
+    const hasBoss = this.state.enemies.some(e => e.isBoss || e.isDoppelganger)
     playBGM(hasBoss ? 'boss' : 'dungeon')
   }
 
@@ -2993,9 +3163,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 全8方向をベースアニメーション（down/up/right）とflipXにマッピング */
-  private getAnimBaseDir(): { anim: 'down' | 'up' | 'right'; flipX: boolean; idleKey: string } {
-    switch (this.playerDir) {
+  /** 全8方向をベースアニメーション（down/up/right）とflipXにマッピング。プレイヤー・ドッペルゲンガー共用 */
+  private getAnimBaseDir(dir: FacingDir): { anim: 'down' | 'up' | 'right'; flipX: boolean; idleKey: string } {
+    switch (dir) {
       case 'up':         return { anim: 'up',    flipX: false, idleKey: 'attack_up_1'    }
       case 'down':       return { anim: 'down',  flipX: false, idleKey: 'attack_down_1'  }
       case 'right':      return { anim: 'right', flipX: false, idleKey: 'attack_right_1' }
@@ -3011,7 +3181,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.hasPlayerAnims || this.isPlayerAttacking) return
     const sprite = this.playerGraphic
     if (!(sprite instanceof Phaser.GameObjects.Sprite)) return
-    const { anim, flipX, idleKey } = this.getAnimBaseDir()
+    const { anim, flipX, idleKey } = this.getAnimBaseDir(this.playerDir)
     sprite.setFlipX(flipX)
     sprite.play(`walk_${anim}`, true)
     this.time.delayedCall(450, () => {
@@ -3025,13 +3195,37 @@ export class GameScene extends Phaser.Scene {
     if (!this.hasPlayerAnims) return
     const sprite = this.playerGraphic
     if (!(sprite instanceof Phaser.GameObjects.Sprite)) return
-    const { anim, flipX, idleKey } = this.getAnimBaseDir()
+    const { anim, flipX, idleKey } = this.getAnimBaseDir(this.playerDir)
     sprite.off('animationcomplete')
     this.isPlayerAttacking = true
     sprite.setFlipX(flipX)
     sprite.play(`attack_${anim}`, true)
     sprite.once('animationcomplete', () => {
       this.isPlayerAttacking = false
+      if (!sprite.active) return
+      sprite.setTexture(idleKey)
+    })
+  }
+
+  /** ドッペルゲンガー用：移動時の歩行アニメーション（プレイヤーのplayWalkAnimと同じ仕組み） */
+  private playEnemyWalkAnim(sprite: Phaser.GameObjects.Sprite, dir: FacingDir): void {
+    const { anim, flipX, idleKey } = this.getAnimBaseDir(dir)
+    sprite.setFlipX(flipX)
+    sprite.play(`walk_${anim}`, true)
+    this.time.delayedCall(450, () => {
+      if (!sprite.active) return
+      sprite.stop()
+      sprite.setTexture(idleKey)
+    })
+  }
+
+  /** ドッペルゲンガー用：攻撃時のアニメーション（プレイヤーのplayAttackAnimと同じ仕組み） */
+  private playEnemyAttackAnim(sprite: Phaser.GameObjects.Sprite, dir: FacingDir): void {
+    const { anim, flipX, idleKey } = this.getAnimBaseDir(dir)
+    sprite.off('animationcomplete')
+    sprite.setFlipX(flipX)
+    sprite.play(`attack_${anim}`, true)
+    sprite.once('animationcomplete', () => {
       if (!sprite.active) return
       sprite.setTexture(idleKey)
     })
@@ -3349,13 +3543,14 @@ export class GameScene extends Phaser.Scene {
         if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(id) }
         const dk = this.dangerMarkers.get(id)
         if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(id) }
+        this.enemyDir.delete(id)
       }
     }
     for (const enemy of enemies) {
       const { x: ex, y: ey } = this.tileToWorld(enemy.position.x, enemy.position.y)
       const vis = this.isVisible(enemy.position.x, enemy.position.y)
       const barW = rts - 2
-      const barH = enemy.isBoss ? Math.max(4, Math.round(8 * rts / TILE_SIZE)) : Math.max(2, Math.round(4 * rts / TILE_SIZE))
+      const barH = (enemy.isBoss || enemy.isDoppelganger) ? Math.max(4, Math.round(8 * rts / TILE_SIZE)) : Math.max(2, Math.round(4 * rts / TILE_SIZE))
 
       // 視界外の敵はスプライト・HPバーを生成しない（描画負荷削減）
       // ただし既に生成済みのものはそのまま位置更新する
@@ -3363,6 +3558,17 @@ export class GameScene extends Phaser.Scene {
       if (!g && !vis) {
         // 視界外かつ未生成 → スキップ（次に視界内に入ったとき生成）
         continue
+      }
+      if (!g && enemy.isDoppelganger && this.hasPlayerAnims) {
+        // ドッペルゲンガー：プレイヤーと全く同じ歩行/攻撃スプライトを使う
+        const dir = this.enemyDir.get(enemy.id) ?? 'down'
+        const { idleKey, flipX } = this.getAnimBaseDir(dir)
+        const sprite = this.add.sprite(ex, ey, idleKey)
+          .setDisplaySize(rts * 1.25, rts * 1.38)
+          .setDepth(5)
+        if (flipX) sprite.setFlipX(true)
+        g = sprite
+        this.enemyGraphics.set(enemy.id, g)
       }
       if (!g) {
         const baseName   = enemy.name.replace(/^【[^】]+】/, '')
@@ -3394,7 +3600,9 @@ export class GameScene extends Phaser.Scene {
               .setDisplaySize(eSize, eSize).setDepth(5)
           }
         } else {
-          const color = enemy.isBoss
+          const color = enemy.isDoppelganger
+            ? 0x9966ff
+            : enemy.isBoss
             ? (enemy.name.startsWith('【MVP】') ? 0xff8800
               : enemy.name.startsWith('【エリア】') ? 0xffff00
               : 0xff00ff)
@@ -3422,13 +3630,19 @@ export class GameScene extends Phaser.Scene {
       const fgColor = ratio > 0.5 ? 0x00ff00 : ratio > 0.25 ? 0xffff00 : 0xff0000
       bar.fg.setSize(fgWidth, barH).setFillStyle(fgColor)
       bar.bg.setSize(barW, barH)
-      const showBar = vis && (enemy.isBoss || enemy.hp < enemy.maxHp)
+      const showBar = vis && (enemy.isBoss || enemy.isDoppelganger || enemy.hp < enemy.maxHp)
 
       // 位置が変わっていたらトゥイーン移動（視界内のみ。遠距離テレポートは即時配置）
       const fixedBar = bar
       if (g.x !== ex || g.y !== ey) {
-        this.tweens.killTweensOf(g)
         const near = Math.abs(g.x - ex) <= rts * 1.6 && Math.abs(g.y - ey) <= rts * 1.6
+        // ドッペルゲンガー：隣接タイルへの移動なら向きを更新し歩行アニメーションを再生する
+        if (enemy.isDoppelganger && g instanceof Phaser.GameObjects.Sprite && vis && g.visible && near) {
+          const dir = dirFromSign(Math.sign(ex - g.x), Math.sign(ey - g.y))
+          this.enemyDir.set(enemy.id, dir)
+          this.playEnemyWalkAnim(g, dir)
+        }
+        this.tweens.killTweensOf(g)
         if (vis && g.visible && near) {
           this.tweens.add({
             targets: g,
@@ -3483,7 +3697,7 @@ export class GameScene extends Phaser.Scene {
     const { x: px, y: py } = this.tileToWorld(player.position.x, player.position.y)
     if (!this.playerGraphic) {
       if (this.hasPlayerAnims) {
-        const { idleKey, flipX } = this.getAnimBaseDir()
+        const { idleKey, flipX } = this.getAnimBaseDir(this.playerDir)
         const sprite = this.add.sprite(px, py, idleKey)
           .setDisplaySize(rts * 1.25, rts * 1.38)
           .setDepth(6)

@@ -72,9 +72,20 @@ export function GameToast() {
         onNo: confirmStartOver,
       })
     }
+    window.showDoppelgangerConfirm = (onYes, onNo) => {
+      lockScroll()
+      setConfirm({
+        message: 'ドッペルゲンガーとして生き続けますか？\n（「はい」を選ぶと、他の冒険者の前に生前の姿でモンスターとして現れることがあります）',
+        yesLabel: 'はい',
+        noLabel:  'いいえ',
+        onYes,
+        onNo,
+      })
+    }
     return () => {
       window.showGameToast     = undefined
       window.showResumeConfirm = undefined
+      window.showDoppelgangerConfirm = undefined
       unlockScroll()
     }
   }, [])

@@ -96,6 +96,8 @@ export interface Player {
   vit: number
   luk: number
   statPoints: number
+  // 生涯累計で獲得したステータスポイント（消費しても減らない）。ドッペルゲンガー撃破報酬の元データ。
+  totalStatPointsEarned?: number
   // 自己最高到達階。これ未満のフロア（蝶の羽で戻った踏破済み階）はXP大幅減＆ドロップなし
   maxFloorReached?: number
   // このプレイでのジャックポット当選回数（ランキング表示用。セーブに永続化）
@@ -121,6 +123,9 @@ export interface Enemy {
   name: string
   isBoss?: boolean
   isSkulporin?: boolean
+  isDoppelganger?: boolean
+  // ドッペルゲンガー撃破時にプレイヤーへ付与するステータスポイント（生前の生涯累計獲得量）
+  doppelStatReward?: number
   slowedTurns: number
 }
 
@@ -197,6 +202,7 @@ declare global {
     showGameToast?: (message: string) => void
     addWorldLogMessage?: (text: string) => void
     showResumeConfirm?: (onYes: () => void, onNo: () => void) => void
+    showDoppelgangerConfirm?: (onYes: () => void, onNo: () => void) => void
     showReport?: () => void
     triggerSkulporinCheck?: () => void
     showEventMessage?: (message: string, color?: string, small?: boolean) => void

@@ -1,9 +1,11 @@
 import Phaser from 'phaser'
+import type { Player } from '../types'
 import { submitRanking, fetchRanking } from '../game/supabase'
 import { ordinalSuffix } from '../game/utils'
 import { playBGM } from '../game/sound'
 import { getDisplayName, setDisplayName } from '../game/playerName'
 import { safePrompt, fadeOutToScene } from '../game/phaserRecovery'
+import { registerDeadCharacter } from '../game/doppelganger'
 
 export class GameOverScene extends Phaser.Scene {
   private floor: number = 1
@@ -14,6 +16,7 @@ export class GameOverScene extends Phaser.Scene {
   private nameInput!: Phaser.GameObjects.Text
   private submitted: boolean = false
   private leaving: boolean = false   // シーン遷移開始済みフラグ（二重遷移防止）
+  private doppelSnapshot: Player | null = null   // ドッペルゲンガー登録用の死亡時ステータス・装備スナップショット
 
   private readonly PLACEHOLDER = 'ここをタップして名前を入力'
 
@@ -21,7 +24,7 @@ export class GameOverScene extends Phaser.Scene {
     super({ key: 'GameOverScene' })
   }
 
-  init(data: { floor: number; level: number; refineTotal?: number; jackpotWins?: number }) {
+  init(data: { floor: number; level: number; refineTotal?: number; jackpotWins?: number; doppelSnapshot?: Player }) {
     this.floor = data.floor
     this.level = data.level
     this.refineTotal = data.refineTotal ?? 0
@@ -29,6 +32,7 @@ export class GameOverScene extends Phaser.Scene {
     this.playerName = getDisplayName()   // 保存中の表示名を初期値に
     this.submitted = false
     this.leaving = false
+    this.doppelSnapshot = data.doppelSnapshot ?? null
   }
 
   create() {
@@ -192,6 +196,18 @@ export class GameOverScene extends Phaser.Scene {
       retryBtn.setColor('#aaaaaa')
       retryHover.clear()
     })
+
+    // ── ドッペルゲンガー確認モーダル ──
+    // ランキング登録/戻るボタンより先に、生前のステータスのまま他プレイヤーの前に
+    // モンスターとして復活することに同意するか確認する。答えるまで入力を止める。
+    if (window.showDoppelgangerConfirm && this.doppelSnapshot) {
+      this.input.enabled = false
+      const snapshot = this.doppelSnapshot
+      window.showDoppelgangerConfirm(
+        () => { this.input.enabled = true; void registerDeadCharacter(getDisplayName(), snapshot) },
+        () => { this.input.enabled = true },
+      )
+    }
   }
 
   /** 名前入力テキストを playerName に合わせて更新 */
