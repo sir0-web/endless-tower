@@ -12,6 +12,7 @@ import { getDisplayName } from '../game/playerName'
 import { claimJackpot } from '../game/jackpot'
 import { getMonsterTextureOverrides } from '../game/overrides'
 import { ENEMY_TEXTURE_MAP } from '../game/enemyTextures'
+import { safePrompt } from '../game/phaserRecovery'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
@@ -387,6 +388,9 @@ export class GameScene extends Phaser.Scene {
     this.initGame()
     this.createLowHpVignette()
     document.addEventListener('visibilitychange', this.onVisibilityChange)
+    // シーン停止時の後始末（shutdown は Phaser から自動では呼ばれないため明示登録。
+    // これがないと visibilitychange リスナーやすかるぽりんの interval が GAME OVER 後も生き続ける）
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this)
     this.input.keyboard!.on('keydown', this.handleInput, this)
     this.input.on('pointerdown', this.handlePointerMove, this)   // PC: クリックした方向へ1歩
     window.allocateStat = (stat: AllocStat) => this.doAllocateStat(stat)
@@ -595,9 +599,10 @@ export class GameScene extends Phaser.Scene {
       : '⚠️セーブに失敗しました。\nプライベートモードを解除し、\nブラウザのデータ保存を許可してください。'
 
     // クラウド保存：名前＋パスワード（任意・キャンセル時はローカルのみ）
-    const name = window.prompt('クラウドに保存する冒険者名を入力\n（別端末での再開に使います）', getDisplayName())?.trim()
+    // safePrompt: ダイアログでtouchendが飲まれてタッチ入力全体が固まる問題への対策
+    const name = safePrompt(this, 'クラウドに保存する冒険者名を入力\n（別端末での再開に使います）', getDisplayName())?.trim()
     if (!name) { window.showGameToast?.(localMsg); return }
-    const password = window.prompt('パスワードを入力\n（再開時に必要。忘れないでください）')?.trim()
+    const password = safePrompt(this, 'パスワードを入力\n（再開時に必要。忘れないでください）')?.trim()
     if (!password) { window.showGameToast?.(localMsg); return }
 
     window.showGameToast?.('クラウドに保存中...')
@@ -2410,13 +2415,15 @@ export class GameScene extends Phaser.Scene {
   private gameOver() {
     if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
     this.isGameOver = true
+    // プレイ中フラグの解除と通知を最優先で行う（後続処理が万一throwしても
+    // ジョイスティックのタッチ横取りや「いいね」判定が生き残らないように）
+    window.isGameSceneActive = false
+    window.dispatchEvent(new Event('game-scene-changed'))
     logEvent('death', { floor: this.state.player.floor, level: this.state.player.level })
     clearSave()              // ローカル中断データをゲームオーバーで強制消滅
     void deleteOwnCloudSave() // クラウドセーブも削除（復活＝セーブスカミング防止・permadeath維持）
     this.input.keyboard!.off('keydown', this.handleInput, this)
     this.input.off('pointerdown', this.handlePointerMove, this)
-    window.isGameSceneActive = false
-    window.dispatchEvent(new Event('game-scene-changed'))
     // 少し間を置いてから暗転 → ゲームオーバー画面へ
     this.time.delayedCall(700, () => this.cameras.main.fadeOut(500, 0, 0, 0))
     // 全身の精錬値合計（装備中アイテムの refineLevel を合算）

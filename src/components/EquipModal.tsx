@@ -37,11 +37,21 @@ export function EquipModal() {
 
   useEffect(() => {
     const onUpdate = () => {
+      // プレイ中以外は開かない（死亡直後の残タイマー等が古い pendingEquip 付きで
+      // gamestate-update を飛ばしても、GAME OVER画面の上に再オープンさせない）
+      if (!window.isGameSceneActive) { setPending(null); return }
       const pe = window.gameState?.pendingEquip ?? null
       setPending(pe)
     }
+    // ゲームオーバー等でシーンが変わったら強制クローズ。
+    // GameScene 停止後は window.resolveEquip が死んだシーンを指し、閉じる手段が無くなるため。
+    const onSceneChanged = () => setPending(null)
     window.addEventListener('gamestate-update', onUpdate)
-    return () => window.removeEventListener('gamestate-update', onUpdate)
+    window.addEventListener('game-scene-changed', onSceneChanged)
+    return () => {
+      window.removeEventListener('gamestate-update', onUpdate)
+      window.removeEventListener('game-scene-changed', onSceneChanged)
+    }
   }, [])
 
   if (!pending) return null

@@ -3,6 +3,7 @@ import { submitRanking, fetchRanking } from '../game/supabase'
 import { ordinalSuffix } from '../game/utils'
 import { playBGM } from '../game/sound'
 import { getDisplayName, setDisplayName } from '../game/playerName'
+import { safePrompt, fadeOutToScene } from '../game/phaserRecovery'
 
 export class GameOverScene extends Phaser.Scene {
   private floor: number = 1
@@ -12,6 +13,7 @@ export class GameOverScene extends Phaser.Scene {
   private playerName: string = ''
   private nameInput!: Phaser.GameObjects.Text
   private submitted: boolean = false
+  private leaving: boolean = false   // シーン遷移開始済みフラグ（二重遷移防止）
 
   private readonly PLACEHOLDER = 'ここをタップして名前を入力'
 
@@ -26,10 +28,13 @@ export class GameOverScene extends Phaser.Scene {
     this.jackpotWins = data.jackpotWins ?? 0
     this.playerName = getDisplayName()   // 保存中の表示名を初期値に
     this.submitted = false
+    this.leaving = false
   }
 
   create() {
     playBGM('gameover')
+    // 防御: 万一プレイ中フラグが残っていても、この画面ではジョイスティック等を確実に無効化する
+    window.isGameSceneActive = false
     // スマホ: キャンバスを全幅化して余白を無くし、文字を大きく見せる（非プレイ画面）
     window.dispatchEvent(new Event('et-canvas-full'))
     const W  = this.scale.width
@@ -112,12 +117,18 @@ export class GameOverScene extends Phaser.Scene {
     })
 
     // スマホ用タップ入力
+    // pointerdown ではなく pointerup + setTimeout で開く：タッチ継続中に同期ダイアログを
+    // 開くと touchend が飲み込まれてポインタが押しっぱなしのままスタックし、
+    // 以後この画面の全ボタンが反応しなくなる（iOS Safari等の既知挙動）ため。
     this.nameInput.setInteractive({ useHandCursor: true })
-    this.nameInput.on('pointerdown', () => {
-      if (this.submitted) return
-      const name = prompt('プレイヤー名を入力（10文字以内）', this.playerName) ?? this.playerName
-      this.playerName = name.slice(0, 10)
-      this.refreshNameInput()
+    this.nameInput.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (this.submitted || this.leaving) return
+      if (pointer.getDistance() > 16) return   // ドラッグ（ページスクロール）は無視
+      window.setTimeout(() => {
+        const name = safePrompt(this, 'プレイヤー名を入力（10文字以内）', this.playerName) ?? this.playerName
+        this.playerName = name.slice(0, 10)
+        this.refreshNameInput()
+      }, 0)
     })
 
     // ── グループ2: ボタン2つ ──
@@ -147,7 +158,7 @@ export class GameOverScene extends Phaser.Scene {
 
     submitBtn.setInteractive({ useHandCursor: true })
     submitBtn.on('pointerdown', () => {
-      if (this.submitted) return
+      if (this.submitted || this.leaving) return
       if (this.playerName.length > 0) {
         this.registerRanking()
       } else {
@@ -230,9 +241,10 @@ export class GameOverScene extends Phaser.Scene {
     this.fadeToScene('RankingScene', { ranking, floor: this.floor, level: this.level, from: 'gameover' })
   }
 
-  /** フェードアウトしてからシーン遷移する共通ヘルパー */
+  /** フェードアウトしてからシーン遷移する共通ヘルパー（RAF停止時もタイムアウトで遷移を保証） */
   private fadeToScene(key: string, data?: object) {
-    this.cameras.main.fadeOut(350, 0, 0, 0)
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(key, data))
+    if (this.leaving) return
+    this.leaving = true
+    fadeOutToScene(this, key, data)
   }
 }

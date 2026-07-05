@@ -67,6 +67,18 @@ export function WorldTelop() {
     }
   }, [current])
 
+  // ウォッチドッグ：どんな経路で消去タイマーが失われても（タッチ後の合成 mouseenter で
+  // pauseHide が走りタイマーが潰されるケース等）、テロップが永久残留しないための絶対上限。
+  useEffect(() => {
+    if (!current) return
+    const maxMs = (current.display_ms ?? SHOW_MS) + 12_000
+    const kill = setTimeout(() => {
+      setVisible(false)
+      setTimeout(() => setCurrent(null), FADE_MS)
+    }, maxMs)
+    return () => clearTimeout(kill)
+  }, [current])
+
   // ホバー/タッチ中は自動消去を止めて、いいねを押す猶予を作る
   const pauseHide = () => {
     if (hideRef.current)  { clearTimeout(hideRef.current);  hideRef.current = null }
@@ -84,6 +96,7 @@ export function WorldTelop() {
 
   const doLike = async () => {
     if (!current || likeStatus !== 'idle') return
+    pauseHide()   // 送信中にテロップが消えないよう保持（完了後 scheduleHide で必ず閉じる）
     setLikeStatus('sending')
     try {
       const res = await fetch('/api/like', {
@@ -118,6 +131,9 @@ export function WorldTelop() {
   const likeable = isLikeable(current)
 
   return createPortal(
+    // 親は常に pointer-events:none（タップは「いいね」ボタンだけが受ける。CSS側で auto 指定済み）。
+    // 以前は likeable 時に親全体を auto にしていたため、消去タイマーが失われた際に
+    // 見えない帯が画面上部のタップを恒久的に奪うことがあった。
     <div
       className="world-telop"
       style={{
@@ -125,12 +141,8 @@ export function WorldTelop() {
         transform: `translateX(-50%) translateY(${visible ? 0 : -10}px)`,
         borderColor: c.border,
         boxShadow: `0 0 18px ${c.glow}, inset 0 0 0 1px rgba(255,255,255,0.04)`,
-        pointerEvents: likeable ? 'auto' : 'none',
+        pointerEvents: 'none',
       }}
-      onMouseEnter={likeable ? pauseHide : undefined}
-      onMouseLeave={likeable ? resumeHide : undefined}
-      onTouchStart={likeable ? pauseHide : undefined}
-      onTouchEnd={likeable ? resumeHide : undefined}
     >
       <div className="world-telop-rule" style={{ background: c.border }} />
       <div className="world-telop-title" style={{ color: c.title }}>{current.title}</div>
@@ -140,6 +152,10 @@ export function WorldTelop() {
           className="world-telop-like"
           disabled={likeStatus !== 'idle'}
           onClick={doLike}
+          // ホバー中は消去を保留（PCのみ。タッチ後の合成マウスイベントは pointerType で除外し、
+          // resumeHide されないままタイマーが潰される残留バグを防ぐ）
+          onPointerEnter={e => { if (e.pointerType === 'mouse') pauseHide() }}
+          onPointerLeave={e => { if (e.pointerType === 'mouse') resumeHide() }}
         >
           {likeStatus === 'done' ? '❤️ いいね済み' : likeStatus === 'sending' ? '送信中…' : '🤍 いいね！'}
         </button>

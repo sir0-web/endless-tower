@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { floorLabel } from '../game/utils'
 import { playBGM } from '../game/sound'
+import { fadeOutToScene } from '../game/phaserRecovery'
 
 interface RankingEntry {
   player_name: string
@@ -16,6 +17,7 @@ export class RankingScene extends Phaser.Scene {
   private floor: number = 1
   private level: number = 1
   private from: 'title' | 'gameover' = 'gameover'
+  private leaving = false   // シーン遷移開始済みフラグ（二重遷移防止）
 
   constructor() {
     super({ key: 'RankingScene' })
@@ -30,6 +32,7 @@ export class RankingScene extends Phaser.Scene {
 
   create() {
     playBGM('ranking')
+    this.leaving = false   // シーンは再利用されるため入場のたびにリセット
     // スマホ: キャンバスを全幅化（非プレイ画面）。ゲームオーバー⇄ランキングでサイズが揃う
     window.dispatchEvent(new Event('et-canvas-full'))
     const W  = this.scale.width
@@ -263,8 +266,10 @@ export class RankingScene extends Phaser.Scene {
 
     btn.setInteractive({ useHandCursor: true })
     btn.on('pointerdown', () => {
-      this.cameras.main.fadeOut(350, 0, 0, 0)
-      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('TitleScene'))
+      if (this.leaving) return
+      this.leaving = true
+      // RAF停止時もタイムアウトで遷移を保証する共通ヘルパー
+      fadeOutToScene(this, 'TitleScene')
     })
     btn.on('pointerover', () => { btn.setColor('#ffffff') })
     btn.on('pointerout',  () => { btn.setColor('#00ff88') })

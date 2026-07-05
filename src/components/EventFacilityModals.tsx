@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EquipSlot, Item, RefineResult, ShadowResult, SpellbookResult } from '../types'
 import { WING_ITEMS } from '../game/items'
 import { refineSuccessPercent } from '../game/utils'
@@ -8,28 +8,41 @@ const SLOT_LABELS: Record<EquipSlot, string> = {
   accessory1: '指輪①', accessory2: '指輪②', charm: 'お守り',
 }
 
-function useFacilityOpen(kind: 'refine' | 'shadow' | 'spellbook' | 'merchant') {
+function useFacilityOpen(kind: 'refine' | 'shadow' | 'spellbook' | 'merchant', onForceClose?: () => void) {
   const [open, setOpen] = useState(false)
+  const forceCloseRef = useRef(onForceClose)
+  useEffect(() => { forceCloseRef.current = onForceClose })
   useEffect(() => {
     const onOpen = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail
       if (detail === kind) setOpen(true)
     }
+    // ゲームオーバー等でシーンが変わったら内部状態ごと強制クローズ
+    // （GameScene 停止後は window.runRefineChallenge 等が使えず、開いたままだと詰むため）
+    const onSceneChanged = () => {
+      forceCloseRef.current?.()
+      setOpen(false)
+    }
     window.addEventListener('facility-open', onOpen)
-    return () => window.removeEventListener('facility-open', onOpen)
+    window.addEventListener('game-scene-changed', onSceneChanged)
+    return () => {
+      window.removeEventListener('facility-open', onOpen)
+      window.removeEventListener('game-scene-changed', onSceneChanged)
+    }
   }, [kind])
   return [open, setOpen] as const
 }
 
 // ── 精錬チャレンジ ──
 export function RefineModal() {
-  const [open, setOpen] = useFacilityOpen('refine')
   const [step, setStep] = useState<'select' | 'video' | 'result'>('select')
   const [slot, setSlot] = useState<EquipSlot | null>(null)
   const [sacrificeId, setSacrificeId] = useState<string | null>(null)
   const [result, setResult] = useState<RefineResult | null>(null)
 
   const reset = () => { setStep('select'); setSlot(null); setSacrificeId(null); setResult(null) }
+  // 強制クローズ（シーン遷移）時も reset を通し、次回開いたとき途中画面から始まらないようにする
+  const [open, setOpen] = useFacilityOpen('refine', reset)
   const close = () => { reset(); setOpen(false) }
 
   if (!open) return null
@@ -136,10 +149,11 @@ export function RefineModal() {
 
 // ── 影装チャレンジ ──
 export function ShadowEquipModal() {
-  const [open, setOpen] = useFacilityOpen('shadow')
   const [result, setResult] = useState<ShadowResult | null>(null)
   const COST = 5
 
+  // 強制クローズ（シーン遷移）時も結果画面が残らないようリセットを渡す
+  const [open, setOpen] = useFacilityOpen('shadow', () => setResult(null))
   const close = () => { setResult(null); setOpen(false) }
 
   if (!open) return null
@@ -193,10 +207,11 @@ const MERCHANT_ITEMS = [
 ]
 
 export function MerchantModal() {
-  const [open, setOpen] = useFacilityOpen('merchant')
   const [, setTick] = useState(0)
   const [msg, setMsg] = useState<string | null>(null)
 
+  // 強制クローズ（シーン遷移）時もメッセージが残らないようリセットを渡す
+  const [open, setOpen] = useFacilityOpen('merchant', () => setMsg(null))
   const close = () => { setMsg(null); setOpen(false) }
 
   if (!open) return null
@@ -257,10 +272,11 @@ export function MerchantModal() {
 
 // ── 魔法の書チャレンジ ──
 export function SpellbookModal() {
-  const [open, setOpen] = useFacilityOpen('spellbook')
   const [spellId, setSpellId] = useState<string | null>(null)
   const [result, setResult] = useState<SpellbookResult | null>(null)
 
+  // 強制クローズ（シーン遷移）時も途中状態が残らないようリセットを渡す
+  const [open, setOpen] = useFacilityOpen('spellbook', () => { setSpellId(null); setResult(null) })
   const close = () => { setSpellId(null); setResult(null); setOpen(false) }
 
   if (!open) return null

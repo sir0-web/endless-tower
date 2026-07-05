@@ -5,6 +5,7 @@ import { hasNewAnnouncement } from '../game/announcements'
 import { hasSave, clearSave, saveGame } from '../game/save'
 import { cloudLoadGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { getDisplayName, setDisplayName } from '../game/playerName'
+import { safePrompt, fadeOutToScene } from '../game/phaserRecovery'
 
 const PIXEL_FONT  = '"Press Start 2P", monospace'
 const KEY_STORAGE = 'keyMode'
@@ -14,6 +15,7 @@ type KeyMode = 'arrows' | 'wasd' | 'both'
 
 export class TitleScene extends Phaser.Scene {
   private overlay: Phaser.GameObjects.Container | null = null
+  private leaving = false   // シーン遷移開始済みフラグ（二重遷移防止）
 
   constructor() { super({ key: 'TitleScene' }) }
 
@@ -24,6 +26,7 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     playBGM('title')
+    this.leaving = false   // シーンは再利用されるため入場のたびにリセット
     const W  = this.scale.width
     const H  = this.scale.height
     const cx = W / 2
@@ -101,10 +104,11 @@ export class TitleScene extends Phaser.Scene {
     window.dispatchEvent(new Event('et-canvas-full'))
   }
 
-  /** フェードアウトしてからシーン遷移する共通ヘルパー */
+  /** フェードアウトしてからシーン遷移する共通ヘルパー（RAF停止時もタイムアウトで遷移を保証） */
   private fadeToScene(key: string, data?: object) {
-    this.cameras.main.fadeOut(350, 0, 0, 0)
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(key, data))
+    if (this.leaving) return
+    this.leaving = true
+    fadeOutToScene(this, key, data)
   }
 
   private startGame() {
@@ -124,9 +128,10 @@ export class TitleScene extends Phaser.Scene {
   // ── クラウド再開：名前＋パスワードでサーバーからセーブを取得し、ローカルへ展開して再開 ──
   // 成功するとサーバー行は消費（削除）され、以降はローカル自動セーブが進行を持つ。
   private resumeFromCloud() {
-    const name = window.prompt('再開する冒険者名を入力')?.trim()
+    // safePrompt: ダイアログでtouchendが飲まれてタッチ入力全体が固まる問題への対策
+    const name = safePrompt(this, '再開する冒険者名を入力')?.trim()
     if (!name) return
-    const password = window.prompt('パスワードを入力')?.trim()
+    const password = safePrompt(this, 'パスワードを入力')?.trim()
     if (!password) return
 
     this.input.enabled = false
@@ -160,9 +165,14 @@ export class TitleScene extends Phaser.Scene {
     badge.setInteractive({ useHandCursor: true })
     badge.on('pointerover', () => badge.setColor('#ffffff'))
     badge.on('pointerout',  () => badge.setColor('#ffe699'))
-    badge.on('pointerdown', () => {
-      const input = prompt('冒険者の名前を入力（12文字以内・任意）', getDisplayName())
-      if (input !== null) { setDisplayName(input); render() }
+    // pointerup + setTimeout で開く：タッチ継続中に同期ダイアログを開くと touchend が
+    // 飲み込まれてポインタがスタックし、以後の全タップが死ぬ問題（iOS Safari等）の回避
+    badge.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.getDistance() > 16) return   // ドラッグは無視
+      window.setTimeout(() => {
+        const input = safePrompt(this, '冒険者の名前を入力（12文字以内・任意）', getDisplayName())
+        if (input !== null) { setDisplayName(input); render() }
+      }, 0)
     })
   }
 

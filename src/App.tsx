@@ -23,6 +23,7 @@ import { ReportModal } from './components/ReportModal'
 import { NewsModal } from './components/NewsModal'
 import { SkulporinReward } from './components/SkulporinReward'
 import { applyOverrides } from './game/overrides'
+import { releaseStuckPointers } from './game/phaserRecovery'
 import { Analytics } from '@vercel/analytics/react'
 
 const BASE_W = 1280
@@ -73,6 +74,7 @@ function App() {
   useEffect(() => {
     let cancelled = false
     let obs: ResizeObserver | null = null
+    let cleanupRecovery: (() => void) | null = null
     void (async () => {
       // データベース編集の公開分をハードコード表へマージ（失敗してもデフォルトで続行）
       await applyOverrides()
@@ -84,6 +86,9 @@ function App() {
         parent: canvasAreaRef.current!,
         backgroundColor: '#000000',
         scene: [TitleScene, GameScene, GameOverScene, RankingScene],
+        // タッチポインタを複数確保する。既定は1本のため、prompt等で touchend が
+        // 飲まれてポインタが1本スタックしただけで全タップが死んでいた。予備を持たせる。
+        input: { activePointers: 3 },
         scale: {
           // PC: 外側ラッパーの transform:scale が全体を拡縮するため、Phaserは等倍(NONE)の
           //     固定サイズで描画する。FITだと transform後に縮んだ親サイズを測って二重スケールし、
@@ -98,15 +103,63 @@ function App() {
       }
       gameRef.current = new Phaser.Game(config)
 
+      // 開発時のみ: コンソール/E2Eテストからシーンを直接操作できるように公開
+      if (import.meta.env.DEV) {
+        ;(window as unknown as { __game?: Phaser.Game }).__game = gameRef.current
+      }
+
       // 初期レイアウト確定後にスケールを再計算し、コンテナとのズレ（隙間）を解消する
       requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
 
       // game-canvas-area のサイズが変わったとき（ステータスバー出現/消滅など）スケールを再計算
       obs = new ResizeObserver(() => { gameRef.current?.scale.refresh() })
       if (canvasAreaRef.current) obs.observe(canvasAreaRef.current)
+
+      // ── バックグラウンド復帰時の自己修復 ──
+      // 「GAME OVER画面などでボタンが一切押せなくなる」報告への対策：
+      //  1. prompt等で touchend が飲まれて押しっぱなしになったタッチポインタを解放
+      //  2. タップ座標の基準（canvasBounds）を再計算
+      //  3. 復帰後に RAF が再開しない既知のブラウザ問題を検出し、ループを強制再始動
+      const onVisible = () => {
+        if (document.hidden) return
+        const game = gameRef.current
+        if (!game) return
+        releaseStuckPointers(game.input)
+        game.scale.refresh()
+        const frameBefore = game.loop.frame
+        window.setTimeout(() => {
+          const g = gameRef.current
+          if (!g || document.hidden) return
+          if (g.loop.frame === frameBefore) {
+            // 表示状態なのにフレームが1つも進んでいない → RAF停止と判断して再始動
+            g.loop.sleep()
+            g.loop.wake(true)
+          }
+        }, 800)
+      }
+      document.addEventListener('visibilitychange', onVisible)
+      window.addEventListener('pageshow', onVisible)   // bfcache復元でも同じ復旧を走らせる
+
+      // visualViewport の変化（アドレスバー収納・キーボード開閉・ページスクロール）でも
+      // タップ座標の基準を再同期する（スクロール中の連発を避けるデバウンス付き）
+      let vvTimer: number | undefined
+      const onVVChange = () => {
+        window.clearTimeout(vvTimer)
+        vvTimer = window.setTimeout(() => gameRef.current?.scale.refresh(), 200)
+      }
+      window.visualViewport?.addEventListener('resize', onVVChange)
+      window.visualViewport?.addEventListener('scroll', onVVChange)
+
+      cleanupRecovery = () => {
+        document.removeEventListener('visibilitychange', onVisible)
+        window.removeEventListener('pageshow', onVisible)
+        window.visualViewport?.removeEventListener('resize', onVVChange)
+        window.visualViewport?.removeEventListener('scroll', onVVChange)
+        window.clearTimeout(vvTimer)
+      }
     })()
 
-    return () => { cancelled = true; obs?.disconnect(); gameRef.current?.destroy(true); gameRef.current = null }
+    return () => { cancelled = true; obs?.disconnect(); cleanupRecovery?.(); gameRef.current?.destroy(true); gameRef.current = null }
   }, [])
 
   // appScale 変更後（React re-render → CSS transform 適用後）に Phaser の入力座標を再同期する。
