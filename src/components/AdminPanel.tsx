@@ -1144,7 +1144,7 @@ export function AdminPanel() {
                     {t.unread > 0 && <span style={{ background: '#e23b2e', color: '#fff', borderRadius: 8, padding: '1px 8px', fontSize: 12, fontWeight: 800 }}>未読{t.unread}</span>}
                     <span style={{ ...S.muted, marginLeft: 'auto', fontSize: 12 }}>{new Date(t.last_at).toLocaleString('ja-JP')}</span>
                   </div>
-                  <div style={{ ...S.muted, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.last_body}</div>
+                  <div style={{ ...S.muted, marginTop: 4, ...S.cellScroll }}>{t.last_body}</div>
                 </div>
               ))}
             </div>
@@ -1416,7 +1416,7 @@ export function AdminPanel() {
                       <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11 }}>{n.type}</span></td>
                       <td style={S.td}>{n.player_name}</td>
                       <td style={S.td}>{n.title}</td>
-                      <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.message}</td>
+                      <td style={{ ...S.td, maxWidth: 200 }}><div style={S.cellScroll}>{n.message}</div></td>
                       <td style={S.td}><button onClick={() => deleteWorldLog(n.id)} style={S.btnDanger}>削除</button></td>
                     </tr>
                   ))}
@@ -1569,7 +1569,7 @@ export function AdminPanel() {
                           <td style={S.td}>{fmtJstDate(n.created_at)}</td>
                           <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11 }}>{n.type}</span></td>
                           <td style={S.td}>{n.title}</td>
-                          <td style={{ ...S.td, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.message}</td>
+                          <td style={{ ...S.td, maxWidth: 180 }}><div style={S.cellScroll}>{n.message}</div></td>
                           <td style={S.td}><button onClick={() => deleteUNotif(n.id)} style={S.btnDanger}>削除</button></td>
                         </tr>
                       ))}
@@ -1676,7 +1676,7 @@ export function AdminPanel() {
                       <td style={{ ...S.td, color: '#666' }}>{r.id}</td>
                       <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{fmtJstDate(r.created_at)}</td>
                       <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11, whiteSpace: 'nowrap' }}>{r.category}</span></td>
-                      <td style={{ ...S.td, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.content}</td>
+                      <td style={{ ...S.td, maxWidth: 220 }}><div style={S.cellScroll}>{r.content}</div></td>
                       <td style={S.td}>{r.player_name ?? <span style={{ color: '#555' }}>─</span>}</td>
                       <td style={S.td}>{r.image_url ? <span style={{ color: '#60a5fa' }}>📎</span> : <span style={{ color: '#555' }}>─</span>}</td>
                       <td style={S.td}>
@@ -1749,7 +1749,7 @@ export function AdminPanel() {
                     <tr key={a.id} style={{ background: editingId === a.id ? 'rgba(79,70,229,0.08)' : 'transparent' }}>
                       <td style={{ ...S.td, color: '#666' }}>{a.id}</td>
                       <td style={{ ...S.td, whiteSpace: 'nowrap' }}>{fmtJstDate(a.published_at)}</td>
-                      <td style={{ ...S.td, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</td>
+                      <td style={{ ...S.td, maxWidth: 260 }}><div style={S.cellScroll}>{a.title}</div></td>
                       <td style={S.td}>
                         <button onClick={() => togglePublish(a)}
                           style={{ ...S.btnSm, background: a.is_published ? 'rgba(20,83,45,0.5)' : 'transparent', border: `1px solid ${a.is_published ? '#22c55e' : '#666'}`, color: a.is_published ? '#4ade80' : '#888' }}>
@@ -1828,7 +1828,7 @@ export function AdminPanel() {
                       const maxCount = stats.killDist[0][1]
                       return (
                         <div key={name} style={S.distRow}>
-                          <span style={{ ...S.distLabel, width: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                          <span style={{ ...S.distLabel, width: 160, wordBreak: 'break-word' }}>{name}</span>
                           <div style={{ ...S.distBar, width: Math.max(4, Math.round(count / maxCount * 260)) }} />
                           <span style={S.distCount}>{count.toLocaleString()}</span>
                         </div>
@@ -2099,6 +2099,8 @@ const S: Record<string, React.CSSProperties> = {
   table:       { width: '100%', borderCollapse: 'collapse', marginTop: 8 },
   th:          { padding: '7px 10px', textAlign: 'left', color: '#8888cc', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', borderBottom: '1px solid #1e1e38' },
   td:          { padding: '6px 10px', borderBottom: '1px solid #12122a', fontSize: 13 },
+  // 長文セル用：折り返して全文を表示し、高さ超過分は縦スクロールで読めるようにする
+  cellScroll:  { maxHeight: 72, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
   muted:       { color: '#666', fontSize: 13 },
   dbHead:      { marginTop: 22, marginBottom: 2, color: '#a5b4fc', fontWeight: 700, fontSize: 14, borderLeft: '3px solid #6366f1', paddingLeft: 8 },
   dbPub:       { padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700, background: 'rgba(20,83,45,0.5)', color: '#4ade80', border: '1px solid #22c55e' },
