@@ -141,6 +141,29 @@ function App() {
       document.addEventListener('visibilitychange', onVisible)
       window.addEventListener('pageshow', onVisible)   // bfcache復元でも同じ復旧を走らせる
 
+      // iframe埋め込み（arcana-guild-site経由のアクセス）ではホストページ側の要素を
+      // 操作しただけで document.hidden は変わらないまま window の blur/focus だけが
+      // 発生しうる。その場合上のonVisibleが一切発火せず、押しっぱなしポインタが
+      // 解放されないままになる。blur/focusにも同じ復旧を繋いでおく。
+      const onBlur = () => {
+        const game = gameRef.current
+        if (!game) return
+        releaseStuckPointers(game.input)   // フォーカスが離れる瞬間に即解放（touchend取りこぼし対策）
+      }
+      window.addEventListener('blur', onBlur)
+      window.addEventListener('focus', onVisible)
+
+      // 最後の保険: 原因を問わず、次にユーザーがタップした瞬間に必ずポインタを
+      // 解放しておく（capture段階でPhaser本体の処理より先に実行）。
+      // これにより「一度バックグラウンドへ回して戻す」往復をしなくても、
+      // 気づいた時点の1タップ目で自己修復するようになる。
+      const onPointerDownCapture = () => {
+        const game = gameRef.current
+        if (game) releaseStuckPointers(game.input)
+      }
+      document.addEventListener('pointerdown', onPointerDownCapture, { capture: true, passive: true })
+      document.addEventListener('touchstart', onPointerDownCapture, { capture: true, passive: true })
+
       // visualViewport の変化（アドレスバー収納・キーボード開閉・ページスクロール）でも
       // タップ座標の基準を再同期する（スクロール中の連発を避けるデバウンス付き）
       let vvTimer: number | undefined
@@ -154,6 +177,10 @@ function App() {
       cleanupRecovery = () => {
         document.removeEventListener('visibilitychange', onVisible)
         window.removeEventListener('pageshow', onVisible)
+        window.removeEventListener('blur', onBlur)
+        window.removeEventListener('focus', onVisible)
+        document.removeEventListener('pointerdown', onPointerDownCapture, { capture: true })
+        document.removeEventListener('touchstart', onPointerDownCapture, { capture: true })
         window.visualViewport?.removeEventListener('resize', onVVChange)
         window.visualViewport?.removeEventListener('scroll', onVVChange)
         window.clearTimeout(vvTimer)
