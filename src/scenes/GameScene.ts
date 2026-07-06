@@ -2598,7 +2598,8 @@ export class GameScene extends Phaser.Scene {
       .reduce((sum, eq) => sum + (eq?.refineLevel ?? 0), 0)
     const jackpotWins = this.state.player.jackpotWins ?? 0
     // ドッペルゲンガー登録用スナップショット（GAME OVER画面での同意確認後に使う。ここでは登録しない）
-    const doppelSnapshot = this.state.player
+    // 10階未満での死亡は弱すぎて出現候補としての意味が薄いため、そもそも同意確認自体を出さない
+    const doppelSnapshot = this.state.player.floor >= 10 ? this.state.player : undefined
     this.time.delayedCall(1250, () => {
       this.scene.start('GameOverScene', {
         floor: this.state.player.floor,
