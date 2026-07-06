@@ -2462,13 +2462,13 @@ export class GameScene extends Phaser.Scene {
   // ドッペルゲンガー
   // ─────────────────────────────────────────────────────────
 
-  // フロア到達時：死亡階±10階（10階未満は対象外）に他プレイヤーの記録があれば30%で1体出現させる。
+  // フロア到達時：死亡階±10階（10階未満は対象外）に他プレイヤーの記録があれば10%で1体出現させる。
   // この周回で既に撃破済みの記録は除外する（DB自体は削除しないため、他プレイヤーや次回の周回には
   // 引き続き出現しうる＝10階バンドの保持上限に達するまで何度でも遭遇可能）。
   private async checkDoppelgangerSpawn(): Promise<void> {
     if (this.isGameOver || this.isEventFloor) return
     if (this.state.enemies.some(e => e.isDoppelganger)) return
-    if (Math.random() >= 0.30) return
+    if (Math.random() >= 0.10) return
     const floor = this.state.player.floor
     const record = await fetchDoppelgangerCandidate(floor, this.defeatedDoppelgangerIds)
     if (!record) return
