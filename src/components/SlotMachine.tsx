@@ -313,7 +313,7 @@ export function SlotMachine({ children }: { children?: ReactNode }) {
             ].filter(Boolean).join(' ')}
           >
             <img
-              src={`/assets/slot/slot${display[i]}.png`}
+              src={`/assets/slot/slot${display[i]}.webp`}
               alt={`slot${display[i]}`}
               className="reel-img"
             />

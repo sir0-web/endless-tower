@@ -1,3 +1,5 @@
+import { ENEMY_TABLE, MINI_BOSS_TABLE, MVP_BOSS_TABLE, AREA_BOSS_TABLE } from './dungeon'
+
 // ── 敵キャラクターの名前→テクスチャキー対応（ゲーム描画とADMINプレビューで共有）──
 // 画像パスは /assets/characters/enemies/<key>.png に統一。
 // ゲーム実行時(GameScene)は上書き画像(ovr_*)のキーをこのオブジェクトへ追記して使う。
@@ -79,10 +81,37 @@ export const ENEMY_TEXTURE_MAP: Record<string, string> = {
   'すかるぽりん':        'scullporin',
 }
 
+/**
+ * 指定フロア範囲（floorFrom〜floorTo）に出現しうる敵の全テクスチャキーを返す。
+ * 通信量削減のため、全敵画像を一括先読みする代わりに現在地周辺のフロア帯だけを先読みする用途。
+ */
+export function getEnemyTextureKeysForFloorRange(floorFrom: number, floorTo: number): string[] {
+  const keys = new Set<string>()
+  const addByName = (name: string) => {
+    const key = ENEMY_TEXTURE_MAP[name]
+    if (key) keys.add(key)
+  }
+  for (const e of ENEMY_TABLE) {
+    if (e.maxFloor >= floorFrom && e.minFloor <= floorTo) addByName(e.name)
+  }
+  for (const [floorStr, boss] of Object.entries(MINI_BOSS_TABLE)) {
+    const f = Number(floorStr)
+    if (f >= floorFrom && f <= floorTo) addByName(boss.name)
+  }
+  for (const [floorStr, boss] of Object.entries(MVP_BOSS_TABLE)) {
+    const f = Number(floorStr)
+    if (f >= floorFrom && f <= floorTo) addByName(boss.name)
+  }
+  for (const b of AREA_BOSS_TABLE) {
+    if (b.maxFloor >= floorFrom && b.minFloor <= floorTo) addByName(b.name)
+  }
+  return [...keys]
+}
+
 /** モンスター名から静的アセットのURLを返す（対応キーが無ければ null）。実ファイルの有無は呼び出し側で <img onError> で判定する。 */
 export function enemyImagePath(name: string): string | null {
   const key = ENEMY_TEXTURE_MAP[name]
-  return key ? `/assets/characters/enemies/${key}.png` : null
+  return key ? `/assets/characters/enemies/${key}.webp` : null
 }
 
 /** 画像が無い敵をゲームが代替表示する際の色（カテゴリ別の塗りつぶし矩形の色）。 */

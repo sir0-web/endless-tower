@@ -11,7 +11,7 @@ import { fireWorldNotification, resetWorldNotifyDedup } from '../game/worldNotif
 import { getDisplayName } from '../game/playerName'
 import { claimJackpot } from '../game/jackpot'
 import { getMonsterTextureOverrides } from '../game/overrides'
-import { ENEMY_TEXTURE_MAP } from '../game/enemyTextures'
+import { ENEMY_TEXTURE_MAP, getEnemyTextureKeysForFloorRange } from '../game/enemyTextures'
 import { safePrompt } from '../game/phaserRecovery'
 import { fetchDoppelgangerCandidate, type DoppelgangerRecord } from '../game/doppelganger'
 
@@ -184,6 +184,9 @@ export class GameScene extends Phaser.Scene {
   private floorIsCleared = false  // 現在のフロアが踏破済み（自己最高到達階未満）か。XP大幅減＆ドロップなし
   private eventFacilities: { id: string; kind: import('../types').FacilityKind; name: string; icon: string; texture?: string; position: import('../types').Position }[] = []
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
+  private loadedEnemyKeys = new Set<string>()  // 先読み済みの敵テクスチャキー（通信量削減の遅延ロード用）
+  private loadedEnemyFloorTo = 0                // 敵テクスチャを先読み済みのフロア上限
+  private enemyTextureLoadInFlight = false      // 先読みロードの多重実行防止
   private floorVariantMap: string[][] = []      // [y][x] → 'tile-floor1/2/3'
   private tileSprites: (Phaser.GameObjects.Image | null)[][] = []
   private miasmaOverlay: Phaser.GameObjects.Rectangle | null = null  // 画面全面の瘴気オーバーレイ
@@ -259,115 +262,55 @@ export class GameScene extends Phaser.Scene {
 
   preload() {
     // 床タイル（3種ランダム）— /assets/dungeon/floor/
-    this.load.image('tile-floor1', '/assets/dungeon/floor/floor1.png')
-    this.load.image('tile-floor2', '/assets/dungeon/floor/floor2.png')
-    this.load.image('tile-floor3', '/assets/dungeon/floor/floor3.png')
-    // 壁 — /assets/dungeon/wall/wall.png
-    this.load.image('tile-wall',   '/assets/dungeon/wall/wall.png')
-    // 階段 — /assets/dungeon/stairs/stairs.png
-    this.load.image('tile-stairs', '/assets/dungeon/stairs/stairs.png')
-    // box.png — アイテム表示用（床に落ちている全アイテム）
-    this.load.image('tile-box', '/assets/dungeon/box/box.png')
-    // trap.png — ベノムダスト（ハズレ時は紫Graphicsにフォールバック）
-    this.load.image('trap', '/assets/dungeon/trap/trap.png')
-    this.load.image('tile-mud',        '/assets/dungeon/mud/mud.png')
-    this.load.image('tile-spring',     '/assets/dungeon/spring/spring.png')
-    this.load.image('tile-spring-dry', '/assets/dungeon/spring/spring_dry.png')
-    this.load.image('tile-pitfall',    '/assets/dungeon/pitfall/pitfall.png')
+    this.load.image('tile-floor1', '/assets/dungeon/floor/floor1.webp')
+    this.load.image('tile-floor2', '/assets/dungeon/floor/floor2.webp')
+    this.load.image('tile-floor3', '/assets/dungeon/floor/floor3.webp')
+    // 壁 — /assets/dungeon/wall/wall.webp
+    this.load.image('tile-wall',   '/assets/dungeon/wall/wall.webp')
+    // 階段 — /assets/dungeon/stairs/stairs.webp
+    this.load.image('tile-stairs', '/assets/dungeon/stairs/stairs.webp')
+    // box.webp — アイテム表示用（床に落ちている全アイテム）
+    this.load.image('tile-box', '/assets/dungeon/box/box.webp')
+    // trap.webp — ベノムダスト（ハズレ時は紫Graphicsにフォールバック）
+    this.load.image('trap', '/assets/dungeon/trap/trap.webp')
+    this.load.image('tile-mud',        '/assets/dungeon/mud/mud.webp')
+    this.load.image('tile-spring',     '/assets/dungeon/spring/spring.webp')
+    this.load.image('tile-spring-dry', '/assets/dungeon/spring/spring_dry.webp')
+    this.load.image('tile-pitfall',    '/assets/dungeon/pitfall/pitfall.webp')
 
     // プレイヤー画像（スタティック・フォールバック用）
-    this.load.image('player', '/assets/characters/player.png')
+    this.load.image('player', '/assets/characters/player.webp')
 
     // プレイヤーアニメーションフレーム（12枚）
     for (let i = 1; i <= 4; i++) {
-      this.load.image(`attack_down_${i}`,  `/assets/characters/player/attack_down_${i}.png`)
-      this.load.image(`attack_up_${i}`,    `/assets/characters/player/attack_up_${i}.png`)
-      this.load.image(`attack_right_${i}`, `/assets/characters/player/attack_right_${i}.png`)
+      this.load.image(`attack_down_${i}`,  `/assets/characters/player/attack_down_${i}.webp`)
+      this.load.image(`attack_up_${i}`,    `/assets/characters/player/attack_up_${i}.webp`)
+      this.load.image(`attack_right_${i}`, `/assets/characters/player/attack_right_${i}.webp`)
     }
 
     // 敵キャラクター画像（存在しないものは loaderror で failedTextures に記録→フォールバック）
-    const enemyImages: [string, string][] = [
-      ['pori',            '/assets/characters/enemies/pori.png'],
-      ['lunatic',         '/assets/characters/enemies/lunatic.png'],
-      ['bitata',          '/assets/characters/enemies/bitata.png'],
-      ['whisper',         '/assets/characters/enemies/whisper.png'],
-      ['smokey',          '/assets/characters/enemies/smokey.png'],
-      ['hakurengoku',     '/assets/characters/enemies/hakurengoku.png'],
-      ['soldierskeleton', '/assets/characters/enemies/soldierskeleton.png'],
-      ['munack',          '/assets/characters/enemies/munack.png'],
-      ['devilchi',        '/assets/characters/enemies/devilchi.png'],
-      ['golem',           '/assets/characters/enemies/golem.png'],
-      ['mummy',           '/assets/characters/enemies/mummy.png'],
-      ['alarm',           '/assets/characters/enemies/alarm.png'],
-      ['fendark',         '/assets/characters/enemies/fendark.png'],
-      ['minotaur',        '/assets/characters/enemies/minotaur.png'],
-      ['otto',            '/assets/characters/enemies/otto.png'],
-      ['chinpira',        '/assets/characters/enemies/chinpira.png'],
-      ['fishman',         '/assets/characters/enemies/fishman.png'],
-      ['nightmare',       '/assets/characters/enemies/nightmare.png'],
-      ['abyssalknight',   '/assets/characters/enemies/abyssalknight.png'],
-      ['goldenbug',       '/assets/characters/enemies/goldenbug.png'],
-      ['eclipse',         '/assets/characters/enemies/eclipse.png'],
-      ['angeling',        '/assets/characters/enemies/angeling.png'],
-      ['furioni',         '/assets/characters/enemies/furioni.png'],
-      ['ghostring',       '/assets/characters/enemies/ghostring.png'],
-      ['drake',           '/assets/characters/enemies/drake.png'],
-      ['toad',            '/assets/characters/enemies/toad.png'],
-      ['oaklord',         '/assets/characters/enemies/oaklord.png'],
-      ['wanderwolf',      '/assets/characters/enemies/wanderwolf.png'],
-      ['kingdramo',       '/assets/characters/enemies/kingdramo.png'],
-      ['oakhero',         '/assets/characters/enemies/oakhero.png'],
-      ['osiris',          '/assets/characters/enemies/osiris.png'],
-      ['stra',            '/assets/characters/enemies/stra.png'],
-      ['horu',            '/assets/characters/enemies/horu.png'],
-      ['master',          '/assets/characters/enemies/master.png'],
-      ['maho',            '/assets/characters/enemies/maho.png'],
-      ['merchant',        '/assets/characters/enemies/merchant.png'],
-      ['scullporin',      '/assets/characters/enemies/scullporin.png'],
-      ['kurimi',          '/assets/characters/enemies/kurimi.png'],
-      ['supoa',           '/assets/characters/enemies/supoa.png'],
-      ['yoyo',            '/assets/characters/enemies/yoyo.png'],
-      ['hidora',          '/assets/characters/enemies/hidora.png'],
-      ['zonbi',           '/assets/characters/enemies/zonbi.png'],
-      ['pekopeko',        '/assets/characters/enemies/pekopeko.png'],
-      ['flog',            '/assets/characters/enemies/flog.png'],
-      ['bokaru',          '/assets/characters/enemies/bokaru.png'],
-      ['paisuke',         '/assets/characters/enemies/paisuke.png'],
-      ['manthis',         '/assets/characters/enemies/manthis.png'],
-      ['gaiasu',          '/assets/characters/enemies/gaiasu.png'],
-      ['flora',           '/assets/characters/enemies/flora.png'],
-      ['sasukachi',       '/assets/characters/enemies/sasukachi.png'],
-      ['marinsfia',       '/assets/characters/enemies/marinsfia.png'],
-      ['isis',            '/assets/characters/enemies/isis.png'],
-      ['marudyuku',       '/assets/characters/enemies/marudyuku.png'],
-      ['fen',             '/assets/characters/enemies/fen.png'],
-      ['marina',          '/assets/characters/enemies/marina.png'],
-      ['bongon',          '/assets/characters/enemies/bongon.png'],
-      ['anybis',          '/assets/characters/enemies/anybis.png'],
-      ['hankobo',         '/assets/characters/enemies/hankobo.png'],
-      ['jack',            '/assets/characters/enemies/jack.png'],
-      ['sofi',            '/assets/characters/enemies/sofi.png'],
-      ['jirutasu',        '/assets/characters/enemies/jirutasu.png'],
-      ['joker',           '/assets/characters/enemies/joker.png'],
-      ['kuranp',          '/assets/characters/enemies/kuranp.png'],
-      ['jesta',           '/assets/characters/enemies/jesta.png'],
-      ['yafa',            '/assets/characters/enemies/yafa.png'],
-      ['dorakyura',       '/assets/characters/enemies/dorakyura.png'],
-      ['dark',            '/assets/characters/enemies/dark.png'],
-      ['oul',             '/assets/characters/enemies/oul.png'],
-      ['myutant',         '/assets/characters/enemies/myutant.png'],
-      ['darkpri',         '/assets/characters/enemies/darkpri.png'],
-      ['kimera',          '/assets/characters/enemies/kimera.png'],
-      ['mistel',          '/assets/characters/enemies/mistel.png'],
-      ['nekuro',          '/assets/characters/enemies/nekuro.png'],
-      ['amon',            '/assets/characters/enemies/amon.png'],
-      ['farao',           '/assets/characters/enemies/farao.png'],
-      ['moroku',          '/assets/characters/enemies/moroku.png'],
-      ['dragonfly',       '/assets/characters/enemies/dragonfly.png'],
-      ['deviling',        '/assets/characters/enemies/deviling.png'],
-      ['masterring',      '/assets/characters/enemies/masterring.png'],
+    // 通信量削減のため、全モンスター画像(70体超)を毎回丸ごと先読みするのではなく、
+    // 現在地から先のフロア帯だけを先読みする（loadEnemyTexturesAround 参照）。
+    // イベントフロアNPC・徘徊モンスターはフロアと無関係に出現しうるので常時ロードする。
+    const alwaysLoadEnemyImages: [string, string][] = [
+      ['horu',       '/assets/characters/enemies/horu.webp'],
+      ['master',     '/assets/characters/enemies/master.webp'],
+      ['maho',       '/assets/characters/enemies/maho.webp'],
+      ['merchant',   '/assets/characters/enemies/merchant.webp'],
+      ['scullporin', '/assets/characters/enemies/scullporin.webp'],
     ]
-    for (const [key, path] of enemyImages) this.load.image(key, path)
+    for (const [key, path] of alwaysLoadEnemyImages) this.load.image(key, path)
+    this.loadedEnemyKeys = new Set(alwaysLoadEnemyImages.map(([key]) => key))
+
+    // 開始フロア周辺のモンスター画像を先読み（新規開始は1F、セーブ再開時はその階から）
+    const startFloor = loadGame()?.player.floor ?? 1
+    const floorLookaheadTo = startFloor + 39
+    for (const key of getEnemyTextureKeysForFloorRange(1, floorLookaheadTo)) {
+      if (this.loadedEnemyKeys.has(key)) continue
+      this.load.image(key, `/assets/characters/enemies/${key}.webp`)
+      this.loadedEnemyKeys.add(key)
+    }
+    this.loadedEnemyFloorTo = floorLookaheadTo
 
     // データベース編集でアップロードされたモンスター画像を上書きロード（透過処理のためCORS有効化）
     const texOverrides = getMonsterTextureOverrides()
@@ -382,6 +325,30 @@ export class GameScene extends Phaser.Scene {
     this.load.on('loaderror', (file: { key: string }) => {
       this.failedTextures.add(file.key)
     })
+  }
+
+  /**
+   * 現在のフロアが先読み済みウィンドウの終端に近づいたら、次のフロア帯のモンスター画像を追加ロードする。
+   * ロード完了までは既存のフォールバック描画（色矩形）に任せ、完了後に renderMap() で差し替える。
+   */
+  private ensureEnemyTexturesForFloor(floor: number) {
+    if (this.enemyTextureLoadInFlight) return
+    if (floor + 10 <= this.loadedEnemyFloorTo) return
+    const from = this.loadedEnemyFloorTo + 1
+    const to   = floor + 39
+    this.loadedEnemyFloorTo = to
+    const newKeys = getEnemyTextureKeysForFloorRange(from, to).filter(key => !this.loadedEnemyKeys.has(key))
+    if (newKeys.length === 0) return
+    this.enemyTextureLoadInFlight = true
+    for (const key of newKeys) {
+      this.load.image(key, `/assets/characters/enemies/${key}.webp`)
+      this.loadedEnemyKeys.add(key)
+    }
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      this.enemyTextureLoadInFlight = false
+      this.renderMap()
+    })
+    this.load.start()
   }
 
   /** DB編集の画像/改名をテクスチャ解決へ反映（透過処理→可視部分サイズ調整は描画時に適用）。 */
@@ -1754,6 +1721,7 @@ export class GameScene extends Phaser.Scene {
     this.eventFacilities = []
     this.state.driedSprings = []
     const floor = this.state.player.floor
+    this.ensureEnemyTexturesForFloor(floor)
     // 踏破済みフロア（蝶の羽で自己最高到達階より下に戻ったケース）→ XP大幅減＆ドロップなし
     this.floorIsCleared = floor < (this.state.player.maxFloorReached ?? floor)
     const map = generateDungeon()

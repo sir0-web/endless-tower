@@ -1078,7 +1078,7 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   aspect-ratio: 1278 / 1421;
   margin: 0 auto;
   flex-shrink: 0;
-  background: url('/assets/slot/slot-cabinet-v2.png') top center / 100% 100% no-repeat;
+  background: url('/assets/slot/slot-cabinet-v2.webp') top center / 100% 100% no-repeat;
   transition: box-shadow 0.3s;
 }
 

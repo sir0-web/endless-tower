@@ -26,7 +26,7 @@ export function EventMsgBar() {
 
   return (
     <div className={`event-msg-bar${fading ? ' emb-fading' : ''}${msg?.small ? ' emb-small' : ''}`}>
-      <img className="emb-bg" src="/assets/ui/event_msg_bg.png" alt="" aria-hidden="true" />
+      <img className="emb-bg" src="/assets/ui/event_msg_bg.webp" alt="" aria-hidden="true" />
       <div className="emb-content">
         {msg && msg.text.split('\n').map((line, i) => (
           <span key={`${msg.key}-${i}`} className="emb-msg" style={{ color: msg.color }}>

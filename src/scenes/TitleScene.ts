@@ -20,8 +20,8 @@ export class TitleScene extends Phaser.Scene {
   constructor() { super({ key: 'TitleScene' }) }
 
   preload() {
-    this.load.image('title-bg', '/assets/title/title.png')
-    this.load.image('btn-frame', '/assets/ui/button-frame.png')
+    this.load.image('title-bg', '/assets/title/title.webp')
+    this.load.image('btn-frame', '/assets/ui/button-frame.webp')
   }
 
   create() {
