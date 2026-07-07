@@ -400,6 +400,7 @@ export class GameScene extends Phaser.Scene {
     window.saveGame        = () => this.doSaveGame()
     window.addWorldLogMessage = (text: string) => this.addWorldLogMessage(text)
     window.runRefineChallenge   = (slot, sacrificeId) => this.runRefineChallenge(slot, sacrificeId)
+    window.runBulkRefineChallenge = (slot, sacrificeIds) => this.runBulkRefineChallenge(slot, sacrificeIds)
     window.runShadowChallenge   = ()                  => this.runShadowChallenge()
     window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
     window.buyMerchantItem      = (key)               => this.buyMerchantItem(key)
@@ -1942,6 +1943,22 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 精錬1回分の判定＋ボーナス反映のみを行う内部処理（単発/一括共通）。生贄の消費・メッセージ・通知は呼び出し側の責務。 */
+  private refineOnce(target: import('../types').Item): { success: boolean; before: number; after: number } {
+    const before = target.refineLevel ?? 0
+    const success = Math.random() * 100 < refineSuccessPercent(before)
+    let after = before
+    if (success) {
+      this.adjustItemBonuses(target, 1.1)
+      after = before + 1
+    } else if (before > 0 && Math.random() < 0.5) {
+      this.adjustItemBonuses(target, 1 / 1.1)
+      after = before - 1
+    }
+    target.refineLevel = after
+    return { success, before, after }
+  }
+
   private runRefineChallenge(slot: import('../types').EquipSlot, sacrificeId: string): import('../types').RefineResult | null {
     const { player, bag } = this.state
     const target = player.equipment[slot]
@@ -1953,28 +1970,64 @@ export class GameScene extends Phaser.Scene {
     this.state.bag = bag.filter(b => b.id !== sacrificeId)
     this.addMessage(`${sacrifice.name}を精錬の生贄に捧げた...`)
 
-    const success = Math.random() * 100 < refineSuccessPercent(target.refineLevel ?? 0)
-    let level = target.refineLevel ?? 0
+    const { success, before, after: level } = this.refineOnce(target)
     if (success) {
-      this.adjustItemBonuses(target, 1.1)
-      level = (target.refineLevel ?? 0) + 1
-      target.refineLevel = level
       this.addMessage(`${target.name}の精錬に成功した！ +${level}`)
       if (level >= 5) {
         fireWorldNotification('achievement', '【精錬成功】', `${getDisplayName()}さんが+${level}精錬に成功しました！`)
       }
+    } else if (level < before) {
+      this.addMessage(`${target.name}の精錬に失敗し、精錬値が下がってしまった... +${level}`)
     } else {
-      if (level > 0 && Math.random() < 0.5) {
-        this.adjustItemBonuses(target, 1 / 1.1)
-        level = level - 1
-        target.refineLevel = level
-        this.addMessage(`${target.name}の精錬に失敗し、精錬値が下がってしまった... +${level}`)
-      } else {
-        this.addMessage(`${target.name}の精錬に失敗した...`)
-      }
+      this.addMessage(`${target.name}の精錬に失敗した...`)
     }
     this.updateWindowGameState()
     return { success, itemName: target.name, refineLevel: level }
+  }
+
+  /**
+   * いっきにカンカン：選んだ生贄の数だけ精錬を連続実行する（1個=1回分）。
+   * 途中経過はプレイヤーログに、終了後は増減にかかわらずワールドログに通知する。
+   */
+  private runBulkRefineChallenge(slot: import('../types').EquipSlot, sacrificeIds: string[]): import('../types').BulkRefineResult | null {
+    const { player, bag } = this.state
+    const target = player.equipment[slot]
+    if (!target) return null
+    const ids = [...new Set(sacrificeIds)].slice(0, 10)
+    const sacrifices = ids
+      .map(id => bag.find(b => b.id === id && b.type === 'equip'))
+      .filter((b): b is import('../types').Item => !!b)
+    if (sacrifices.length === 0) return null
+
+    // 生贄をまとめて消費
+    const consumedIds = new Set(sacrifices.map(s => s.id))
+    this.state.bag = bag.filter(b => !consumedIds.has(b.id))
+    this.addMessage(`いっきにカンカン：${sacrifices.length}個の生贄を捧げた...`)
+
+    const attempts: import('../types').RefineAttempt[] = []
+    for (const sacrifice of sacrifices) {
+      const { success, before, after } = this.refineOnce(target)
+      attempts.push({ success, before, after })
+      this.addMessage(
+        success
+          ? `${target.name}の精錬に成功した！ +${before}→+${after}（生贄：${sacrifice.name}）`
+          : after < before
+          ? `${target.name}の精錬に失敗し、精錬値が下がってしまった... +${before}→+${after}（生贄：${sacrifice.name}）`
+          : `${target.name}の精錬に失敗した...（生贄：${sacrifice.name}）`
+      )
+    }
+
+    const startLevel = attempts[0].before
+    const endLevel = attempts[attempts.length - 1].after
+    // 増減にかかわらず、いっきにカンカン利用時は必ずワールドログを施行する
+    fireWorldNotification(
+      'achievement',
+      '【いっきにカンカン】',
+      `${getDisplayName()}さんがいっきにカンカンモードで${attempts.length}回精錬にチャレンジ！${target.name}が+${startLevel}→+${endLevel}になりました！`,
+    )
+
+    this.updateWindowGameState()
+    return { itemName: target.name, attempts }
   }
 
   // ── 影装チャレンジ ──

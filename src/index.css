@@ -2794,6 +2794,10 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   border-color: #ffd766;
   background: #2a2a52;
 }
+.facility-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 .fi-slot {
   font-size: 11px;
@@ -2871,6 +2875,36 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   color: #e0e0f0;
 }
 .facility-close-btn:hover { filter: brightness(1.2); }
+
+.facility-bulk-btn {
+  background: #66ccff;
+}
+
+.facility-bulk-target {
+  font-size: 15px;
+  color: #ffd766;
+  font-weight: 700;
+}
+
+.facility-bulk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.facility-bulk-list li {
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: #1c1c3c;
+  text-align: center;
+}
 
 .facility-video-wrap {
   display: flex;

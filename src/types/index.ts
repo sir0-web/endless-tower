@@ -61,6 +61,8 @@ export interface LikeReward {
 }
 
 export interface RefineResult { success: boolean; itemName: string; refineLevel: number }
+export interface RefineAttempt { success: boolean; before: number; after: number }
+export interface BulkRefineResult { itemName: string; attempts: RefineAttempt[] }
 export interface ShadowResult { success: boolean }
 export interface SpellbookResult { success: boolean; lostName: string; gainedName?: string }
 
@@ -217,6 +219,7 @@ declare global {
     // ── イベントフロア施設 ──
     openFacility?: (kind: FacilityKind) => void
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
+    runBulkRefineChallenge?: (slot: EquipSlot, sacrificeIds: string[]) => BulkRefineResult | null
     runShadowChallenge?: () => ShadowResult | null
     runSpellbookChallenge?: (spellId: string) => SpellbookResult | null
     // ── 行商人：女神のコインで羽を購入（所持上限はWING_ITEMS.holdMax）──

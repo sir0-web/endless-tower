@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { EquipSlot, Item, RefineResult, ShadowResult, SpellbookResult } from '../types'
+import type { BulkRefineResult, EquipSlot, Item, RefineResult, ShadowResult, SpellbookResult } from '../types'
 import { WING_ITEMS } from '../game/items'
 import { refineSuccessPercent } from '../game/utils'
 
@@ -34,13 +34,20 @@ function useFacilityOpen(kind: 'refine' | 'shadow' | 'spellbook' | 'merchant', o
 }
 
 // ── 精錬チャレンジ ──
+const BULK_REFINE_MAX = 10
+
 export function RefineModal() {
-  const [step, setStep] = useState<'select' | 'video' | 'result'>('select')
+  const [step, setStep] = useState<'select' | 'bulk-select' | 'video' | 'result' | 'bulk-result'>('select')
   const [slot, setSlot] = useState<EquipSlot | null>(null)
   const [sacrificeId, setSacrificeId] = useState<string | null>(null)
+  const [bulkSacrificeIds, setBulkSacrificeIds] = useState<string[]>([])
   const [result, setResult] = useState<RefineResult | null>(null)
+  const [bulkResult, setBulkResult] = useState<BulkRefineResult | null>(null)
 
-  const reset = () => { setStep('select'); setSlot(null); setSacrificeId(null); setResult(null) }
+  const reset = () => {
+    setStep('select'); setSlot(null); setSacrificeId(null)
+    setBulkSacrificeIds([]); setResult(null); setBulkResult(null)
+  }
   // 強制クローズ（シーン遷移）時も reset を通し、次回開いたとき途中画面から始まらないようにする
   const [open, setOpen] = useFacilityOpen('refine', reset)
   const close = () => { reset(); setOpen(false) }
@@ -59,15 +66,36 @@ export function RefineModal() {
     setStep('video')
   }
 
-  const onVideoEnd = () => setStep('result')
+  const toggleBulkSacrifice = (id: string) => {
+    setBulkSacrificeIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id)
+      if (prev.length >= BULK_REFINE_MAX) return prev
+      return [...prev, id]
+    })
+  }
+
+  const startBulk = () => {
+    if (!slot || bulkSacrificeIds.length === 0) return
+    const r = window.runBulkRefineChallenge?.(slot, bulkSacrificeIds) ?? null
+    setBulkResult(r)
+    setStep('video')
+  }
+
+  const onVideoEnd = () => setStep(bulkResult ? 'bulk-result' : 'result')
 
   return (
     <div className="facility-overlay">
       <div className="facility-modal">
-        {step === 'select' && (
+        {(step === 'select' || step === 'bulk-select') && (
           <>
-            <p className="facility-title">✨精錬チャレンジ✨</p>
-            <p className="facility-desc">精錬する装備と、生贄に捧げる未装備の武具を選んでください。</p>
+            <p className="facility-title">
+              {step === 'bulk-select' ? '✨いっきにカンカン✨' : '✨精錬チャレンジ✨'}
+            </p>
+            <p className="facility-desc">
+              {step === 'bulk-select'
+                ? '精錬する装備と、生贄に捧げる未装備の武具を施工したい回数分（最大10個）選んでください。'
+                : '精錬する装備と、生贄に捧げる未装備の武具を選んでください。'}
+            </p>
 
             <p className="facility-sub">精錬する装備</p>
             <div className="facility-list">
@@ -96,24 +124,67 @@ export function RefineModal() {
               </p>
             )}
 
-            <p className="facility-sub">生贄にする未装備の武具</p>
-            <div className="facility-list">
-              {sacrificeCandidates.length === 0 && <p className="facility-empty">生贄にできる装備品がバッグにありません</p>}
-              {sacrificeCandidates.map(item => (
-                <button
-                  key={item.id}
-                  className={`facility-item${sacrificeId === item.id ? ' selected' : ''}`}
-                  onClick={() => setSacrificeId(item.id)}
-                >
-                  <span className="fi-name">{item.name}</span>
-                </button>
-              ))}
-            </div>
+            {step === 'bulk-select' ? (
+              <>
+                <p className="facility-sub">生贄にする未装備の武具（{bulkSacrificeIds.length}/{BULK_REFINE_MAX}）</p>
+                <div className="facility-list">
+                  {sacrificeCandidates.length === 0 && <p className="facility-empty">生贄にできる装備品がバッグにありません</p>}
+                  {sacrificeCandidates.map(item => {
+                    const selected = bulkSacrificeIds.includes(item.id)
+                    const disabled = !selected && bulkSacrificeIds.length >= BULK_REFINE_MAX
+                    return (
+                      <button
+                        key={item.id}
+                        className={`facility-item${selected ? ' selected' : ''}`}
+                        disabled={disabled}
+                        onClick={() => toggleBulkSacrifice(item.id)}
+                      >
+                        <span className="fi-name">{item.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
 
-            <div className="facility-btns">
-              <button className="facility-go-btn" disabled={!slot || !sacrificeId} onClick={start}>精錬する</button>
-              <button className="facility-close-btn" onClick={close}>やめる</button>
-            </div>
+                <div className="facility-btns">
+                  <button
+                    className="facility-go-btn"
+                    disabled={!slot || bulkSacrificeIds.length === 0}
+                    onClick={startBulk}
+                  >
+                    {bulkSacrificeIds.length}回いっきにカンカン開始
+                  </button>
+                  <button className="facility-close-btn" onClick={() => { setBulkSacrificeIds([]); setStep('select') }}>もどる</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="facility-sub">生贄にする未装備の武具</p>
+                <div className="facility-list">
+                  {sacrificeCandidates.length === 0 && <p className="facility-empty">生贄にできる装備品がバッグにありません</p>}
+                  {sacrificeCandidates.map(item => (
+                    <button
+                      key={item.id}
+                      className={`facility-item${sacrificeId === item.id ? ' selected' : ''}`}
+                      onClick={() => setSacrificeId(item.id)}
+                    >
+                      <span className="fi-name">{item.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="facility-btns">
+                  <button className="facility-go-btn" disabled={!slot || !sacrificeId} onClick={start}>精錬する</button>
+                  <button
+                    className="facility-go-btn facility-bulk-btn"
+                    disabled={sacrificeCandidates.length < 1}
+                    onClick={() => setStep('bulk-select')}
+                  >
+                    いっきにカンカン
+                  </button>
+                  <button className="facility-close-btn" onClick={close}>やめる</button>
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -139,6 +210,21 @@ export function RefineModal() {
                 ? `${result.itemName} は ＋${result.refineLevel} になった！`
                 : `${result.itemName} の精錬は失敗に終わった（現在 ＋${result.refineLevel}）`}
             </p>
+            <button className="facility-close-btn" onClick={close}>閉じる</button>
+          </div>
+        )}
+
+        {step === 'bulk-result' && bulkResult && (
+          <div className="facility-result facility-bulk-result">
+            <p className="facility-result-text">いっきにカンカン けっか</p>
+            <p className="facility-bulk-target">対象装備：{bulkResult.itemName}</p>
+            <ul className="facility-bulk-list">
+              {bulkResult.attempts.map((a, i) => (
+                <li key={i} className={a.success ? 'fr-success' : 'fr-failure'}>
+                  {i + 1}回目：+{a.before}→+{a.after}
+                </li>
+              ))}
+            </ul>
             <button className="facility-close-btn" onClick={close}>閉じる</button>
           </div>
         )}
