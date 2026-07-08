@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { BulkRefineResult, EquipSlot, Item, RefineResult, ShadowResult, SpellbookResult } from '../types'
+import type { BulkRefineResult, BulkShadowResult, EquipSlot, Item, RefineResult, ShadowResult, SpellbookResult } from '../types'
 import { WING_ITEMS } from '../game/items'
 import { refineSuccessPercent } from '../game/utils'
 
@@ -234,43 +234,92 @@ export function RefineModal() {
 }
 
 // ── 影装チャレンジ ──
+const BULK_SHADOW_MAX = 10
+
 export function ShadowEquipModal() {
+  const [step, setStep] = useState<'main' | 'bulk-select' | 'result' | 'bulk-result'>('main')
   const [result, setResult] = useState<ShadowResult | null>(null)
+  const [bulkResult, setBulkResult] = useState<BulkShadowResult | null>(null)
+  const [bulkCount, setBulkCount] = useState(1)
   const COST = 5
 
+  const reset = () => { setStep('main'); setResult(null); setBulkResult(null); setBulkCount(1) }
   // 強制クローズ（シーン遷移）時も結果画面が残らないようリセットを渡す
-  const [open, setOpen] = useFacilityOpen('shadow', () => setResult(null))
-  const close = () => { setResult(null); setOpen(false) }
+  const [open, setOpen] = useFacilityOpen('shadow', reset)
+  const close = () => { reset(); setOpen(false) }
 
   if (!open) return null
 
   const statPoints = window.gameState?.statPoints ?? 0
+  const maxAffordable = Math.min(BULK_SHADOW_MAX, Math.floor(statPoints / COST))
 
   const start = () => {
     const r = window.runShadowChallenge?.() ?? null
     setResult(r)
+    setStep('result')
+  }
+
+  const startBulk = () => {
+    const r = window.runBulkShadowChallenge?.(bulkCount) ?? null
+    setBulkResult(r)
+    setStep('bulk-result')
   }
 
   return (
     <div className="facility-overlay">
       <div className="facility-modal">
-        {!result && (
+        {step === 'main' && (
           <>
             <p className="facility-title">🌑影装チャレンジ🌑</p>
             <p className="facility-desc">
               ボーナスステータスポイントを {COST} 消費して挑戦します。<br />
-              成功（30%）すると全ステータス＋3。失敗してもデバフはありません。
+              成功（一定の低確率）すると全ステータス＋3。失敗してもデバフはありません。
             </p>
             <p className="facility-sub">所持ボーナスポイント：{statPoints}</p>
             <div className="facility-btns">
               <button className="facility-go-btn" disabled={statPoints < COST} onClick={start}>挑戦する</button>
+              <button
+                className="facility-go-btn facility-bulk-btn"
+                disabled={maxAffordable < 1}
+                onClick={() => { setBulkCount(maxAffordable); setStep('bulk-select') }}
+              >
+                いっきにエイ！エイ！ソー！
+              </button>
               <button className="facility-close-btn" onClick={close}>やめる</button>
             </div>
             {statPoints < COST && <p className="facility-empty">ボーナスポイントが足りません</p>}
           </>
         )}
 
-        {result && (
+        {step === 'bulk-select' && (
+          <>
+            <p className="facility-title">✨いっきにエイ！エイ！ソー！✨</p>
+            <p className="facility-desc">
+              1回 {COST} ポイント消費して、指定回数ぶん連続で影装チャレンジに挑戦します（最大{BULK_SHADOW_MAX}回）。
+            </p>
+            <p className="facility-sub">所持ボーナスポイント：{statPoints}</p>
+            <p className="facility-sub">挑戦回数：{bulkCount}回（消費 {bulkCount * COST} ポイント）</p>
+            <div className="facility-list">
+              {Array.from({ length: maxAffordable }, (_, i) => i + 1).map(n => (
+                <button
+                  key={n}
+                  className={`facility-item${bulkCount === n ? ' selected' : ''}`}
+                  onClick={() => setBulkCount(n)}
+                >
+                  <span className="fi-name">{n}回</span>
+                </button>
+              ))}
+            </div>
+            <div className="facility-btns">
+              <button className="facility-go-btn" disabled={bulkCount < 1} onClick={startBulk}>
+                {bulkCount}回いっきにエイ！エイ！ソー！開始
+              </button>
+              <button className="facility-close-btn" onClick={() => setStep('main')}>もどる</button>
+            </div>
+          </>
+        )}
+
+        {step === 'result' && result && (
           <div className="facility-result">
             <p className={`facility-result-text ${result.success ? 'fr-success' : 'fr-failure'}`}>
               {result.success ? 'success!!' : 'failure...'}
@@ -278,6 +327,23 @@ export function ShadowEquipModal() {
             <p className="facility-result-sub">
               {result.success ? '全ステータスが＋3された！' : 'ボーナスポイントを失った...'}
             </p>
+            <button className="facility-close-btn" onClick={close}>閉じる</button>
+          </div>
+        )}
+
+        {step === 'bulk-result' && bulkResult && (
+          <div className="facility-result facility-bulk-result">
+            <p className="facility-result-text">いっきにエイ！エイ！ソー！ けっか</p>
+            <p className="facility-bulk-target">
+              {bulkResult.attempts.filter(a => a.success).length}/{bulkResult.attempts.length}回 成功
+            </p>
+            <ul className="facility-bulk-list">
+              {bulkResult.attempts.map((a, i) => (
+                <li key={i} className={a.success ? 'fr-success' : 'fr-failure'}>
+                  {i + 1}回目：{a.success ? '成功！全ステータス+3' : '失敗...'}
+                </li>
+              ))}
+            </ul>
             <button className="facility-close-btn" onClick={close}>閉じる</button>
           </div>
         )}

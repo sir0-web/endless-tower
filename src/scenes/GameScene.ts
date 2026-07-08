@@ -402,6 +402,7 @@ export class GameScene extends Phaser.Scene {
     window.runRefineChallenge   = (slot, sacrificeId) => this.runRefineChallenge(slot, sacrificeId)
     window.runBulkRefineChallenge = (slot, sacrificeIds) => this.runBulkRefineChallenge(slot, sacrificeIds)
     window.runShadowChallenge   = ()                  => this.runShadowChallenge()
+    window.runBulkShadowChallenge = (times)            => this.runBulkShadowChallenge(times)
     window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
     window.buyMerchantItem      = (key)               => this.buyMerchantItem(key)
 
@@ -2031,16 +2032,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ── 影装チャレンジ ──
-  private runShadowChallenge(): import('../types').ShadowResult | null {
-    const { player } = this.state
-    const COST = 5
-    if (player.statPoints < COST) return null
-    player.statPoints -= COST
+  private readonly SHADOW_COST = 5
 
-    const success = Math.random() < 0.3
+  /** 影装1回分の判定＋反映のみを行う内部処理（単発/一括共通）。statPoints消費は呼び出し側の責務。 */
+  private shadowOnce(): import('../types').ShadowResult {
+    const { player } = this.state
+    const success = Math.random() < 0.2
     if (success) {
       player.str += 3; player.agi += 3; player.dex += 3
       player.int += 3; player.vit += 3; player.luk += 3
+    }
+    return { success }
+  }
+
+  private runShadowChallenge(): import('../types').ShadowResult | null {
+    const { player } = this.state
+    if (player.statPoints < this.SHADOW_COST) return null
+    player.statPoints -= this.SHADOW_COST
+
+    const { success } = this.shadowOnce()
+    if (success) {
       this.addMessage('影装チャレンジに成功した！全ステータス+3！')
       fireWorldNotification('achievement', '【影装強化】', `${getDisplayName()}さんが影装強化に成功しました！`)
     } else {
@@ -2048,6 +2059,39 @@ export class GameScene extends Phaser.Scene {
     }
     this.updateWindowGameState()
     return { success }
+  }
+
+  /**
+   * いっきにエイ！エイ！ソー！：所持ボーナスポイントの続く限り（最大10回）影装チャレンジを連続実行する。
+   * 途中経過はプレイヤーログに、終了後は必ずワールドログに通知する。
+   */
+  private runBulkShadowChallenge(times: number): import('../types').BulkShadowResult | null {
+    const { player } = this.state
+    const maxAffordable = Math.floor(player.statPoints / this.SHADOW_COST)
+    const count = Math.max(0, Math.min(times, maxAffordable, 10))
+    if (count === 0) return null
+
+    const attempts: import('../types').ShadowResult[] = []
+    for (let i = 0; i < count; i++) {
+      player.statPoints -= this.SHADOW_COST
+      const { success } = this.shadowOnce()
+      attempts.push({ success })
+      this.addMessage(
+        success
+          ? `影装チャレンジに成功した！全ステータス+3！（${i + 1}回目）`
+          : `影装チャレンジに失敗し、ボーナスポイントを失った...（${i + 1}回目）`
+      )
+    }
+
+    const successCount = attempts.filter(a => a.success).length
+    fireWorldNotification(
+      'achievement',
+      '【いっきにエイ！エイ！ソー！】',
+      `${getDisplayName()}さんがいっきにエイ！エイ！ソー！で${attempts.length}回影装にチャレンジ！${successCount}回成功しました！`,
+    )
+
+    this.updateWindowGameState()
+    return { attempts }
   }
 
   // ── 魔法の書チャレンジ ──

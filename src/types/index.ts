@@ -64,6 +64,7 @@ export interface RefineResult { success: boolean; itemName: string; refineLevel:
 export interface RefineAttempt { success: boolean; before: number; after: number }
 export interface BulkRefineResult { itemName: string; attempts: RefineAttempt[] }
 export interface ShadowResult { success: boolean }
+export interface BulkShadowResult { attempts: ShadowResult[] }
 export interface SpellbookResult { success: boolean; lostName: string; gainedName?: string }
 
 export interface Equipment {
@@ -221,6 +222,7 @@ declare global {
     runRefineChallenge?: (slot: EquipSlot, sacrificeId: string) => RefineResult | null
     runBulkRefineChallenge?: (slot: EquipSlot, sacrificeIds: string[]) => BulkRefineResult | null
     runShadowChallenge?: () => ShadowResult | null
+    runBulkShadowChallenge?: (times: number) => BulkShadowResult | null
     runSpellbookChallenge?: (spellId: string) => SpellbookResult | null
     // ── 行商人：女神のコインで羽を購入（所持上限はWING_ITEMS.holdMax）──
     buyMerchantItem?: (key: 'fly' | 'butterfly') => { ok: boolean; reason?: 'coin' | 'limit' }
