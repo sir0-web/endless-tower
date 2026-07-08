@@ -210,6 +210,10 @@ export class GameScene extends Phaser.Scene {
   private resolvedSkulporinIds = new Set<number>()
   private skulporinHeartbeatTimer: ReturnType<typeof setInterval> | null = null
   private skulporinEscapeTimer: ReturnType<typeof setInterval> | null = null
+  // すかるぽりんの新規ターゲット選出から放置プレイヤーを除外するための最終操作時刻。
+  // タブを開いたまま無操作でもheartbeat自体は送られ続けるため、実操作(移動等)でのみ更新する。
+  private lastActionAt: number = Date.now()
+  private static readonly SKULPORIN_IDLE_MS = 5 * 60 * 1000
 
   // このプレイ（この周回）中に撃破済みのドッペルゲンガー記録ID。DBの記録自体は削除しない
   // （他プレイヤーや次回以降の自分には引き続き出現しうる）ため、同一周回内での再出現だけを防ぐ。
@@ -668,6 +672,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleInput(event: KeyboardEvent) {
+    this.lastActionAt = Date.now()
     if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
     if (event.key === 'Escape') {
       if (this.inventoryOpen) {
@@ -2172,6 +2177,8 @@ export class GameScene extends Phaser.Scene {
           player_id: getPlayerId(),
           player_name: getDisplayName(),
           floor: player.floor,
+          // 放置プレイヤーがすかるぽりんの新規ターゲットに選ばれ続けるのを防ぐための無操作判定
+          idle: Date.now() - this.lastActionAt >= GameScene.SKULPORIN_IDLE_MS,
           // ADMINユーザー管理で「現在のステータス・装備」を閲覧するための軽量スナップショット
           state: this.buildStateSnapshot(),
         }),

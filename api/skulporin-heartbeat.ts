@@ -14,7 +14,7 @@ export default async function handler(req: any, res: any) {
     return res.json({ spawn: null, commands: [], _debug: 'SUPABASE_SERVICE_ROLE_KEY missing in Vercel' })
   }
 
-  const { player_id, player_name, floor, state } = req.body ?? {}
+  const { player_id, player_name, floor, state, idle } = req.body ?? {}
   if (!player_id || typeof floor !== 'number') {
     return res.status(400).json({ error: 'invalid params' })
   }
@@ -84,6 +84,14 @@ export default async function handler(req: any, res: any) {
     // アクティブなスポーンがあればそのまま返す
     const active = activeResult.data
     if (active) return res.json({ spawn: active, commands, rewards })
+
+    // 放置中（5分以上無操作）のリクエスターは新規ターゲットにしない。
+    // タブを開いたままのAFKプレイヤーが対象になり続け、討伐されないまま逃走→
+    // 再スポーンを繰り返して「[緊急]出現」通知だけが空振りで流れ続けるのを防ぐ。
+    // クリーンアップ／セッション更新／コマンド・報酬の取得は通常通り行い、ここだけスキップする。
+    if (idle === true) {
+      return res.json({ spawn: null, commands, rewards, _debug: 'skip: requester is idle' })
+    }
 
     // 4. クールダウンチェック（最後のスポーンから20分）
     const { data: last } = await db
