@@ -81,12 +81,23 @@ export function incrementJackpot(amount = 1): void {
 /**
  * ジャックポット成立時にプールを総取りする。総取りした額(リセット前のpool)を返す。
  * 同時成立しても row lock により1人だけが満額、他は0になる（原子的）。
+ *
+ * 同一 claim_id で最大3回まで再試行する。claim_jackpot RPC は claim_id を憶えており、
+ * サーバー側では成功していたのにレスポンスが届かず失敗扱いになったケースでも、
+ * 再試行時に「新たに0を引いてしまう」のではなく前回と同じ結果を返す（冪等）。
  */
 export async function claimJackpot(): Promise<number> {
-  const { data, error } = await supabase.rpc('claim_jackpot')
-  if (error) { console.warn('jackpot獲得失敗:', error.message); return 0 }
-  const won = typeof data === 'number' ? data : 0
-  // 自分のローカル値も即0へ（Realtime が届く前のチラつき防止）
-  if (won > 0) { pool = 0; emit() }
-  return won
+  const claimId = crypto.randomUUID()
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error } = await supabase.rpc('claim_jackpot', { p_claim_id: claimId })
+    if (!error) {
+      const won = typeof data === 'number' ? data : 0
+      // 自分のローカル値も即0へ（Realtime が届く前のチラつき防止）
+      if (won > 0) { pool = 0; emit() }
+      return won
+    }
+    console.warn(`jackpot獲得失敗(試行${attempt + 1}/3):`, error.message)
+    if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
+  }
+  return 0
 }

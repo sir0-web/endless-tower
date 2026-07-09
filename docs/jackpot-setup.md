@@ -63,23 +63,43 @@ $$;
 
 -- ── 総取り（ジャックポット成立時に呼ぶ）──
 -- リセット前の pool を返す。row lock により同時成立でも1人だけ満額、他は0。
-create or replace function claim_jackpot()
+-- p_claim_id はクライアント生成のUUID。同じ claim_id で再送された場合は
+-- 新たにプールを引かず、前回と同じ結果をそのまま返す（冪等）。
+-- サーバー側では成功していたのにレスポンスがクライアントへ届かず失敗扱いになり、
+-- 「プールは空だったので最低保証」を誤って表示してしまう取りこぼし対策。
+alter table ebt_jackpot add column if not exists last_claim_id     uuid;
+alter table ebt_jackpot add column if not exists last_claim_amount integer not null default 0;
+
+drop function if exists claim_jackpot();
+
+create or replace function claim_jackpot(p_claim_id uuid default null)
 returns integer
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare won integer;
+declare prev_claim_id uuid;
+declare prev_claim_amount integer;
 begin
-  select pool into won from ebt_jackpot where id = 1 for update;
-  update ebt_jackpot set pool = 0, updated_at = now() where id = 1;
+  select pool, last_claim_id, last_claim_amount into won, prev_claim_id, prev_claim_amount
+  from ebt_jackpot where id = 1 for update;
+
+  if p_claim_id is not null and prev_claim_id = p_claim_id then
+    return prev_claim_amount;
+  end if;
+
+  update ebt_jackpot
+    set pool = 0, last_claim_id = p_claim_id, last_claim_amount = won, updated_at = now()
+    where id = 1;
   return won;
 end;
 $$;
 
-grant execute on function increment_jackpot(integer) to anon, authenticated;
-grant execute on function claim_jackpot()            to anon, authenticated;
+grant execute on function increment_jackpot(integer)  to anon, authenticated;
+grant execute on function claim_jackpot(uuid)          to anon, authenticated;
 ```
+
 
 ## 必要なアセット（配置済み）
 
@@ -97,5 +117,8 @@ grant execute on function claim_jackpot()            to anon, authenticated;
   3. 動画終了後 `applySlotEffect('jackpot')` → `claimJackpot()` でプールを総取り→ステータスポイントへ加算、
      「ポイント総取り XX ポイントゲット！」を表示。pool は 0 にリセット。
      直前に他プレイヤーが総取りした等でプールが空だった場合は最低保証20ポイントを付与（「当選したのに0枚」を防ぐ）。
+     `claimJackpot()` はクライアント生成のUUID(`claim_id`)を付けて呼び、失敗時は同じIDで最大3回まで
+     再試行する。サーバー側では成功していたのにレスポンスが届かず失敗扱いになるケースでも、
+     再試行で前回と同じ結果を受け取れるため、取りこぼし（例: 2026-07-09 8:30 屍のモコの事例）を防ぐ。
 - プールが 100 に達すると（`increment_jackpot` RPC 内で）全鯖へ EVENT アナウンスが1度だけ流れる。
 - 777（7 が 3 つ揃い）は従来どおり阿修羅覇王拳のまま（ジャックポットとは別）。
