@@ -633,7 +633,7 @@ export class GameScene extends Phaser.Scene {
   // セーブ実行（プレイ中のセーブボタンから呼ばれる）
   // ローカル（この端末の中断データ）に保存しつつ、名前＋パスワードでクラウドにも保存し、
   // 別端末でも「クラウド再開」から続けられるようにする。
-  private doSaveGame() {
+  private async doSaveGame() {
     const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
     const snapshot = { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor }
     const localOk = saveGame(snapshot)
@@ -643,10 +643,10 @@ export class GameScene extends Phaser.Scene {
       : '⚠️セーブに失敗しました。\nプライベートモードを解除し、\nブラウザのデータ保存を許可してください。'
 
     // クラウド保存：名前＋パスワード（任意・キャンセル時はローカルのみ）
-    // safePrompt: ダイアログでtouchendが飲まれてタッチ入力全体が固まる問題への対策
-    const name = safePrompt(this, 'クラウドに保存する冒険者名を入力\n（別端末での再開に使います）', getDisplayName())?.trim()
+    // safePrompt: DOM入力モーダル（prompt非対応ブラウザ対策）。表示中はシーン入力を停止
+    const name = (await safePrompt(this, 'クラウドに保存する冒険者名を入力\n（別端末での再開に使います）', getDisplayName()))?.trim()
     if (!name) { window.showGameToast?.(localMsg); return }
-    const password = safePrompt(this, 'パスワードを入力\n（再開時に必要。忘れないでください）')?.trim()
+    const password = (await safePrompt(this, 'パスワードを入力\n（再開時に必要。忘れないでください）'))?.trim()
     if (!password) { window.showGameToast?.(localMsg); return }
 
     window.showGameToast?.('クラウドに保存中...')

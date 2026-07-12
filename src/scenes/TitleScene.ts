@@ -145,11 +145,11 @@ export class TitleScene extends Phaser.Scene {
     }
   }
 
-  private proceedResumeFromCloud() {
-    // safePrompt: ダイアログでtouchendが飲まれてタッチ入力全体が固まる問題への対策
-    const name = safePrompt(this, '再開する冒険者名を入力')?.trim()
+  private async proceedResumeFromCloud() {
+    // safePrompt: DOM入力モーダル（prompt非対応ブラウザ対策）。表示中はシーン入力を停止
+    const name = (await safePrompt(this, '再開する冒険者名を入力'))?.trim()
     if (!name) return
-    const password = safePrompt(this, 'パスワードを入力')?.trim()
+    const password = (await safePrompt(this, 'パスワードを入力'))?.trim()
     if (!password) return
 
     this.input.enabled = false
@@ -183,14 +183,11 @@ export class TitleScene extends Phaser.Scene {
     badge.setInteractive({ useHandCursor: true })
     badge.on('pointerover', () => badge.setColor('#ffffff'))
     badge.on('pointerout',  () => badge.setColor('#ffe699'))
-    // pointerup + setTimeout で開く：タッチ継続中に同期ダイアログを開くと touchend が
-    // 飲み込まれてポインタがスタックし、以後の全タップが死ぬ問題（iOS Safari等）の回避
     badge.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       if (pointer.getDistance() > 16) return   // ドラッグは無視
-      window.setTimeout(() => {
-        const input = safePrompt(this, '冒険者の名前を入力（12文字以内・任意）', getDisplayName())
+      void safePrompt(this, '冒険者の名前を入力（12文字以内・任意）', getDisplayName(), 12).then(input => {
         if (input !== null) { setDisplayName(input); render() }
-      }, 0)
+      })
     })
   }
 

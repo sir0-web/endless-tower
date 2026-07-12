@@ -120,19 +120,16 @@ export class GameOverScene extends Phaser.Scene {
       this.refreshNameInput()
     })
 
-    // スマホ用タップ入力
-    // pointerdown ではなく pointerup + setTimeout で開く：タッチ継続中に同期ダイアログを
-    // 開くと touchend が飲み込まれてポインタが押しっぱなしのままスタックし、
-    // 以後この画面の全ボタンが反応しなくなる（iOS Safari等の既知挙動）ため。
+    // スマホ用タップ入力（safePrompt: DOM入力モーダル。prompt非対応ブラウザでも動く）
     this.nameInput.setInteractive({ useHandCursor: true })
     this.nameInput.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       if (this.submitted || this.leaving) return
       if (pointer.getDistance() > 16) return   // ドラッグ（ページスクロール）は無視
-      window.setTimeout(() => {
-        const name = safePrompt(this, 'プレイヤー名を入力（10文字以内）', this.playerName) ?? this.playerName
+      void safePrompt(this, 'プレイヤー名を入力（10文字以内）', this.playerName, 10).then(name => {
+        if (name === null) return   // キャンセルは変更なし
         this.playerName = name.slice(0, 10)
         this.refreshNameInput()
-      }, 0)
+      })
     })
 
     // ── グループ2: ボタン2つ ──

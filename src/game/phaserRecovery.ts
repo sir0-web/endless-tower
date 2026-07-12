@@ -23,14 +23,72 @@ export function releaseStuckPointers(manager: Phaser.Input.InputManager): void {
 }
 
 /**
- * window.prompt の安全版。ダイアログ表示中に touchend が飲み込まれた場合の
- * 後始末として、戻ってきた直後にスタックしたポインタを必ず解放する。
- * Phaser シーン内から prompt を呼ぶときは必ずこちらを使うこと。
+ * テキスト入力ダイアログ（DOMモーダル）。window.prompt の代替。
+ * prompt はアプリ内WebViewや一部のOEMブラウザ（Xiaomi等）で未実装/描画不全のため使えない
+ * （入力欄が出ない・即nullが返る）。全ブラウザで確実に動くHTMLモーダルで置き換える。
+ * OK=入力文字列 / キャンセル・背景タップ=null を resolve する。
  */
-export function safePrompt(scene: Phaser.Scene, message: string, defaultValue?: string): string | null {
-  const result = window.prompt(message, defaultValue)
-  releaseStuckPointers(scene.input.manager)
-  return result
+export function showTextInputDialog(message: string, defaultValue = '', maxLength?: number): Promise<string | null> {
+  return new Promise(resolve => {
+    // 二重表示ガード：既に開いていたら新規は即キャンセル扱い
+    if (document.querySelector('.eb-input-overlay')) { resolve(null); return }
+
+    const overlay = document.createElement('div')
+    overlay.className = 'eb-input-overlay'
+    overlay.innerHTML = `
+      <div class="eb-input-box">
+        <div class="eb-input-msg"></div>
+        <input class="eb-input-field" type="text" autocomplete="off" autocapitalize="off" />
+        <div class="eb-input-btns">
+          <button type="button" class="eb-input-cancel">キャンセル</button>
+          <button type="button" class="eb-input-ok">OK</button>
+        </div>
+      </div>`
+    overlay.querySelector<HTMLElement>('.eb-input-msg')!.innerText = message
+    const input = overlay.querySelector<HTMLInputElement>('.eb-input-field')!
+    input.value = defaultValue
+    if (maxLength) input.maxLength = maxLength
+
+    let done = false
+    const finish = (result: string | null) => {
+      if (done) return
+      done = true
+      overlay.remove()
+      resolve(result)
+    }
+
+    overlay.querySelector('.eb-input-ok')!.addEventListener('click', () => finish(input.value))
+    overlay.querySelector('.eb-input-cancel')!.addEventListener('click', () => finish(null))
+    overlay.addEventListener('pointerdown', e => { if (e.target === overlay) finish(null) })
+    // Enter=OK / Esc=キャンセル。stopPropagationでPhaserのwindowキーリスナー（移動等）に流さない
+    overlay.addEventListener('keydown', e => {
+      e.stopPropagation()
+      if (e.key === 'Enter') finish(input.value)
+      else if (e.key === 'Escape') finish(null)
+    })
+
+    document.body.appendChild(overlay)
+    input.focus()
+    input.select()
+  })
+}
+
+/**
+ * Phaser シーンからのテキスト入力。ダイアログ表示中はシーン入力を止め、
+ * 閉じた後にスタックしたポインタを解放する。シーン内から入力を求めるときは必ずこちらを使うこと。
+ * （旧実装は window.prompt だったが、prompt非対応ブラウザ対策でDOMモーダルに変更。非同期になった）
+ */
+export async function safePrompt(scene: Phaser.Scene, message: string, defaultValue?: string, maxLength?: number): Promise<string | null> {
+  const keyboard = scene.input.keyboard
+  scene.input.enabled = false
+  if (keyboard) keyboard.enabled = false
+  try {
+    return await showTextInputDialog(message, defaultValue ?? '', maxLength)
+  } finally {
+    scene.input.enabled = true
+    if (keyboard) keyboard.enabled = true
+    releaseStuckPointers(scene.input.manager)
+  }
 }
 
 /**
