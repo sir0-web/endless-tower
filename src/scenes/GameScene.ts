@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import type { GameState, AllocStat, Enemy, Player } from '../types'
 import { weaponKindOf } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
-import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, type WingKey } from '../game/items'
+import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM, setHeartbeat } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
@@ -969,6 +969,7 @@ export class GameScene extends Phaser.Scene {
       this.addMessage(`${item.name}を手に入れた！`)
       this.showPickupNotif(`${item.name}を手に入れた！`)
     } else if (item.type === 'equip' && item.equipSlot) {
+      this.notifyIfMasterwork(item)
       // 装備モーダルを開く（ターン消費なし）
       this.pendingItem = item
       this.isEquipModalOpen = true
@@ -983,6 +984,17 @@ export class GameScene extends Phaser.Scene {
   private showPickupNotif(text: string) {
     // PC・スマホともに EventMsgBar へ（キャンバス内テキストは使わない）
     window.showEventMessage?.(text, '#ffdd44')
+  }
+
+  /** 名匠装備の入手をワールド通知する（床ドロップ拾得・スロット当選の両経路から呼ぶ） */
+  private notifyIfMasterwork(item: import('../types').Item) {
+    if (!item.name.startsWith(MASTERWORK_PREFIX)) return
+    fireWorldNotification(
+      'achievement',
+      '【名匠の逸品】',
+      `${getDisplayName()}さんがB${this.state.player.floor}Fで「${item.name}」を手に入れました！`,
+      `masterwork_${item.id}`,
+    )
   }
 
   private doEquip(item: import('../types').Item) {
@@ -3392,6 +3404,7 @@ export class GameScene extends Phaser.Scene {
     const pool = spawnItems(this.state.map, { countMult: 1, equipRate: 1.0, floor: this.state.player.floor })
     const equip = pool.find(i => i.type === 'equip')
     if (equip) {
+      this.notifyIfMasterwork(equip)
       this.state.bag.push({ ...equip, position: { x: 0, y: 0 } })
       this.addMessage(`🎰 女神からのプレゼント！ランダム装備品ゲット！`)
       this.addMessage(`→ ${equip.name}をバッグに入れた`)

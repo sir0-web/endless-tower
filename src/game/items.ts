@@ -106,6 +106,49 @@ export const EQUIP_ITEMS: {
   { name: '創世のタリスマン', equipSlot: 'charm',   minFloor: 45, strBonus: 10, vitBonus: 10, agiBonus: 10, dexBonus: 10, intBonus: 10, lukBonus: 10 },
 ]
 
+// ── 装備プレフィックス（名品システム） ──
+// 装備ドロップの15%に接頭辞が付き、対象ステータスが強化される。ボーナスはアイテム個体に
+// 焼き込む方式（精錬・影装・セーブと自動的に共存）。「名匠の」は全ボーナス+25%の激レア。
+export const EQUIP_PREFIX_RATE = 0.15
+export const MASTERWORK_PREFIX = '名匠の'
+
+const BONUS_KEYS = ['hpBonus', 'strBonus', 'agiBonus', 'dexBonus', 'intBonus', 'vitBonus', 'lukBonus'] as const
+type BonusKey = typeof BONUS_KEYS[number]
+
+// keys省略＝全ボーナス対象（名匠の）。weightは適用可能なものの中での相対比。
+const EQUIP_PREFIXES: { name: string; weight: number; keys?: BonusKey[]; mult: number; minAdd: number }[] = [
+  { name: '鋭い',   weight: 20, keys: ['strBonus'],            mult: 1.3,  minAdd: 2 },
+  { name: '精密な', weight: 20, keys: ['dexBonus'],            mult: 1.3,  minAdd: 2 },
+  { name: '堅牢な', weight: 20, keys: ['vitBonus', 'hpBonus'], mult: 1.3,  minAdd: 2 },
+  { name: '疾風の', weight: 13, keys: ['agiBonus'],            mult: 1.3,  minAdd: 2 },
+  { name: '賢者の', weight: 13, keys: ['intBonus'],            mult: 1.3,  minAdd: 2 },
+  { name: '幸運の', weight: 7,  keys: ['lukBonus'],            mult: 1.3,  minAdd: 2 },
+  { name: MASTERWORK_PREFIX, weight: 7,                        mult: 1.25, minAdd: 1 },
+]
+
+/**
+ * 15%で装備にプレフィックスを付与する（in-place）。装備が対象ステータスを持つ
+ * プレフィックスだけを抽選対象にするので、弓に「鋭い」等の不発は起きない。
+ */
+export function maybeApplyEquipPrefix(item: Item): Item {
+  if (item.type !== 'equip' || Math.random() >= EQUIP_PREFIX_RATE) return item
+  const applicable = EQUIP_PREFIXES.filter(p =>
+    (p.keys ?? BONUS_KEYS).some(k => (item[k] ?? 0) > 0))
+  if (applicable.length === 0) return item
+
+  const total = applicable.reduce((s, p) => s + p.weight, 0)
+  let r = Math.random() * total
+  let pick = applicable[applicable.length - 1]
+  for (const p of applicable) { r -= p.weight; if (r <= 0) { pick = p; break } }
+
+  for (const k of pick.keys ?? BONUS_KEYS) {
+    const v = item[k]
+    if (v && v > 0) item[k] = Math.max(Math.round(v * pick.mult), v + pick.minAdd)
+  }
+  item.name = pick.name + item.name
+  return item
+}
+
 export function spawnItems(
   map: TileType[][],
   options: { countMult?: number; equipRate?: number; floor?: number } = {}
@@ -130,7 +173,7 @@ export function spawnItems(
 
     if (r < equipRate && equipPool.length > 0) {
       const base = equipPool[Math.floor(Math.random() * equipPool.length)]
-      items.push({
+      items.push(maybeApplyEquipPrefix({
         id: `item_${i}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         name: base.name,
         type: 'equip',
@@ -144,7 +187,7 @@ export function spawnItems(
         intBonus: base.intBonus,
         vitBonus: base.vitBonus,
         lukBonus: base.lukBonus,
-      })
+      }))
     } else if (r < equipRate + 0.10) {
       // 魔法の書：装備率より低い確率
       const base = SPELL_ITEMS[Math.floor(Math.random() * SPELL_ITEMS.length)]
