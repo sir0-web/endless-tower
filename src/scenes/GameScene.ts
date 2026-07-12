@@ -4,7 +4,7 @@ import { weaponKindOf } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
-import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM } from '../game/sound'
+import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM, setHeartbeat } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { cloudSaveGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { logEvent, getPlayerId } from '../game/supabase'
@@ -164,6 +164,13 @@ export class GameScene extends Phaser.Scene {
   private attackMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // 強敵警告マーク（3発で瀕死/即死級の攻撃力を持つ敵の頭上に💀）
   private dangerMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
+  // ボス大技チャージ警告（溜め中の敵の頭上に⚠️）
+  private chargeMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
+  // ヒットストップ/スローモーションのネスト深度（多重発動時に復帰を1回にする）
+  private timeFreezeDepth = 0
+  // 連続撃破コンボ（実時間ベース）
+  private killComboCount = 0
+  private killComboAt = 0
   // イベントフロアNPC（施設の話しかけ役）描画
   private facilityGraphics: Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Text> = new Map()
   // 施設NPC画像の可視領域割合キャッシュ（透過除き可視部分 / 画像全体）
@@ -260,6 +267,10 @@ export class GameScene extends Phaser.Scene {
     this.itemGraphics       = new Map()
     this.attackMarkers      = new Map()
     this.dangerMarkers      = new Map()
+    this.chargeMarkers      = new Map()
+    this.timeFreezeDepth    = 0
+    this.killComboCount     = 0
+    this.killComboAt        = 0
     this.facilityGraphics   = new Map()
     this.tileSprites        = []
     this.floorVariantMap    = []
@@ -1111,12 +1122,19 @@ export class GameScene extends Phaser.Scene {
       const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
       enemy.hp = Math.max(0, enemy.hp - dmg)
 
-      // ヒット演出：ダメージ数字ポップ＋敵フラッシュ＋火花（連撃は少し時間差で）
+      // ヒット演出：ヒットストップ＋ダメージ数字ポップ＋敵フラッシュ＋のけぞり＋火花（連撃は少し時間差で）
+      if (hit === 0) this.hitStop(isCrit)
       const delay = hit * 70
       this.time.delayedCall(delay, () => {
         if (this.isVisible(enemy.position.x, enemy.position.y)) {
           this.popDamageNumber(enemy.position.x, enemy.position.y, dmg, { crit: isCrit })
           this.flashSprite(enemy.id)
+          this.recoilEnemy(
+            enemy.id,
+            Math.sign(enemy.position.x - player.position.x),
+            Math.sign(enemy.position.y - player.position.y),
+            isCrit ? 0.34 : 0.22,
+          )
           const eg = this.enemyGraphics.get(enemy.id)
           if (eg) {
             this.spawnBurst(eg.x, eg.y, {
@@ -1259,12 +1277,19 @@ export class GameScene extends Phaser.Scene {
       if (isPointBlank)  dmg = Math.max(1, Math.floor(dmg * 0.5))
       enemy.hp = Math.max(0, enemy.hp - dmg)
 
-      // 矢が飛び、着弾したタイミングでダメージ演出を出す
+      // 矢が飛び、着弾したタイミングでダメージ演出を出す（着弾瞬間にヒットストップ＋のけぞり）
       this.fireArrowEffect(player.position.x, player.position.y, enemy.position.x, enemy.position.y, delay, flightMs)
       this.time.delayedCall(delay + flightMs, () => {
         if (this.isVisible(enemy.position.x, enemy.position.y)) {
+          if (hit === 0) this.hitStop(isCrit)
           this.popDamageNumber(enemy.position.x, enemy.position.y, dmg, { crit: isCrit })
           this.flashSprite(enemy.id)
+          this.recoilEnemy(
+            enemy.id,
+            Math.sign(enemy.position.x - player.position.x),
+            Math.sign(enemy.position.y - player.position.y),
+            isCrit ? 0.30 : 0.18,
+          )
           const eg = this.enemyGraphics.get(enemy.id)
           if (eg) {
             this.spawnBurst(eg.x, eg.y, {
@@ -1432,6 +1457,8 @@ export class GameScene extends Phaser.Scene {
     if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(enemy.id) }
     const dk = this.dangerMarkers.get(enemy.id)
     if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(enemy.id) }
+    const ck = this.chargeMarkers.get(enemy.id)
+    if (ck) { this.tweens.killTweensOf(ck); ck.destroy(); this.chargeMarkers.delete(enemy.id) }
     if (g) {
       this.tweens.killTweensOf(g)
       if (g.visible) {
@@ -1440,7 +1467,16 @@ export class GameScene extends Phaser.Scene {
           count: enemy.isBoss ? 14 : 7,
           speed: this.rts * (enemy.isBoss ? 1.4 : 0.9),
         })
-        if (enemy.isBoss) this.cameras.main.shake(220, 0.008)
+        if (enemy.isBoss) {
+          // ボス撃破：白フラッシュ＋スローモーション＋二重バースト（勝利の瞬間を刻む）
+          this.cameras.main.shake(220, 0.008)
+          this.cameras.main.flash(200, 255, 240, 190)
+          this.freezeTime(0.25, 450)
+          this.time.delayedCall(60, () => {
+            this.spawnBurst(g.x, g.y, { color: 0xffffff, count: 10, speed: this.rts * 2.0 })
+          })
+        }
+        this.countKillCombo(g.x, g.y)
         this.tweens.add({
           targets: g,
           alpha: 0,
@@ -1459,6 +1495,78 @@ export class GameScene extends Phaser.Scene {
     this.checkLevelUp()
     window.onEnemyKilled?.()
     logEvent('kill', { floor: this.state.player.floor, enemy_name: enemy.name, is_boss: enemy.isBoss })
+  }
+
+  /**
+   * ヒットストップ/スローモーション：tween・タイマー・アニメを一瞬遅くして打撃の「重さ」を出す。
+   * realMs は実時間（setTimeoutなのでタイムスケールの影響を受けない）。多重発動はネスト管理し、
+   * 最後の1つが終わった時だけ等速へ復帰する。
+   */
+  private freezeTime(scale: number, realMs: number) {
+    this.timeFreezeDepth++
+    this.tweens.timeScale = scale
+    this.time.timeScale = scale
+    this.anims.globalTimeScale = scale
+    setTimeout(() => {
+      this.timeFreezeDepth = Math.max(0, this.timeFreezeDepth - 1)
+      if (this.timeFreezeDepth === 0 && this.scene?.isActive()) {
+        this.tweens.timeScale = 1
+        this.time.timeScale = 1
+        this.anims.globalTimeScale = 1
+      }
+    }, realMs)
+  }
+
+  /** 攻撃命中時のヒットストップ（通常45ms／クリティカル90ms） */
+  private hitStop(crit: boolean) {
+    this.freezeTime(0.05, crit ? 90 : 45)
+  }
+
+  /** 被弾した敵を攻撃方向へ小さく弾く「のけぞり」。dx/dyは攻撃の進行方向(-1/0/1) */
+  private recoilEnemy(enemyId: string, dx: number, dy: number, strength = 0.22) {
+    const g = this.enemyGraphics.get(enemyId)
+    if (!g || !g.visible) return
+    this.tweens.add({
+      targets: g,
+      x: `+=${dx * this.rts * strength}`,
+      y: `+=${dy * this.rts * strength}`,
+      duration: 55,
+      yoyo: true,
+      ease: 'Quad.Out',
+    })
+  }
+
+  /** 連続撃破コンボの計上と「n連撃破！」ポップ。倒した位置(world座標)に出す */
+  private countKillCombo(wx?: number, wy?: number) {
+    const now = Date.now()
+    this.killComboCount = now - this.killComboAt < 3500 ? this.killComboCount + 1 : 1
+    this.killComboAt = now
+    const n = this.killComboCount
+    if (n < 2 || wx === undefined || wy === undefined) return
+
+    const hot   = n >= 4
+    const label = this.add.text(wx, wy - this.rts * 0.8, `${n}連撃破！`, {
+      fontSize: `${Math.round(this.rts * (hot ? 0.66 : 0.52))}px`,
+      fontFamily: 'Arial, sans-serif',
+      color: hot ? '#ff8a2a' : '#ffdd33',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: Math.max(3, Math.round(this.rts * 0.09)),
+    }).setOrigin(0.5).setDepth(21).setScale(0.3).setAngle(-6)
+    this.tweens.add({ targets: label, scale: 1, angle: 0, duration: 180, ease: 'Back.Out' })
+    this.tweens.add({
+      targets: label,
+      y: wy - this.rts * 1.7,
+      alpha: 0,
+      delay: 380,
+      duration: 520,
+      ease: 'Cubic.Out',
+      onComplete: () => label.destroy(),
+    })
+    if (hot) {
+      playCrit()
+      this.cameras.main.flash(120, 255, 170, 60)
+    }
   }
 
   /** 小さな破片を放射状に飛ばす汎用パーティクル（ヒット火花・撃破演出） */
@@ -1613,6 +1721,73 @@ export class GameScene extends Phaser.Scene {
         edx !== 0 && edy !== 0 &&
         (this.state.map[enemy.position.y]?.[player.position.x] === 'wall' ||
          this.state.map[player.position.y]?.[enemy.position.x] === 'wall')
+
+      // ── ボス大技テレグラフ ──
+      // 溜め中(chargeTurns>0)のボスはこのターンに大技を解放する。プレイヤーがまだ隣接していれば
+      // 通常1発の2.5倍ダメージ、離れていれば空振り。位置取りで大技を「避けられる」のが核。
+      if (enemy.chargeCd && enemy.chargeCd > 0) enemy.chargeCd--
+      if (enemy.chargeTurns && enemy.chargeTurns > 0) {
+        enemy.chargeTurns = 0
+        enemy.chargeCd = 3   // 連続チャージ禁止（弓による安全ハメ狩り防止）
+        const eg = this.enemyGraphics.get(enemy.id)
+        if (chebDist === 1 && !diagAttackBlocked) {
+          // 直撃：計算式は通常攻撃1発と同じ土台（クリティカルなし・×2.5）
+          const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
+          const effAtk  = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
+          const effDef  = player.vit + Math.floor(player.level / 2)
+          const pierce  = Math.min(0.20, PIERCE_RATE + Math.max(0, player.floor - 100) * 0.002)
+          const raw     = Math.max(1, Math.round(effAtk * pierce), effAtk - effDef)
+          const dmg     = Math.floor(raw * 2.5)
+          player.hp = Math.max(0, player.hp - dmg)
+          playDamage()
+          this.hitStop(true)
+          if (eg && eg.visible) {
+            this.tweens.add({
+              targets: eg,
+              x: eg.x + Math.sign(edx) * this.rts * 0.5,
+              y: eg.y + Math.sign(edy) * this.rts * 0.5,
+              duration: 70, yoyo: true, ease: 'Quad.Out',
+            })
+          }
+          const pw = this.tileToWorld(player.position.x, player.position.y)
+          this.spawnBurst(pw.x, pw.y, { color: 0xff5533, count: 14, speed: this.rts * 1.5 })
+          this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true, crit: true })
+          this.flashPlayer()
+          this.cameras.main.shake(280, 0.018)
+          this.cameras.main.flash(170, 150, 0, 0)
+          this.addMessage(`${enemy.name}の大技が炸裂！${dmg}ダメージ！`)
+          if (player.hp <= 0) { this.gameOver(); return }
+        } else {
+          // 空振り：回避成功の快感を演出で返す
+          if (eg && eg.visible) {
+            this.spawnBurst(eg.x, eg.y, { color: 0x99aabb, count: 8, speed: this.rts * 1.3 })
+          }
+          this.addMessage(`${enemy.name}の大技は空を切った！`)
+        }
+        continue
+      }
+      // 溜め開始判定：隣接しているボスのみ。溜めたターンは攻撃も移動もしない
+      if (
+        enemy.isBoss && !enemy.isSkulporin && !enemy.isDoppelganger &&
+        chebDist === 1 && !diagAttackBlocked &&
+        !(enemy.chargeCd && enemy.chargeCd > 0) &&
+        Math.random() < 0.35
+      ) {
+        enemy.chargeTurns = 1
+        const eg = this.enemyGraphics.get(enemy.id)
+        if (eg && eg.visible) {
+          // 赤く膨らむ「力を溜める」パルス
+          this.tweens.add({
+            targets: eg,
+            scaleX: eg.scaleX * 1.14,
+            scaleY: eg.scaleY * 1.14,
+            duration: 220, yoyo: true, repeat: 1, ease: 'Sine.InOut',
+          })
+          this.spawnBurst(eg.x, eg.y, { color: 0xff3333, count: 6, speed: this.rts * 0.7 })
+        }
+        this.addMessage(`⚠ ${enemy.name}は大技を溜めている…！（離れれば避けられる）`)
+        continue
+      }
 
       if (chebDist === 1 && !diagAttackBlocked) {
         // 隣接（斜め含む。ただし壁角越しの斜めは不可）→攻撃
@@ -2459,6 +2634,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   shutdown() {
+    setHeartbeat(false)
+    // ヒットストップ/スローモ中にシーンが終わっても等速へ戻す
+    this.timeFreezeDepth = 0
+    this.tweens.timeScale = 1
+    this.time.timeScale = 1
+    this.anims.globalTimeScale = 1
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
     if (this.animatingTimer) { clearTimeout(this.animatingTimer); this.animatingTimer = null }
     if (this.skulporinHeartbeatTimer) { clearInterval(this.skulporinHeartbeatTimer); this.skulporinHeartbeatTimer = null }
@@ -2956,6 +3137,8 @@ export class GameScene extends Phaser.Scene {
     if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(enemy.id) }
     const dk = this.dangerMarkers.get(enemy.id)
     if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(enemy.id) }
+    const ck2 = this.chargeMarkers.get(enemy.id)
+    if (ck2) { this.tweens.killTweensOf(ck2); ck2.destroy(); this.chargeMarkers.delete(enemy.id) }
     if (g) {
       this.tweens.killTweensOf(g)
       if (g.visible) {
@@ -2984,6 +3167,7 @@ export class GameScene extends Phaser.Scene {
   private gameOver() {
     if (this.isGameOver) return   // 1ターン内で複数回HP<=0判定が走っても遷移は1回だけにする
     this.isGameOver = true
+    setHeartbeat(false)
     // プレイ中フラグの解除と通知を最優先で行う（後続処理が万一throwしても
     // ジョイスティックのタッチ横取りや「いいね」判定が生き残らないように）
     window.isGameSceneActive = false
@@ -3328,12 +3512,18 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = this.tileToWorld(tx, ty)
     const { crit, heal, miss, toPlayer } = opts
 
+    // ダメージ量の階調：大きいダメージほど数字がデカく・熱い色に・派手に跳ねる（成長の可視化）
+    const v    = typeof value === 'number' ? value : 0
+    const tier = v >= 1000 ? 3 : v >= 300 ? 2 : v >= 100 ? 1 : 0
+    const tierColor = ['#ffffff', '#ffe9a8', '#ffc14d', '#ff8a2a'][tier]
+
     const color = miss ? '#cccccc'
       : heal ? '#66ff99'
       : crit ? '#ffdd33'
       : toPlayer ? '#ff5555'
-      : '#ffffff'
-    const baseSize = this.rts * (crit ? 0.62 : 0.46)
+      : tierColor
+    const sizeMul  = [1, 1.18, 1.42, 1.72][tier]
+    const baseSize = this.rts * (crit ? 0.62 : 0.46) * sizeMul
     const text = miss ? 'MISS' : heal ? `+${value}` : `${value}`
 
     // 横位置を少しランダムにずらして連続ヒットでも重ならないように
@@ -3344,21 +3534,23 @@ export class GameScene extends Phaser.Scene {
       fontSize: `${Math.round(baseSize)}px`,
       fontFamily: 'Arial, sans-serif',
       color,
-      fontStyle: crit ? 'bold' : 'normal',
+      fontStyle: crit || tier >= 1 ? 'bold' : 'normal',
       stroke: '#000000',
-      strokeThickness: Math.max(2, Math.round(baseSize * 0.14)),
+      strokeThickness: Math.max(2, Math.round(baseSize * (tier >= 2 ? 0.17 : 0.14))),
     }).setOrigin(0.5).setDepth(20)
 
-    if (crit) {
+    if (crit || tier >= 2) {
+      // 「ドン」と飛び出す。特大(tier3)はわずかに傾けてインパクトを足す
       label.setScale(0.4)
-      this.tweens.add({ targets: label, scale: 1, duration: 160, ease: 'Back.Out' })
+      if (tier >= 3) label.setAngle(Math.random() < 0.5 ? -8 : 8)
+      this.tweens.add({ targets: label, scale: 1, angle: 0, duration: 160, ease: 'Back.Out' })
     }
 
     this.tweens.add({
       targets: label,
-      y: startY - this.rts * (crit ? 1.1 : 0.85),
+      y: startY - this.rts * (crit || tier >= 2 ? 1.1 : 0.85),
       alpha: 0,
-      duration: crit ? 900 : 700,
+      duration: (crit ? 900 : 700) + tier * 120,
       ease: 'Cubic.Out',
       onComplete: () => label.destroy(),
     })
@@ -4037,6 +4229,8 @@ export class GameScene extends Phaser.Scene {
         if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(id) }
         const dk = this.dangerMarkers.get(id)
         if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(id) }
+        const ck = this.chargeMarkers.get(id)
+        if (ck) { this.tweens.killTweensOf(ck); ck.destroy(); this.chargeMarkers.delete(id) }
         this.enemyDir.delete(id)
       }
     }
@@ -4168,6 +4362,26 @@ export class GameScene extends Phaser.Scene {
         mark.setVisible(true)
       } else if (mark) {
         mark.setVisible(false)
+      }
+
+      // 大技チャージ警告：溜め中のボスの頭上に⚠️（速い点滅パルス＝次ターン大技の合図）
+      const isCharging = vis && (enemy.chargeTurns ?? 0) > 0
+      let charge = this.chargeMarkers.get(enemy.id)
+      if (isCharging) {
+        if (!charge) {
+          charge = this.add.text(ex, ey, '⚠️', { fontSize: `${Math.round(rts * 0.62)}px` })
+            .setOrigin(0.5).setDepth(9)
+          this.tweens.add({
+            targets: charge,
+            scale: 1.35, alpha: { from: 1, to: 0.45 },
+            duration: 260, yoyo: true, repeat: -1, ease: 'Sine.InOut',
+          })
+          this.chargeMarkers.set(enemy.id, charge)
+        }
+        charge.setPosition(ex, ey - rts * 1.28)
+        charge.setVisible(true)
+      } else if (charge) {
+        charge.setVisible(false)
       }
 
       // 強敵警告マーク：3発以内でプレイヤーの最大HPを削り切る攻撃力を持つ敵の頭上に💀
@@ -4303,6 +4517,8 @@ export class GameScene extends Phaser.Scene {
     const { hp, maxHp } = this.state.player
     const ratio  = maxHp > 0 ? hp / maxHp : 1
     const target = hp > 0 && ratio <= 0.25 ? 0.85 : hp > 0 && ratio <= 0.4 ? 0.4 : 0
+    // HP25%以下は心音を鳴らす（ビネットの脈動と同期する緊張演出）
+    setHeartbeat(hp > 0 && ratio <= 0.25)
     if (target === this.vignetteTarget) return
     this.vignetteTarget = target
     if (this.vignetteTween) { this.vignetteTween.stop(); this.vignetteTween = null }

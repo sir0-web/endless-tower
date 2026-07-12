@@ -162,6 +162,46 @@ if (typeof window !== 'undefined') {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeAudio() })
 }
 
+// ── 低HP心音（WebAudio合成：音源ファイル不要） ──
+// 「ドクン・ドクン」を2連のローシンセで合成。既存の低HPビネットの脈動と同じテンポ感。
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+function thump(when: number, vol: number): void {
+  const ctx = getCtx()
+  if (!ctx) return
+  const osc  = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(58, when)
+  osc.frequency.exponentialRampToValueAtTime(36, when + 0.11)
+  gain.gain.setValueAtTime(0.0001, when)
+  gain.gain.exponentialRampToValueAtTime(vol, when + 0.014)
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.17)
+  osc.connect(gain).connect(ctx.destination)
+  osc.start(when)
+  osc.stop(when + 0.2)
+  osc.onended = () => { osc.disconnect(); gain.disconnect() }
+}
+
+/** 低HP時の心音ループを開始/停止する（HP25%以下の緊張演出）。 */
+export function setHeartbeat(active: boolean): void {
+  if (!active) {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
+    return
+  }
+  if (heartbeatTimer) return
+  const beat = () => {
+    if (_muted) return
+    const ctx = getCtx()
+    if (!ctx || ctx.state === 'suspended') return
+    const t = ctx.currentTime + 0.02
+    thump(t, 0.40)          // ドクン（強）
+    thump(t + 0.22, 0.26)   // ドクン（弱）
+  }
+  beat()
+  heartbeatTimer = setInterval(beat, 1300)  // ビネットの脈動(650ms yoyo)と同周期
+}
+
 export function playAttack():  void { se('attack')  }
 export function playCrit():    void { se('attack', 1.5) }  // クリは attack を大きめに鳴らして強調（専用音源なし）
 export function playDamage():  void { se('damage')  }

@@ -139,6 +139,10 @@ export interface Enemy {
   // ドッペルゲンガー撃破時にプレイヤーへ付与するステータスポイント（生前の生涯累計獲得量）
   doppelStatReward?: number
   slowedTurns: number
+  // ボスの大技テレグラフ：>0なら「溜め中」（次ターンに大技が来る。離れれば空振りする）
+  chargeTurns?: number
+  // 大技のクールダウン残りターン（連続チャージによる遠距離ハメ狩り防止）
+  chargeCd?: number
 }
 
 export interface GameState {
