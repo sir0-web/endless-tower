@@ -214,6 +214,16 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   display: none !important;
 }
 
+/* スマホ：マップ枠右下は弓の攻撃ボタン(.bow-attack-btn)に譲り、
+   📬報告ボタンはスクロールロックボタン(右上)の真下へ退避させる */
+@media (max-width: 767px) {
+  .report-float-btn {
+    top: 52px;
+    right: 6px;
+    bottom: auto;
+  }
+}
+
 /* ── スクロールロックボタン（スマホ・マップ枠右上） ── */
 .scroll-lock-btn {
   display: none;
@@ -392,6 +402,49 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   background: rgba(255, 255, 255, 0.62);
   border: 2px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ── 弓の攻撃ボタン（PC/スマホ共通・弓装備時のみ表示）──
+   マップ枠（.game-canvas-area）内の右下に円状で配置。スマホで同じ場所にあった📬報告ボタンは
+   スクロールロックボタンの下（右上）へ退避させ、ここを弓専用にした。 */
+.bow-attack-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: 12px;
+  /* PC: イベントメッセージウィンドウ(.event-msg-bar)がキャンバス下部に重なって表示されるため、
+     その真上に載せる。バー高さ = game-pane幅832px × 画像比274/1347 ≈ 169px（PCは固定レイアウト） */
+  bottom: 180px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(90, 60, 0, 0.6);
+  border: 2px solid rgba(255, 200, 100, 0.55);
+  color: #ffdd99;
+  font-size: 28px;
+  cursor: pointer;
+  z-index: 310;
+  pointer-events: auto;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.bow-attack-btn:hover {
+  background: rgba(130, 88, 0, 0.75);
+  border-color: rgba(255, 220, 140, 0.9);
+  box-shadow: 0 0 14px rgba(255, 200, 100, 0.45);
+}
+.bow-attack-btn:active { transform: translateY(1px) scale(0.96); }
+
+@media (max-width: 767px) {
+  .bow-attack-btn {
+    right: 8px;
+    /* スマホはメッセージバーがキャンバス枠外（下の別領域）なので枠の右下ぴったりで良い */
+    bottom: 8px;
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+  }
 }
 
 /* スマホ: 縦積み */

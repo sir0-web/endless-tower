@@ -1,4 +1,4 @@
-import type { Item, TileType, EquipSlot, SpellType } from '../types'
+import type { Item, TileType, EquipSlot, SpellType, WeaponKind } from '../types'
 
 export const SPELL_ITEMS: { name: string; spellType: SpellType; effect: string }[] = [
   { name: 'ファイアボルトの書',     spellType: 'firebolt',      effect: '最寄りの敵1体に INT×3＋10 のダメージ' },
@@ -50,6 +50,7 @@ export function makeWingItem(key: WingKey): Item {
 export const EQUIP_ITEMS: {
   name: string
   equipSlot: EquipSlot
+  weaponKind?: WeaponKind
   minFloor?: number
   hpBonus?: number
   strBonus?: number
@@ -66,6 +67,14 @@ export const EQUIP_ITEMS: {
   { name: 'ミスリルブレイド', equipSlot: 'weapon',  minFloor: 15, strBonus: 16, dexBonus: 4 },
   { name: '竜牙の大剣',     equipSlot: 'weapon',    minFloor: 25, strBonus: 24, agiBonus: 4 },
   { name: '覇王の剣',       equipSlot: 'weapon',    minFloor: 40, strBonus: 34, dexBonus: 8, lukBonus: 4 },
+  // 弓系 → DEX重視（射程攻撃・命中減衰あり。GameScene attackWithBow参照）
+  // ステータス合計値は同格の近接武器とほぼ同水準に揃える（弓はダメージ係数自体が近接よりやや低いため、
+  // 装備側でも劣後させると二重に不利になるのを防ぐ）。
+  { name: '木の弓',         equipSlot: 'weapon', weaponKind: 'bow',               dexBonus: 5 },
+  { name: '狩人の弓',       equipSlot: 'weapon', weaponKind: 'bow',               dexBonus: 9, agiBonus: 3 },
+  { name: 'エルフの弓',     equipSlot: 'weapon', weaponKind: 'bow', minFloor: 15, dexBonus: 15, lukBonus: 4 },
+  { name: '疾風の長弓',     equipSlot: 'weapon', weaponKind: 'bow', minFloor: 25, dexBonus: 22, agiBonus: 6 },
+  { name: '天弓ガンディヴァ', equipSlot: 'weapon', weaponKind: 'bow', minFloor: 40, dexBonus: 32, lukBonus: 6, agiBonus: 5 },
   // 鎧系 → VIT重視
   { name: '革の鎧',         equipSlot: 'armor',                   vitBonus: 3 },
   { name: '鉄の鎧',         equipSlot: 'armor',                   vitBonus: 6 },
@@ -127,6 +136,7 @@ export function spawnItems(
         type: 'equip',
         position: { ...pos },
         equipSlot: base.equipSlot,
+        weaponKind: base.weaponKind,
         hpBonus: base.hpBonus,
         strBonus: base.strBonus,
         agiBonus: base.agiBonus,

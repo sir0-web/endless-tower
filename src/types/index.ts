@@ -7,6 +7,8 @@ export interface Position {
 
 export type EquipSlot = 'weapon' | 'armor' | 'shoulder' | 'boots' | 'accessory1' | 'accessory2' | 'charm'
 
+export type WeaponKind = 'melee' | 'bow'
+
 export type AllocStat = 'str' | 'agi' | 'dex' | 'int' | 'vit' | 'luk'
 
 export type SpellType = 'firebolt' | 'blessing' | 'lightblessing' | 'quagmire' | 'meteostorm'
@@ -34,6 +36,8 @@ export interface Item {
   healPercent?: number   // 最大HPに対する割合回復（灰ポーション。healAmountを下限として併用）
   // 装備アイテム
   equipSlot?: EquipSlot
+  // 武器の種別（weaponスロットのみ意味を持つ）。未指定は近接武器扱い。
+  weaponKind?: WeaponKind
   hpBonus?: number
   strBonus?: number
   agiBonus?: number
@@ -75,6 +79,11 @@ export interface Equipment {
   accessory1?: Item
   accessory2?: Item
   charm?: Item
+}
+
+/** 装備中の武器種別を判定する。未装備・未指定は近接(melee)扱い。 */
+export function weaponKindOf(item?: Item | null): WeaponKind {
+  return item?.weaponKind === 'bow' ? 'bow' : 'melee'
 }
 
 export interface Player {
@@ -193,6 +202,7 @@ declare global {
     showArcanaRoulette?: (onComplete: () => void) => void
     applyArcanaResult?: (points: number) => void
     gameMove?: (key: string) => void
+    gameAttack?: () => void
     saveGame?: () => void
     warpFloor?: (floor: number) => void
     giveEquip?: (name?: string) => void

@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat, Enemy, Player } from '../types'
+import { weaponKindOf } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
@@ -106,6 +107,21 @@ function dexPierceBonus(dex: number): number {
   return Math.min(0.16, Math.max(0, dex - 100) / 100 * 0.02)
 }
 
+// 弓：射程はマンハッタン距離4マス。「敵が詰め寄る1〜2ターンの間に先制できる」だけの距離を確保する
+// （2マスだと敵が1手で隣接でき、先制の恩恵がほぼ無かったためバランス調整で3→4に拡張）。
+const BOW_RANGE = 4
+// 弓の割合貫通：近接(PIERCE_RATE=6%)より低い基礎4%＋DEXボーナス（近接のdexPierceBonusを流用）。
+// DEXは弓の主力ステータスなので、近接よりむしろ貫通が伸びやすい＝高VIT/ボス戦でも芯を通せる。
+const BOW_PIERCE_RATE = 0.04
+// 弓：AGIによる多段攻撃の閾値。初段(2発目)は近接と同じAGI50で揃える
+// （防具等でのAGI"おこぼれ"投資で近接だけ得をするのを防ぐ＝入口は公平に）。
+// 2発目以降の伸び率(2.2倍・上限5)は近接(2倍・上限8)より急なので、天井の高さでのみ差別化する。
+function bowAttackCount(agi: number): number {
+  let hits = 1, need = 50
+  while (agi >= need && hits < 5) { hits++; need *= 2.2 }
+  return hits
+}
+
 // プレイヤー/ドッペルゲンガー共通の8方向むき（プレイヤーの歩行・攻撃スプライトをそのまま流用するため）
 type FacingDir = 'down' | 'up' | 'right' | 'left' | 'down-right' | 'down-left' | 'up-right' | 'up-left'
 
@@ -122,14 +138,22 @@ function dirFromSign(sx: number, sy: number): FacingDir {
   return 'down'
 }
 
+// dirFromSign の逆変換（8方向 → 符号ベクトル）。弓の照準優先方向の判定に使う。
+const FACING_VEC: Record<FacingDir, [number, number]> = {
+  'down': [0, 1], 'up': [0, -1], 'right': [1, 0], 'left': [-1, 0],
+  'down-right': [1, 1], 'down-left': [-1, 1], 'up-right': [1, -1], 'up-left': [-1, -1],
+}
+
 export class GameScene extends Phaser.Scene {
   private state!: GameState
   private graphics!: Phaser.GameObjects.Graphics
   private fogGraphics!: Phaser.GameObjects.Graphics
+  private bowRangeGraphics!: Phaser.GameObjects.Graphics
   private playerGraphic: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite | null = null
   private playerDir: FacingDir = 'down'
   private isPlayerAttacking = false
   private hasPlayerAnims    = false
+  private hasArcherAnims    = false
   // ドッペルゲンガー用：プレイヤーと同じ歩行/攻撃スプライトを使うための敵ごとの向き記憶
   private enemyDir = new Map<string, FacingDir>()
   private enemyGraphics: Map<string, Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image | Phaser.GameObjects.Sprite> = new Map()
@@ -292,6 +316,18 @@ export class GameScene extends Phaser.Scene {
       this.load.image(`attack_right_${i}`, `/assets/characters/player/attack_right_${i}.webp`)
     }
 
+    // 弓職（アーチャー）フレーム（16枚・透過済みなのでmakeTransparent不要）。
+    // 左向き系は近接と同様flipXで代用するため画像を持たない。
+    // 攻撃は斜め射ちの専用絵があるため、近接（上下で代用）と違い斜め2方向もロードする。
+    for (let i = 1; i <= 2; i++) {
+      for (const d of ['down', 'up', 'right']) {
+        this.load.image(`archer_walk_${d}_${i}`, `/assets/characters/player/archer/walk_${d}_${i}.webp`)
+      }
+      for (const d of ['down', 'up', 'right', 'up-right', 'down-right']) {
+        this.load.image(`archer_attack_${d}_${i}`, `/assets/characters/player/archer/attack_${d}_${i}.webp`)
+      }
+    }
+
     // 敵キャラクター画像（存在しないものは loaderror で failedTextures に記録→フォールバック）
     // 通信量削減のため、全モンスター画像(70体超)を毎回丸ごと先読みするのではなく、
     // 現在地から先のフロア帯だけを先読みする（loadEnemyTexturesAround 参照）。
@@ -379,6 +415,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * this.rts, MAP_HEIGHT * this.rts)
     this.graphics    = this.add.graphics().setDepth(1)
     this.fogGraphics = this.add.graphics().setDepth(7)
+    this.bowRangeGraphics = this.add.graphics().setDepth(2)
     this.applyMonsterTextureOverrides()
     this.initGame()
     this.createLowHpVignette()
@@ -400,6 +437,7 @@ export class GameScene extends Phaser.Scene {
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
     window.applyArcanaResult = (points: number) => this.applyArcanaResult(points)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
+    window.gameAttack      = () => this.gameAttackById()
     window.grantReward     = (reward, message) => this.grantLikeReward(reward, message)
     window.saveGame        = () => this.doSaveGame()
     window.addWorldLogMessage = (text: string) => this.addWorldLogMessage(text)
@@ -433,6 +471,7 @@ export class GameScene extends Phaser.Scene {
           id: `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           name: base.name, type: 'equip', position: { x: 0, y: 0 },
           equipSlot: base.equipSlot,
+          weaponKind: base.weaponKind,
           hpBonus: base.hpBonus, strBonus: base.strBonus, agiBonus: base.agiBonus,
           dexBonus: base.dexBonus, intBonus: base.intBonus, vitBonus: base.vitBonus, lukBonus: base.lukBonus,
         })
@@ -688,6 +727,13 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.isPaused || this.inventoryOpen) return
 
+    // 弓：その場から攻撃（🏹ボタンと同じ）。スペースキー移動系操作を持たないため、
+    // マウス/タップに頼らずキーボードだけでも弓を撃てるようにする。
+    if (event.key === ' ' || event.code === 'Space') {
+      this.gameAttackById()
+      return
+    }
+
     const { player } = this.state
     let dx = 0
     let dy = 0
@@ -760,7 +806,14 @@ export class GameScene extends Phaser.Scene {
     const enemy = this.state.enemies.find(e => e.position.x === nx && e.position.y === ny)
     let didAttack = false
     if (enemy) {
-      this.attackEnemy(enemy)
+      // 弓装備時は隣接へ移動(bump)した場合も近接attackEnemy()(STR基準)ではなく
+      // 弓の攻撃(DEX基準)を使う。これが無いとDEX特化の弓使いが通路等での自然なbump操作のたびに
+      // ほぼ無力なSTR攻撃を撃ってしまい、弓の存在意義が失われる。
+      if (weaponKindOf(player.equipment.weapon) === 'bow') {
+        this.attackWithBow(enemy)
+      } else {
+        this.attackEnemy(enemy)
+      }
       didAttack = true
       this.lastActionWasAttack = true
       if (enemy.hp <= 0) this.lastMoveAt = performance.now() + 300
@@ -1064,6 +1117,217 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (enemy.hp <= 0) this.killEnemy(enemy)
+  }
+
+  /**
+   * 弓の通常攻撃：射程内(BOW_RANGE)の敵を攻撃する。
+   * target省略時は射程内でプレイヤーの向いている方向にいる敵を優先し、いなければ最も近い敵へ
+   * フォールバックしてオートターゲットする（🏹ボタン用。狙った方向を向いてから撃つと反映される）。
+   * target指定時はその敵を対象に、隣接(dist=1)からの移動bump攻撃として扱う
+   * （bump時に近接attackEnemy()へ誤フォールバックしないための経路）。
+   * 近接attackEnemy()と異なり、隣接不要・距離に応じて命中率が下がる。
+   * bump(dist=1)ではない真の遠距離弾(dist>1)には先制ボーナス(+30%)が乗る。
+   * 戻り値: 攻撃を実行できたか（false=射程内に敵がいない＝ターン消費させない）
+   */
+  private attackWithBow(target?: import('../types').Enemy): boolean {
+    const { player, enemies } = this.state
+    if (weaponKindOf(player.equipment.weapon) !== 'bow') return false
+
+    // すかるぽりんは武器種によらず専用戦闘（命中率10%、ヒット時は必ず1ダメージ）で固定
+    if (target?.isSkulporin) { this.attackSkulporin(target); return true }
+
+    let enemy: import('../types').Enemy
+    let dist: number
+    if (target) {
+      enemy = target
+      dist  = Math.abs(target.position.x - player.position.x) + Math.abs(target.position.y - player.position.y)
+    } else {
+      const inRange = enemies
+        .map(e => ({
+          e,
+          dist: Math.abs(e.position.x - player.position.x) + Math.abs(e.position.y - player.position.y),
+        }))
+        .filter(o => o.dist <= BOW_RANGE)
+        .filter(o => this.hasLineOfSight(player.position.x, player.position.y, o.e.position.x, o.e.position.y))
+
+      if (inRange.length === 0) {
+        this.addMessage('射程内に敵がいない！')
+        return false
+      }
+
+      // プレイヤーが向いている方向にいる敵を優先ターゲットにする（狙った敵を選べない、という不満対策）。
+      // 向き先に誰もいなければ、これまで通り最も近い敵へフォールバックし、ボタンが空振りしないようにする。
+      const [fx, fy] = FACING_VEC[this.playerDir]
+      const faced = inRange.filter(o => {
+        const esx = Math.sign(o.e.position.x - player.position.x)
+        const esy = Math.sign(o.e.position.y - player.position.y)
+        return (fx === 0 || esx === fx) && (fy === 0 || esy === fy)
+      })
+      const pool = faced.length > 0 ? faced : inRange
+      const nearest = pool.reduce((a, b) => (a.dist <= b.dist ? a : b))
+      enemy = nearest.e
+      dist  = nearest.dist
+      // 射る敵の方向を向く（攻撃アニメの向き・次弾の照準優先方向に反映）
+      this.playerDir = dirFromSign(
+        Math.sign(enemy.position.x - player.position.x),
+        Math.sign(enemy.position.y - player.position.y),
+      )
+      if (enemy.isSkulporin) { this.attackSkulporin(enemy); return true }
+    }
+
+    // 先制ボーナス：隣接(bump)ではなく、真に離れた位置(dist>1)から先制した一撃には威力+30%。
+    // bump時と全く同じ火力になってしまうと「弓としての強み」が命中率減衰だけになるため、
+    // 「敵が詰め寄る前に狙い撃つ」というプレイに明確な報酬を用意する。
+    const isOpeningShot = dist > 1
+
+    // ── 剣との差別化（弓が単純上位互換にならないための2つのコスト）──
+    // (1) 至近距離ペナルティ：隣接(bump含む)では弓を引き絞れず威力半減 → 隣接戦は剣の領分
+    const isPointBlank = dist === 1
+    if (isPointBlank) this.addMessage('近すぎて弓を引き絞れない！（威力半減）')
+    // (2) 射撃コスト：1射撃ごとにスタミナ-2（通常のhungerTickは3ターンで-1なので6ターン分）。
+    //     「射程の安全はスタミナ（＝食料経済）で買う」。低資源・長期戦では剣が有利になる。
+    player.stamina = Math.max(0, player.stamina - 2)
+
+    // ダメージは近接の対称式(str*1.5+level)よりやや低い係数(dex*1.4+level)。
+    // 「安全な距離から先制できる」分の調整はBOW_RANGE/命中率側で行い、火力そのものは大きく削らない
+    // （検証:等投資STR255vsDEX同値の理論DPS比が約59%だったため、ランキング等進行速度を競う
+    //   ヘビー層で"完全な劣化選択"にならないよう1.3→1.4へ微調整）。
+    const effectiveAtk = Math.floor(player.dex * 1.4) + player.level
+    const attackCount  = bowAttackCount(player.agi)
+    const baseHit      = 0.95 + player.dex * 0.0008
+    const hitRate      = Math.max(0.15, Math.min(1.00, baseHit - Math.max(0, dist - 1) * 0.10))
+    const critRate     = player.luk * 0.0022
+    // 割合貫通：基礎4%＋DEXボーナス（近接のdexPierceBonusを流用）。DEXが主力の弓は貫通が伸びやすい。
+    const playerPierce = BOW_PIERCE_RATE + dexPierceBonus(player.dex)
+
+    for (let hit = 0; hit < attackCount; hit++) {
+      if (enemy.hp <= 0) break
+
+      const delay    = hit * 70
+      // 飛翔時間：距離に比例（多段時は矢が連なって見えるようdelayと同程度のオーダーに収める）
+      const flightMs = 60 + dist * 35
+
+      if (Math.random() > hitRate) {
+        this.addMessage(`${enemy.name}への矢がはずれた！`)
+        // はずれ矢は敵マスを通り過ぎて1マス奥へ飛び抜ける
+        this.fireArrowEffect(
+          player.position.x, player.position.y,
+          enemy.position.x + Math.sign(enemy.position.x - player.position.x),
+          enemy.position.y + Math.sign(enemy.position.y - player.position.y),
+          delay, flightMs * 1.3,
+        )
+        this.time.delayedCall(delay + flightMs, () => {
+          if (this.isVisible(enemy.position.x, enemy.position.y)) {
+            this.popDamageNumber(enemy.position.x, enemy.position.y, '', { miss: true })
+          }
+        })
+        continue
+      }
+
+      const isCrit = Math.random() < critRate
+      const enemyDef = enemy.defense + enemy.vit
+      const raw = Math.max(1, Math.round(effectiveAtk * playerPierce), effectiveAtk - enemyDef)
+      let dmg = isCrit ? Math.floor(raw * 1.8) : raw
+      if (isOpeningShot) dmg = Math.floor(dmg * 1.3)
+      if (isPointBlank)  dmg = Math.max(1, Math.floor(dmg * 0.5))
+      enemy.hp = Math.max(0, enemy.hp - dmg)
+
+      // 矢が飛び、着弾したタイミングでダメージ演出を出す
+      this.fireArrowEffect(player.position.x, player.position.y, enemy.position.x, enemy.position.y, delay, flightMs)
+      this.time.delayedCall(delay + flightMs, () => {
+        if (this.isVisible(enemy.position.x, enemy.position.y)) {
+          this.popDamageNumber(enemy.position.x, enemy.position.y, dmg, { crit: isCrit })
+          this.flashSprite(enemy.id)
+          const eg = this.enemyGraphics.get(enemy.id)
+          if (eg) {
+            this.spawnBurst(eg.x, eg.y, {
+              color: isCrit ? 0xffdd33 : 0xffffff,
+              count: isCrit ? 9 : 4,
+              speed: this.rts * (isCrit ? 1.1 : 0.6),
+            })
+          }
+        }
+      })
+
+      if (isCrit) {
+        playCrit()
+        this.cameras.main.shake(120, 0.006)
+        this.addMessage(
+          isOpeningShot
+            ? `${enemy.name}に会心の不意打ち！${dmg}ダメージ！`
+            : `${enemy.name}にクリティカル！${dmg}ダメージ！`
+        )
+      } else {
+        playAttack()
+        this.addMessage(
+          isOpeningShot
+            ? `${enemy.name}に不意打ち！${dmg}ダメージ！`
+            : `${enemy.name}に${dmg}ダメージ！`
+        )
+      }
+    }
+
+    if (enemy.hp <= 0) this.killEnemy(enemy)
+    return true
+  }
+
+  /** 矢のテクスチャ（+x向き：羽・シャフト・鏃）をGraphicsから一度だけ生成する */
+  private ensureArrowTexture() {
+    if (this.textures.exists('bow-arrow')) return
+    const g = this.add.graphics().setVisible(false)
+    g.fillStyle(0xf2f2f2)
+    g.fillTriangle(0, 8, 9, 3, 9, 13)      // 羽
+    g.fillStyle(0xb98a44)
+    g.fillRect(8, 7, 22, 3)                // シャフト
+    g.fillStyle(0xffe28a)
+    g.fillTriangle(38, 8, 28, 3, 28, 13)   // 鏃
+    g.generateTexture('bow-arrow', 40, 16)
+    g.destroy()
+  }
+
+  /** 矢の飛翔エフェクト：発射マスから対象マスへ矢の画像を回転を合わせて飛ばす（見た目のみ） */
+  private fireArrowEffect(fromTx: number, fromTy: number, toTx: number, toTy: number, delay: number, flightMs: number) {
+    this.ensureArrowTexture()
+    this.time.delayedCall(delay, () => {
+      if (!this.isVisible(fromTx, fromTy) && !this.isVisible(toTx, toTy)) return
+      const from = this.tileToWorld(fromTx, fromTy)
+      const to   = this.tileToWorld(toTx, toTy)
+      const arrow = this.add.image(from.x, from.y, 'bow-arrow')
+        .setDepth(7)
+        .setScale(this.rts / 44)
+        .setRotation(Math.atan2(to.y - from.y, to.x - from.x))
+      this.tweens.add({
+        targets: arrow,
+        x: to.x, y: to.y,
+        duration: flightMs,
+        ease: 'Linear',
+        onComplete: () => arrow.destroy(),
+      })
+    })
+  }
+
+  /** 弓の攻撃ボタン用エントリポイント（window.gameAttack）。行動→ターン消費はuseSpellById等と同型。 */
+  private gameAttackById() {
+    if (this.isPaused || this.isStatAllocOpen) return
+    const { player } = this.state
+    if (weaponKindOf(player.equipment.weapon) !== 'bow') return
+
+    const acted = this.attackWithBow()
+    if (!acted) {
+      this.renderMap()
+      this.updateWindowGameState()
+      return
+    }
+
+    // attackWithBow内で標的の方向を向いているので、その向きで攻撃アニメを再生
+    this.playAttackAnim()
+    this.state.turn++
+    this.enemyTurn()
+    this.hungerTick()
+    this.poisonTick()
+    this.effectTick()
+    this.renderMap()
+    this.updateWindowGameState()
   }
 
   /** 敵を撃破：状態から除去し、撃破演出（縮小フェード＋破片）・経験値・レベルアップ処理を行う */
@@ -1421,21 +1685,31 @@ export class GameScene extends Phaser.Scene {
           }
         }
 
-        // 斜め移動できなかった場合は単軸移動
+        // 斜め移動できなかった場合は単軸移動。主軸(移動量の大きい方)が壁等で塞がっていたら、
+        // 副軸での移動を試す（これが無いと壁の角で完全に足止めされ、遠距離から一方的に攻撃され続けるバグになる）
         if (!moved) {
-          const mx = Math.abs(tdx) >= Math.abs(tdy) ? Math.sign(tdx) : 0
-          const my = Math.abs(tdx) >= Math.abs(tdy) ? 0 : Math.sign(tdy)
-          const nx = enemy.position.x + mx
-          const ny = enemy.position.y + my
+          const tryAxisMove = (mx: number, my: number): boolean => {
+            if (mx === 0 && my === 0) return false
+            const nx = enemy.position.x + mx
+            const ny = enemy.position.y + my
+            const tile = this.state.map[ny]?.[nx]
+            const isWalkable = tile === 'floor' || tile === 'trap' || tile === 'mud' || tile === 'spring' || tile === 'pitfall'
+            const isPlayerPos = nx === player.position.x && ny === player.position.y
+            const occupied = enemies.some(e => e !== enemy && e.position.x === nx && e.position.y === ny)
+            if (isWalkable && !isPlayerPos && !occupied) {
+              enemy.position.x = nx
+              enemy.position.y = ny
+              return true
+            }
+            return false
+          }
 
-          const tile = this.state.map[ny]?.[nx]
-          const isWalkable = tile === 'floor' || tile === 'trap' || tile === 'mud' || tile === 'spring' || tile === 'pitfall'
-          const isPlayerPos = nx === player.position.x && ny === player.position.y
-          const occupied = enemies.some(e => e !== enemy && e.position.x === nx && e.position.y === ny)
+          const primaryX = Math.abs(tdx) >= Math.abs(tdy)
+          const primary:   [number, number] = primaryX ? [Math.sign(tdx), 0] : [0, Math.sign(tdy)]
+          const secondary: [number, number] = primaryX ? [0, Math.sign(tdy)] : [Math.sign(tdx), 0]
 
-          if (isWalkable && !isPlayerPos && !occupied) {
-            enemy.position.x = nx
-            enemy.position.y = ny
+          if (!tryAxisMove(primary[0], primary[1])) {
+            tryAxisMove(secondary[0], secondary[1])
           }
         }
       }
@@ -2954,6 +3228,26 @@ export class GameScene extends Phaser.Scene {
     return true
   }
 
+  /**
+   * 2点間に壁を挟まず射線が通るか（弓の射程判定・射程表示に使用）。
+   * ブレゼンハムのアルゴリズムで始点/終点を除く経路上のタイルを調べ、壁があれば不通とする。
+   */
+  private hasLineOfSight(x0: number, y0: number, x1: number, y1: number): boolean {
+    let x = x0, y = y0
+    const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0)
+    const sx = x0 < x1 ? 1 : -1
+    const sy = y0 < y1 ? 1 : -1
+    let err = dx - dy
+    while (x !== x1 || y !== y1) {
+      const e2 = 2 * err
+      if (e2 > -dy) { err -= dy; x += sx }
+      if (e2 < dx)  { err += dx; y += sy }
+      if (x === x1 && y === y1) break
+      if (this.state.map[y]?.[x] === 'wall') return false
+    }
+    return true
+  }
+
   private tileToWorld(tx: number, ty: number): { x: number; y: number } {
     return {
       x: tx * this.rts + this.rts / 2,
@@ -3234,6 +3528,42 @@ export class GameScene extends Phaser.Scene {
         repeat: 0,
       })
     }
+
+    this.createArcherAnims()
+  }
+
+  // ── 弓職アニメーション定義（弓装備時のみ使用。左向き系はflipXで代用） ──
+  private createArcherAnims() {
+    const walkDirs   = ['down', 'up', 'right'] as const
+    const attackDirs = ['down', 'up', 'right', 'up-right', 'down-right'] as const
+    const ok = (key: string) => !this.failedTextures.has(key) && this.textures.exists(key)
+    const allLoaded =
+      walkDirs.every(d => [1, 2].every(i => ok(`archer_walk_${d}_${i}`))) &&
+      attackDirs.every(d => [1, 2].every(i => ok(`archer_attack_${d}_${i}`)))
+    if (!allLoaded) return
+    this.hasArcherAnims = true
+
+    for (const d of walkDirs) {
+      if (!this.anims.exists(`archer_walk_${d}`)) {
+        this.anims.create({
+          key: `archer_walk_${d}`,
+          frames: [{ key: `archer_walk_${d}_1` }, { key: `archer_walk_${d}_2` }],
+          frameRate: 1000 / 150,
+          repeat: -1,
+        })
+      }
+    }
+    for (const d of attackDirs) {
+      if (!this.anims.exists(`archer_attack_${d}`)) {
+        this.anims.create({
+          key: `archer_attack_${d}`,
+          // 近接(4frame×80ms)と体感時間を揃えるため、2frameは1コマ140msにする
+          frames: [{ key: `archer_attack_${d}_1` }, { key: `archer_attack_${d}_2` }],
+          frameRate: 1000 / 140,
+          repeat: 0,
+        })
+      }
+    }
   }
 
   /** 全8方向をベースアニメーション（down/up/right）とflipXにマッピング。プレイヤー・ドッペルゲンガー共用 */
@@ -3250,13 +3580,42 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 弓装備＆弓グラ読込済みか（プレイヤーの見た目セット切り替え判定） */
+  private useArcherSprites(): boolean {
+    return this.hasArcherAnims && weaponKindOf(this.state?.player?.equipment?.weapon) === 'bow'
+  }
+
+  /**
+   * プレイヤーの向き→再生アニメキー・待機テクスチャの解決。弓装備時はアーチャーセットを使う。
+   * 近接：斜めは上下向きで代用（斜め絵が無いため）。
+   * 弓　：攻撃のみ斜め専用絵（up-right/down-right、左側はflipX）があるので斜め攻撃はそれを使う。
+   */
+  private getPlayerAnimKeys(dir: FacingDir): { walkKey: string; attackKey: string; flipX: boolean; idleKey: string } {
+    const { anim, flipX, idleKey } = this.getAnimBaseDir(dir)
+    if (!this.useArcherSprites()) {
+      return { walkKey: `walk_${anim}`, attackKey: `attack_${anim}`, flipX, idleKey }
+    }
+    // 弓の攻撃方向：右上・右下は専用、左上・左下はそれぞれの反転
+    let attackDir: string = anim
+    switch (dir) {
+      case 'up-right': case 'up-left':     attackDir = 'up-right';   break
+      case 'down-right': case 'down-left': attackDir = 'down-right'; break
+    }
+    return {
+      walkKey:   `archer_walk_${anim}`,
+      attackKey: `archer_attack_${attackDir}`,
+      flipX,
+      idleKey:   `archer_walk_${anim}_1`,
+    }
+  }
+
   private playWalkAnim() {
     if (!this.hasPlayerAnims || this.isPlayerAttacking) return
     const sprite = this.playerGraphic
     if (!(sprite instanceof Phaser.GameObjects.Sprite)) return
-    const { anim, flipX, idleKey } = this.getAnimBaseDir(this.playerDir)
+    const { walkKey, flipX, idleKey } = this.getPlayerAnimKeys(this.playerDir)
     sprite.setFlipX(flipX)
-    sprite.play(`walk_${anim}`, true)
+    sprite.play(walkKey, true)
     this.time.delayedCall(450, () => {
       if (this.isPlayerAttacking || !sprite.active) return
       sprite.stop()
@@ -3268,11 +3627,11 @@ export class GameScene extends Phaser.Scene {
     if (!this.hasPlayerAnims) return
     const sprite = this.playerGraphic
     if (!(sprite instanceof Phaser.GameObjects.Sprite)) return
-    const { anim, flipX, idleKey } = this.getAnimBaseDir(this.playerDir)
+    const { attackKey, flipX, idleKey } = this.getPlayerAnimKeys(this.playerDir)
     sprite.off('animationcomplete')
     this.isPlayerAttacking = true
     sprite.setFlipX(flipX)
-    sprite.play(`attack_${anim}`, true)
+    sprite.play(attackKey, true)
     sprite.once('animationcomplete', () => {
       this.isPlayerAttacking = false
       if (!sprite.active) return
@@ -3557,7 +3916,7 @@ export class GameScene extends Phaser.Scene {
           g = this.add.image(wx, wy, 'tile-box')
             .setDisplaySize(rts - 2, rts - 2).setDepth(3)
         } else {
-          const icon = item.coin ? '🪙' : item.type === 'heal' ? '💊' : item.type === 'spell' ? '📖' : '⚔️'
+          const icon = item.coin ? '🪙' : item.type === 'heal' ? '💊' : item.type === 'spell' ? '📖' : item.weaponKind === 'bow' ? '🏹' : '⚔️'
           g = this.add.text(wx, wy, icon, { fontSize: `${Math.round(rts * 0.6)}px` }).setOrigin(0.5).setDepth(3)
         }
         // ゆっくり上下に浮遊させて「拾える物」感を出す
@@ -3770,7 +4129,7 @@ export class GameScene extends Phaser.Scene {
     const { x: px, y: py } = this.tileToWorld(player.position.x, player.position.y)
     if (!this.playerGraphic) {
       if (this.hasPlayerAnims) {
-        const { idleKey, flipX } = this.getAnimBaseDir(this.playerDir)
+        const { idleKey, flipX } = this.getPlayerAnimKeys(this.playerDir)
         const sprite = this.add.sprite(px, py, idleKey)
           .setDisplaySize(rts * 1.25, rts * 1.38)
           .setDepth(6)
@@ -3794,6 +4153,14 @@ export class GameScene extends Phaser.Scene {
         this.tweens.killTweensOf(g)
         this.tweens.add({ targets: g, x: px, y: py, duration: 110, ease: 'Quad.Out' })
       }
+      // 武器持ち替え（弓⇔近接）を待機グラフィックへ即反映。アニメ再生中はcomplete側に任せる
+      if (g instanceof Phaser.GameObjects.Sprite && !this.isPlayerAttacking && !g.anims.isPlaying) {
+        const { idleKey, flipX } = this.getPlayerAnimKeys(this.playerDir)
+        if (g.texture.key !== idleKey) {
+          g.setTexture(idleKey)
+          g.setFlipX(flipX)
+        }
+      }
     }
     this.snapNextRender = false
 
@@ -3812,6 +4179,24 @@ export class GameScene extends Phaser.Scene {
           if (alpha <= 0) continue
           this.fogGraphics.fillStyle(fogColor, Math.min(1, alpha))
           this.fogGraphics.fillRect(fx * rts, fy * rts, rts, rts)
+        }
+      }
+    }
+
+    // ── 弓の射程表示（薄緑、装備中は常時表示）──
+    this.bowRangeGraphics.clear()
+    if (weaponKindOf(player.equipment.weapon) === 'bow') {
+      this.bowRangeGraphics.fillStyle(0x33dd66, 0.16)
+      for (let ry = player.position.y - BOW_RANGE; ry <= player.position.y + BOW_RANGE; ry++) {
+        for (let rx = player.position.x - BOW_RANGE; rx <= player.position.x + BOW_RANGE; rx++) {
+          if (rx === player.position.x && ry === player.position.y) continue
+          if (rx < 0 || ry < 0 || rx >= MAP_WIDTH || ry >= MAP_HEIGHT) continue
+          const rdist = Math.abs(rx - player.position.x) + Math.abs(ry - player.position.y)
+          if (rdist > BOW_RANGE) continue
+          if (!this.isTileVisible(rx, ry)) continue
+          if (map[ry]?.[rx] === 'wall') continue
+          if (!this.hasLineOfSight(player.position.x, player.position.y, rx, ry)) continue
+          this.bowRangeGraphics.fillRect(rx * rts, ry * rts, rts, rts)
         }
       }
     }

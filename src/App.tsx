@@ -11,6 +11,7 @@ import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal, MerchantModal } from './components/EventFacilityModals'
 import { ScrollLockButton } from './components/ScrollLockButton'
+import { BowAttackButton } from './components/BowAttackButton'
 import { GameToast } from './components/GameToast'
 import { AutoSaveToast } from './components/AutoSaveToast'
 import { MailBox } from './components/MailBox'
@@ -261,6 +262,7 @@ function App() {
                 📬
               </button>
             )}
+            <BowAttackButton />
           </div>
           <EventMsgBar />
         </div>
