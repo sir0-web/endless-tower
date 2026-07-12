@@ -262,7 +262,9 @@ function App() {
                 📬
               </button>
             )}
-            <BowAttackButton />
+            {/* 弓の攻撃ボタン：非プレイ画面（タイトル・GAME OVER・ランキング）では
+                window.gameStateに弓装備が残っていても表示しない */}
+            {!fullCanvas && <BowAttackButton />}
           </div>
           <EventMsgBar />
         </div>

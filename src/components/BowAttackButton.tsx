@@ -19,9 +19,11 @@ export function BowAttackButton() {
     <button
       className="bow-attack-btn"
       data-priority-tap
-      onClick={e => { e.stopPropagation(); window.gameAttack?.() }}
+      // blur: クリック後にフォーカスが残るとSpaceキーがボタンのclickも発火させ、
+      // キー側のgameAttackと合わせて1押しで2回攻撃（2ターン消費）になるのを防ぐ
+      onClick={e => { e.stopPropagation(); e.currentTarget.blur(); window.gameAttack?.() }}
       onTouchStart={e => e.stopPropagation()}
-      title="弓で攻撃"
+      title="弓で攻撃（Spaceキーでも可）"
     >
       🏹
     </button>

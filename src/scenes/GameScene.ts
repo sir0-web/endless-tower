@@ -1308,9 +1308,16 @@ export class GameScene extends Phaser.Scene {
 
   /** 弓の攻撃ボタン用エントリポイント（window.gameAttack）。行動→ターン消費はuseSpellById等と同型。 */
   private gameAttackById() {
-    if (this.isPaused || this.isStatAllocOpen) return
+    if (this.isPaused || this.isStatAllocOpen || this.inventoryOpen) return
     const { player } = this.state
     if (weaponKindOf(player.equipment.weapon) !== 'bow') return
+
+    // 連打・キーリピート抑制：Space分岐は移動系スロットル(95ms)より手前でreturnするため、
+    // ここで抑えないと長押しで1秒に数十ターン進みスタミナが溶ける。移動と同じlastMoveAtを共有し、
+    // 攻撃(敵ターン込み)は移動より少し長めの間隔にする。
+    const now = performance.now()
+    if (now - this.lastMoveAt < 180) return
+    this.lastMoveAt = now
 
     const acted = this.attackWithBow()
     if (!acted) {
