@@ -438,6 +438,7 @@ export class GameScene extends Phaser.Scene {
     window.applyArcanaResult = (points: number) => this.applyArcanaResult(points)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
     window.gameAttack      = () => this.gameAttackById()
+    window.gameSwapWeapon  = () => this.gameSwapWeapon()
     window.grantReward     = (reward, message) => this.grantLikeReward(reward, message)
     window.saveGame        = () => this.doSaveGame()
     window.addWorldLogMessage = (text: string) => this.addWorldLogMessage(text)
@@ -688,13 +689,34 @@ export class GameScene extends Phaser.Scene {
   // PC向け：ゲーム画面のクリックで、クリック先タイルの方向へ1歩進む（8方向）。
   // タッチ（モバイル）は仮想ジョイスティック維持のため無視する。
   private handlePointerMove(pointer: Phaser.Input.Pointer) {
-    if (pointer.wasTouch) return
     if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
     if (this.isPaused || this.inventoryOpen) return
 
     const { player } = this.state
     const tx = Math.floor(pointer.worldX / this.rts)
     const ty = Math.floor(pointer.worldY / this.rts)
+
+    // 弓装備中：射程内の敵のマスをタップ/クリック → その敵を狙い撃ち。
+    // スマホはジョイスティック移動のため「向きで狙いを選ぶ」操作が不親切で、
+    // 敵を直接タップして狙えるようにする（PCのクリックでも同じに動く）。
+    if (weaponKindOf(player.equipment.weapon) === 'bow') {
+      const enemy = this.state.enemies.find(e => e.position.x === tx && e.position.y === ty)
+      if (enemy) {
+        const dist = Math.abs(tx - player.position.x) + Math.abs(ty - player.position.y)
+        if (
+          dist >= 1 && dist <= BOW_RANGE &&
+          this.isVisible(tx, ty) &&
+          this.hasLineOfSight(player.position.x, player.position.y, tx, ty)
+        ) {
+          this.gameAttackById(enemy)
+          return
+        }
+      }
+    }
+
+    // タッチの移動タップは無効（スマホの移動はジョイスティック。誤タップ移動を防ぐ）
+    if (pointer.wasTouch) return
+
     const dx = Math.sign(tx - player.position.x)
     const dy = Math.sign(ty - player.position.y)
     if (dx === 0 && dy === 0) return   // 自分のタイルをクリック → 何もしない
@@ -1141,6 +1163,11 @@ export class GameScene extends Phaser.Scene {
     if (target) {
       enemy = target
       dist  = Math.abs(target.position.x - player.position.x) + Math.abs(target.position.y - player.position.y)
+      // 標的の方向を向く（bump時は移動方向と同じ。タップ狙撃時はここで初めて向きが決まる）
+      this.playerDir = dirFromSign(
+        Math.sign(target.position.x - player.position.x),
+        Math.sign(target.position.y - player.position.y),
+      )
     } else {
       const inRange = enemies
         .map(e => ({
@@ -1306,8 +1333,11 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  /** 弓の攻撃ボタン用エントリポイント（window.gameAttack）。行動→ターン消費はuseSpellById等と同型。 */
-  private gameAttackById() {
+  /**
+   * 弓の攻撃ボタン用エントリポイント（window.gameAttack）。行動→ターン消費はuseSpellById等と同型。
+   * target指定時（敵タップ狙撃）はその敵を、省略時はオートターゲットで攻撃する。
+   */
+  private gameAttackById(target?: import('../types').Enemy) {
     if (this.isPaused || this.isStatAllocOpen || this.inventoryOpen) return
     const { player } = this.state
     if (weaponKindOf(player.equipment.weapon) !== 'bow') return
@@ -1319,7 +1349,7 @@ export class GameScene extends Phaser.Scene {
     if (now - this.lastMoveAt < 180) return
     this.lastMoveAt = now
 
-    const acted = this.attackWithBow()
+    const acted = this.attackWithBow(target)
     if (!acted) {
       this.renderMap()
       this.updateWindowGameState()
@@ -1335,6 +1365,25 @@ export class GameScene extends Phaser.Scene {
     this.effectTick()
     this.renderMap()
     this.updateWindowGameState()
+  }
+
+  /**
+   * 剣⇔弓のクイック切替（window.gameSwapWeapon）。バッグ内の異種武器のうち
+   * 合計ボーナスが最大のものへ持ち替える。通常の装備と同じくターンを消費する
+   * （equipFromBag経由）ので、戦闘中の持ち替えは「1ターン払う」戦術判断になる。
+   */
+  private gameSwapWeapon() {
+    if (this.isPaused || this.isStatAllocOpen || this.inventoryOpen) return
+    const { player } = this.state
+    const targetKind = weaponKindOf(player.equipment.weapon) === 'bow' ? 'melee' : 'bow'
+    const candidates = this.state.bag.filter(b => b.equipSlot === 'weapon' && weaponKindOf(b) === targetKind)
+    if (candidates.length === 0) return
+
+    const score = (i: import('../types').Item) =>
+      (i.strBonus ?? 0) + (i.agiBonus ?? 0) + (i.dexBonus ?? 0) +
+      (i.intBonus ?? 0) + (i.vitBonus ?? 0) + (i.lukBonus ?? 0) + (i.hpBonus ?? 0) * 0.2
+    const best = candidates.reduce((a, b) => (score(a) >= score(b) ? a : b))
+    this.equipFromBag(best.id)
   }
 
   /** 敵を撃破：状態から除去し、撃破演出（縮小フェード＋破片）・経験値・レベルアップ処理を行う */
@@ -3013,6 +3062,12 @@ export class GameScene extends Phaser.Scene {
         currentItem: this.state.player.equipment[this.pendingItem.equipSlot] ?? null,
       } : null,
       floorType: this.state.floorType,
+      bowTargetInRange:
+        weaponKindOf(player.equipment.weapon) === 'bow' &&
+        this.state.enemies.some(e => {
+          const d = Math.abs(e.position.x - player.position.x) + Math.abs(e.position.y - player.position.y)
+          return d <= BOW_RANGE && this.hasLineOfSight(player.position.x, player.position.y, e.position.x, e.position.y)
+        }),
     }
     window.dispatchEvent(new Event('gamestate-update'))
     this.updateLowHpVignette()

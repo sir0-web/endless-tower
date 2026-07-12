@@ -178,6 +178,8 @@ export interface WindowGameState {
   pendingEquip: PendingEquip | null
   minimapData: MinimapData | null
   floorType: 'normal' | 'lucky' | 'chaos'
+  /** 弓装備中かつ射程内(視線あり)に敵がいるか。🏹ボタンの薄表示切替に使う */
+  bowTargetInRange: boolean
 }
 
 declare global {
@@ -203,6 +205,7 @@ declare global {
     applyArcanaResult?: (points: number) => void
     gameMove?: (key: string) => void
     gameAttack?: () => void
+    gameSwapWeapon?: () => void
     saveGame?: () => void
     warpFloor?: (floor: number) => void
     giveEquip?: (name?: string) => void
