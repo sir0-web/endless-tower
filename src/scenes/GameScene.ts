@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat, Enemy, Player } from '../types'
 import { weaponKindOf } from '../types'
-import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
+import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
 import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM, setHeartbeat } from '../game/sound'
@@ -166,6 +166,12 @@ export class GameScene extends Phaser.Scene {
   private dangerMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // ボス大技チャージ警告（溜め中の敵の頭上に⚠️）
   private chargeMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
+  // 性格カウントダウン数字（突進兵=赤・支配者=紫。頭上に3→2→1）
+  private countdownMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
+  // 支配者の黒いもや（足元の暗紫グロー）
+  private mistSprites: Map<string, Phaser.GameObjects.Image> = new Map()
+  // 弱虫オーラで強化中の敵に出す💢マーク
+  private buffMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // ヒットストップ/スローモーションのネスト深度（多重発動時に復帰を1回にする）
   private timeFreezeDepth = 0
   // 連続撃破コンボ（実時間ベース）
@@ -268,6 +274,9 @@ export class GameScene extends Phaser.Scene {
     this.attackMarkers      = new Map()
     this.dangerMarkers      = new Map()
     this.chargeMarkers      = new Map()
+    this.countdownMarkers   = new Map()
+    this.mistSprites        = new Map()
+    this.buffMarkers        = new Map()
     this.timeFreezeDepth    = 0
     this.killComboCount     = 0
     this.killComboAt        = 0
@@ -1437,18 +1446,22 @@ export class GameScene extends Phaser.Scene {
       }
     }
     const baseExp = enemy.isBoss ? (50 + enemy.maxHp) : (5 + enemy.maxHp)
+    // 弱虫は経験値2倍（逃げる敵を追いかける報酬）。召喚体はゼロ（召喚無限狩り対策）。
     // 踏破済みフロアでは経験値ゼロにして周回レベリングを無効化
-    const expGain = this.floorIsCleared ? 0 : baseExp
+    const persMult = enemy.personality === 'coward' ? 2 : 1
+    const expGain = (this.floorIsCleared || enemy.isSummoned) ? 0 : baseExp * persMult
     player.exp += expGain
     this.addMessage(
-      this.floorIsCleared
-        ? `${enemy.name}を倒した！（踏破済み：経験値なし）`
-        : `${enemy.name}を倒した！経験値+${expGain}`
+      this.floorIsCleared ? `${enemy.name}を倒した！（踏破済み：経験値なし）`
+      : enemy.isSummoned  ? `${enemy.name}を倒した！（召喚体：経験値なし）`
+      : enemy.personality === 'coward' ? `${enemy.name}を追い詰めて倒した！経験値+${expGain}（2倍）`
+      : `${enemy.name}を倒した！経験値+${expGain}`
     )
 
     // 女神のコイン：撃破時20%＋LUKで微増（上限30%）でその場にドロップ（踏破済みフロアではドロップなし）
-    const coinDropRate = Math.min(0.30, 0.20 + player.luk * 0.0002)
-    if (!this.floorIsCleared && Math.random() < coinDropRate) {
+    // 弱虫はコイン確定ドロップ（宝持ちのコソ泥）。召喚体はドロップなし。
+    const coinDropRate = enemy.personality === 'coward' ? 1.0 : Math.min(0.30, 0.20 + player.luk * 0.0002)
+    if (!this.floorIsCleared && !enemy.isSummoned && Math.random() < coinDropRate) {
       this.state.items.push({
         id: `coin_${enemy.id}_${Date.now()}`,
         name: '女神のコイン',
@@ -1465,12 +1478,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyHpBars.delete(enemy.id)
     if (bar) { bar.bg.destroy(); bar.fg.destroy() }
     // 攻撃可能マークも撤去（撃破時にマップから即削除するため描画ループのクリーンアップでは拾えない）
-    const mk = this.attackMarkers.get(enemy.id)
-    if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(enemy.id) }
-    const dk = this.dangerMarkers.get(enemy.id)
-    if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(enemy.id) }
-    const ck = this.chargeMarkers.get(enemy.id)
-    if (ck) { this.tweens.killTweensOf(ck); ck.destroy(); this.chargeMarkers.delete(enemy.id) }
+    this.destroyEnemyDecor(enemy.id)
     if (g) {
       this.tweens.killTweensOf(g)
       if (g.visible) {
@@ -1532,6 +1540,18 @@ export class GameScene extends Phaser.Scene {
   /** 攻撃命中時のヒットストップ（通常45ms／クリティカル90ms） */
   private hitStop(crit: boolean) {
     this.freezeTime(0.05, crit ? 90 : 45)
+  }
+
+  /** 敵に付随する全マーカー・エフェクト（⚔️💀⚠️・カウントダウン・もや・💢）を破棄する */
+  private destroyEnemyDecor(id: string) {
+    const maps: Map<string, Phaser.GameObjects.Text | Phaser.GameObjects.Image>[] = [
+      this.attackMarkers, this.dangerMarkers, this.chargeMarkers,
+      this.countdownMarkers, this.mistSprites, this.buffMarkers,
+    ]
+    for (const m of maps) {
+      const obj = m.get(id)
+      if (obj) { this.tweens.killTweensOf(obj); obj.destroy(); m.delete(id) }
+    }
   }
 
   /** 被弾した敵を攻撃方向へ小さく弾く「のけぞり」。dx/dyは攻撃の進行方向(-1/0/1) */
@@ -1723,6 +1743,8 @@ export class GameScene extends Phaser.Scene {
     )
 
     for (const enemy of sorted) {
+      // 突進兵の誘爆などでこのターン中に死亡した敵は行動させない
+      if (enemy.hp <= 0) continue
       const edx = player.position.x - enemy.position.x
       const edy = player.position.y - enemy.position.y
       const chebDist = Math.max(Math.abs(edx), Math.abs(edy))
@@ -1801,7 +1823,64 @@ export class GameScene extends Phaser.Scene {
         continue
       }
 
-      if (chebDist === 1 && !diagAttackBlocked) {
+      // ── 敵の性格：突進兵（自爆カウントダウン） ──
+      if (enemy.personality === 'bomber') {
+        if (enemy.fuseCount === undefined) {
+          // プレイヤーを発見したら導火線に点火（視線が通る6マス以内）
+          if (manhDist <= 6 && this.hasLineOfSight(enemy.position.x, enemy.position.y, player.position.x, player.position.y)) {
+            enemy.fuseCount = 3
+            this.addMessage(`⚠ ${enemy.name}が突進してくる…！（3ターン後に自爆・2マス離れれば無傷）`)
+          }
+        } else {
+          enemy.fuseCount--
+          if (enemy.fuseCount <= 0) {
+            this.explodeBomber(enemy)
+            if (player.hp <= 0) { this.gameOver(); return }
+            continue
+          }
+        }
+      }
+      const bomberFused = enemy.personality === 'bomber' && enemy.fuseCount !== undefined
+
+      // ── 敵の性格：支配者（召喚カウントダウン。通常の攻撃・移動と並行して進む） ──
+      if (enemy.personality === 'summoner' && (enemy.summonsLeft ?? 0) > 0) {
+        if (enemy.summonCount === undefined) {
+          if (manhDist < 10) {
+            enemy.summonCount = 3
+            this.addMessage(`⚠ ${enemy.name}が黒いもやを纏い始めた…！`)
+          }
+        } else {
+          enemy.summonCount--
+          if (enemy.summonCount <= 0) {
+            this.summonMinions(enemy)
+            enemy.summonCount = undefined
+            enemy.summonsLeft = (enemy.summonsLeft ?? 1) - 1
+          }
+        }
+      }
+
+      // ── 敵の性格：弱虫（逃走・強化オーラ。オーラの効果は攻撃計算側で参照） ──
+      if (enemy.personality === 'coward') {
+        if (chebDist <= 3) {
+          if (this.fleeEnemy(enemy)) continue
+          // 逃げ場なし：追い詰められたら苦し紛れの弱い攻撃（威力50%）
+          if (chebDist === 1 && !diagAttackBlocked) {
+            const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
+            const effAtk  = Math.floor((enemy.slowedTurns > 0 ? baseAtk * 0.5 : baseAtk) * 0.5)
+            const effDef  = player.vit + Math.floor(player.level / 2)
+            const dmg     = Math.max(1, effAtk - effDef)
+            player.hp = Math.max(0, player.hp - dmg)
+            playDamage()
+            this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true })
+            this.flashPlayer()
+            this.addMessage(`${enemy.name}は苦し紛れの攻撃！${dmg}ダメージ！`)
+            if (player.hp <= 0) { this.gameOver(); return }
+          }
+        }
+        continue   // 弱虫は自分からは近寄らない
+      }
+
+      if (chebDist === 1 && !diagAttackBlocked && !bomberFused) {
         // 隣接（斜め含む。ただし壁角越しの斜めは不可）→攻撃
 
         // すかるぽりん専用攻撃（最大HPの3%の固定ダメージ。長期戦でも倒しきれるよう低めに設定）
@@ -1838,12 +1917,17 @@ export class GameScene extends Phaser.Scene {
           ? Math.floor(player.maxHp * Math.min(0.15, (floorNow - 100) * 0.0025))
           : 0
         const eg = this.enemyGraphics.get(enemy.id)
+        // 弱虫の強化オーラ：2マス以内に弱虫がいる敵は攻撃力1.3倍（💢マークの敵）
+        // ※弱虫自身はこの分岐に到達しない（上でcontinue済み）
+        const cowardAura = enemies.some(o =>
+          o !== enemy && o.hp > 0 && o.personality === 'coward' &&
+          Math.max(Math.abs(o.position.x - enemy.position.x), Math.abs(o.position.y - enemy.position.y)) <= 2)
         let totalDmg = 0
         let anyCrit  = false
         for (let hit = 0; hit < attackCount; hit++) {
           if (player.hp <= 0) break
           const baseAtk      = enemy.attack + Math.floor(enemy.str * 0.5)
-          const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
+          const effectiveAtk = Math.floor((enemy.slowedTurns > 0 ? baseAtk * 0.5 : baseAtk) * (cowardAura ? 1.3 : 1))
           const isCrit = Math.random() < enemy.luk * 0.001
           // 割合貫通(深層で逓増)は防御を無視して必ず通る。さらにボスは最大HP割合ダメージを加算。
           const raw    = Math.max(1, Math.round(effectiveAtk * pierce), effectiveAtk - effectiveDef)
@@ -1957,6 +2041,127 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /** 突進兵の自爆：自身は消滅（経験値なし）し、周囲1マスのプレイヤー・敵すべてに大ダメージ（誘爆あり） */
+  private explodeBomber(enemy: import('../types').Enemy) {
+    const { player } = this.state
+    // 本体を先に除去（周囲ダメージの巻き込み対象から外す）
+    this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
+    const { x: wx, y: wy } = this.tileToWorld(enemy.position.x, enemy.position.y)
+    const g = this.enemyGraphics.get(enemy.id)
+    this.enemyGraphics.delete(enemy.id)
+    const bar = this.enemyHpBars.get(enemy.id)
+    if (bar) { bar.bg.destroy(); bar.fg.destroy(); this.enemyHpBars.delete(enemy.id) }
+    this.destroyEnemyDecor(enemy.id)
+    if (g) { this.tweens.killTweensOf(g); g.destroy() }
+
+    // 爆発演出：橙フラッシュ＋強シェイク＋ヒットストップ＋二重バースト＋衝撃波リング
+    if (this.isVisible(enemy.position.x, enemy.position.y)) {
+      this.cameras.main.flash(180, 255, 120, 30)
+      this.cameras.main.shake(300, 0.02)
+      this.hitStop(true)
+      this.spawnBurst(wx, wy, { color: 0xff6622, count: 18, speed: this.rts * 1.8 })
+      this.spawnBurst(wx, wy, { color: 0xffdd66, count: 10, speed: this.rts * 1.1 })
+      const ring = this.add.circle(wx, wy, this.rts * 1.6)
+        .setStrokeStyle(Math.max(3, this.rts * 0.08), 0xffaa33)
+        .setDepth(19).setScale(0.15)
+      this.tweens.add({
+        targets: ring, scale: 1, alpha: 0, duration: 400, ease: 'Cubic.Out',
+        onComplete: () => ring.destroy(),
+      })
+    }
+    this.addMessage(`${enemy.name}が自爆した！`)
+
+    const atk3 = Math.floor((enemy.attack + Math.floor(enemy.str * 0.5)) * 3)
+    // プレイヤーへのダメージ（周囲1マス。2マス離れていれば無傷）
+    const pd = Math.max(Math.abs(player.position.x - enemy.position.x), Math.abs(player.position.y - enemy.position.y))
+    if (pd <= 1) {
+      const effDef = player.vit + Math.floor(player.level / 2)
+      const dmg = Math.max(1, Math.round(atk3 * 0.06), atk3 - effDef)
+      player.hp = Math.max(0, player.hp - dmg)
+      playDamage()
+      this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true, crit: true })
+      this.flashPlayer()
+      this.addMessage(`爆発に巻き込まれた！${dmg}ダメージ！`)
+    }
+    // 周囲の敵も巻き込む（誘爆で処理する遊び）
+    const caught = this.state.enemies.filter(e =>
+      Math.max(Math.abs(e.position.x - enemy.position.x), Math.abs(e.position.y - enemy.position.y)) <= 1)
+    for (const e of caught) {
+      if (e.isSkulporin) continue   // すかるぽりんは特殊戦闘（固定1ダメ制）なので巻き込まない
+      const dmg = Math.max(1, Math.round(atk3 * 0.06), atk3 - (e.defense + e.vit))
+      e.hp = Math.max(0, e.hp - dmg)
+      if (this.isVisible(e.position.x, e.position.y)) {
+        this.popDamageNumber(e.position.x, e.position.y, dmg, {})
+        this.flashSprite(e.id)
+      }
+      this.addMessage(`${e.name}が爆発に巻き込まれた！`)
+      if (e.hp <= 0) this.killEnemy(e)
+    }
+  }
+
+  /** 支配者の召喚：周囲の空きマスに雑魚を1〜3体呼ぶ（ステータス70%・経験値ドロップなし） */
+  private summonMinions(summoner: import('../types').Enemy) {
+    const isW = (t: string | undefined) => t === 'floor' || t === 'trap' || t === 'mud' || t === 'spring' || t === 'pitfall'
+    const dirs = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+    const free = dirs
+      .map(([dx, dy]) => ({ x: summoner.position.x + dx, y: summoner.position.y + dy }))
+      .filter(p =>
+        isW(this.state.map[p.y]?.[p.x]) &&
+        !this.state.enemies.some(e => e.position.x === p.x && e.position.y === p.y) &&
+        !(this.state.player.position.x === p.x && this.state.player.position.y === p.y))
+    const count = Math.min(free.length, 1 + Math.floor(Math.random() * 3))
+    if (count <= 0) {
+      this.addMessage(`${summoner.name}の召喚は不発に終わった…`)
+      return
+    }
+    for (let i = free.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [free[i], free[j]] = [free[j], free[i]]
+    }
+    for (let i = 0; i < count; i++) {
+      const m = makeMinionEnemy(this.state.player.floor)
+      m.position = { ...free[i] }
+      this.state.enemies.push(m)
+      // 召喚地点に黒い光の粒が弾ける
+      if (this.isVisible(free[i].x, free[i].y)) {
+        const { x, y } = this.tileToWorld(free[i].x, free[i].y)
+        this.spawnBurst(x, y, { color: 0x7733aa, count: 10, speed: this.rts * 0.9 })
+        this.spawnBurst(x, y, { color: 0x221133, count: 6, speed: this.rts * 0.5 })
+      }
+    }
+    if (this.isVisible(summoner.position.x, summoner.position.y)) {
+      const { x, y } = this.tileToWorld(summoner.position.x, summoner.position.y)
+      this.spawnBurst(x, y, { color: 0x330055, count: 12, speed: this.rts * 1.2 })
+      this.cameras.main.shake(140, 0.006)
+    }
+    this.addMessage(`${summoner.name}が配下を${count}体召喚した！`)
+  }
+
+  /** 弱虫の逃走：プレイヤーから最も遠ざかる隣接マスへ移動する。動けなければfalse */
+  private fleeEnemy(enemy: import('../types').Enemy): boolean {
+    const { player, enemies } = this.state
+    const isW = (t: string | undefined) => t === 'floor' || t === 'trap' || t === 'mud' || t === 'spring' || t === 'pitfall'
+    const dirs = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+    let best: { x: number; y: number } | null = null
+    let bestDist = Math.max(Math.abs(player.position.x - enemy.position.x), Math.abs(player.position.y - enemy.position.y))
+    for (const [dx, dy] of dirs) {
+      const nx = enemy.position.x + dx
+      const ny = enemy.position.y + dy
+      if (!isW(this.state.map[ny]?.[nx])) continue
+      // 斜めのコーナーカット防止（通常移動と同条件）
+      if (dx !== 0 && dy !== 0 &&
+          !(isW(this.state.map[enemy.position.y]?.[nx]) && isW(this.state.map[ny]?.[enemy.position.x]))) continue
+      if (nx === player.position.x && ny === player.position.y) continue
+      if (enemies.some(e => e !== enemy && e.position.x === nx && e.position.y === ny)) continue
+      const d = Math.max(Math.abs(player.position.x - nx), Math.abs(player.position.y - ny))
+      if (d > bestDist) { bestDist = d; best = { x: nx, y: ny } }
+    }
+    if (!best) return false
+    enemy.position.x = best.x
+    enemy.position.y = best.y
+    return true
   }
 
   private effectTick() {
@@ -3145,12 +3350,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyGraphics.delete(enemy.id)
     this.enemyHpBars.delete(enemy.id)
     if (bar) { bar.bg.destroy(); bar.fg.destroy() }
-    const mk = this.attackMarkers.get(enemy.id)
-    if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(enemy.id) }
-    const dk = this.dangerMarkers.get(enemy.id)
-    if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(enemy.id) }
-    const ck2 = this.chargeMarkers.get(enemy.id)
-    if (ck2) { this.tweens.killTweensOf(ck2); ck2.destroy(); this.chargeMarkers.delete(enemy.id) }
+    this.destroyEnemyDecor(enemy.id)
     if (g) {
       this.tweens.killTweensOf(g)
       if (g.visible) {
@@ -4238,12 +4438,7 @@ export class GameScene extends Phaser.Scene {
         this.enemyGraphics.delete(id)
         const bar = this.enemyHpBars.get(id)
         if (bar) { bar.bg.destroy(); bar.fg.destroy(); this.enemyHpBars.delete(id) }
-        const mk = this.attackMarkers.get(id)
-        if (mk) { this.tweens.killTweensOf(mk); mk.destroy(); this.attackMarkers.delete(id) }
-        const dk = this.dangerMarkers.get(id)
-        if (dk) { this.tweens.killTweensOf(dk); dk.destroy(); this.dangerMarkers.delete(id) }
-        const ck = this.chargeMarkers.get(id)
-        if (ck) { this.tweens.killTweensOf(ck); ck.destroy(); this.chargeMarkers.delete(id) }
+        this.destroyEnemyDecor(id)
         this.enemyDir.delete(id)
       }
     }
@@ -4272,7 +4467,8 @@ export class GameScene extends Phaser.Scene {
         this.enemyGraphics.set(enemy.id, g)
       }
       if (!g) {
-        const baseName   = enemy.name.replace(/^【[^】]+】/, '')
+        // ボス【】と性格接頭辞（突進兵の等）を剥がして素のモンスター名で画像を引く
+        const baseName   = enemy.name.replace(/^【[^】]+】/, '').replace(PERSONALITY_PREFIX_RE, '')
         const textureKey = ENEMY_TEXTURE_MAP[baseName]
         // 透過パディング補正でサイズ指定するテクスチャ
         // heroSized: 可視部分が主人公（1.25×1.38タイル）と同サイズになるよう補正
@@ -4395,6 +4591,78 @@ export class GameScene extends Phaser.Scene {
         charge.setVisible(true)
       } else if (charge) {
         charge.setVisible(false)
+      }
+
+      // ── 性格の視覚表現 ──
+      // カウントダウン数字（突進兵=赤・支配者=紫）：頭上で3→2→1と脈動
+      const cdVal = enemy.personality === 'bomber' ? enemy.fuseCount
+        : enemy.personality === 'summoner' ? enemy.summonCount
+        : undefined
+      const showCd = vis && cdVal !== undefined && cdVal > 0
+      let cd = this.countdownMarkers.get(enemy.id)
+      if (showCd) {
+        const cdColor = enemy.personality === 'bomber' ? '#ff4433' : '#cc66ff'
+        if (!cd) {
+          cd = this.add.text(ex, ey, '', {
+            fontSize: `${Math.round(rts * 0.6)}px`, fontStyle: 'bold',
+            color: cdColor, stroke: '#000000', strokeThickness: Math.max(2, Math.round(rts * 0.08)),
+          }).setOrigin(0.5).setDepth(9)
+          this.tweens.add({
+            targets: cd, scale: { from: 1, to: 1.45 },
+            duration: 300, yoyo: true, repeat: -1, ease: 'Sine.InOut',
+          })
+          this.countdownMarkers.set(enemy.id, cd)
+        }
+        cd.setText(String(cdVal)).setColor(cdColor)
+        cd.setPosition(ex, ey - rts * 1.28)
+        cd.setVisible(true)
+      } else if (cd) {
+        cd.setVisible(false)
+      }
+
+      // 体色：突進兵(点火中)=赤発光／支配者(詠唱中)=紫
+      if (g instanceof Phaser.GameObjects.Image) {
+        if (enemy.personality === 'bomber' && enemy.fuseCount !== undefined) g.setTint(0xff6655)
+        else if (enemy.personality === 'summoner' && enemy.summonCount !== undefined) g.setTint(0xcc88ff)
+        else if (enemy.personality) g.clearTint()
+      }
+
+      // 黒いもや：詠唱中の支配者の足元に暗紫のグローが明滅
+      const showMist = vis && enemy.personality === 'summoner' && enemy.summonCount !== undefined
+      let mist = this.mistSprites.get(enemy.id)
+      if (showMist) {
+        if (!mist) {
+          this.ensureGlowTexture()
+          mist = this.add.image(ex, ey, 'miasma-glow').setTint(0x330055)
+            .setDisplaySize(rts * 1.9, rts * 1.2).setAlpha(0.6).setDepth(4)
+          this.tweens.add({
+            targets: mist, alpha: 0.25,
+            duration: 480, yoyo: true, repeat: -1, ease: 'Sine.InOut',
+          })
+          this.mistSprites.set(enemy.id, mist)
+        }
+        mist.setPosition(ex, ey + rts * 0.3)
+        mist.setVisible(true)
+      } else if (mist) {
+        mist.setVisible(false)
+      }
+
+      // 弱虫の強化オーラを受けている敵に💢（攻撃力1.3倍の可視化）
+      const isBuffed = vis && enemy.personality !== 'coward' && this.state.enemies.some(o =>
+        o !== enemy && o.hp > 0 && o.personality === 'coward' &&
+        Math.max(Math.abs(o.position.x - enemy.position.x), Math.abs(o.position.y - enemy.position.y)) <= 2)
+      let buff = this.buffMarkers.get(enemy.id)
+      if (isBuffed) {
+        if (!buff) {
+          buff = this.add.text(ex, ey, '💢', { fontSize: `${Math.round(rts * 0.4)}px` })
+            .setOrigin(0.5).setDepth(8)
+          this.tweens.add({ targets: buff, scale: 1.25, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+          this.buffMarkers.set(enemy.id, buff)
+        }
+        buff.setPosition(ex + rts * 0.42, ey - rts * 0.55)
+        buff.setVisible(true)
+      } else if (buff) {
+        buff.setVisible(false)
       }
 
       // 強敵警告マーク：3発以内でプレイヤーの最大HPを削り切る攻撃力を持つ敵の頭上に💀

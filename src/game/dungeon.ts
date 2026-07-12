@@ -431,6 +431,59 @@ export function getFloorTelopMessage(floor: number, areaBossFloors: Record<numbe
   return null
 }
 
+// ── 敵の「性格」システム ──
+// モンスター種と直交するランダム属性。6F以降の通常モンスターの25%に付与される。
+//   突進兵の＝自爆型（発見で導火線3ターン→周囲1マス大爆発。敵も巻き込む）
+//   支配者の＝召喚型（カウント3→周囲に雑魚1〜3体召喚。最大2回）
+//   弱虫の　＝臆病型（逃走しつつ周囲2マスの敵を強化。倒すと経験値2倍+コイン確定）
+export const PERSONALITY_RATE = 0.25
+export const PERSONALITY_MIN_FLOOR = 6
+export const PERSONALITY_PREFIX_RE = /^(突進兵の|支配者の|弱虫の)/
+const PERSONALITY_POOL: { key: 'bomber' | 'summoner' | 'coward'; prefix: string; weight: number }[] = [
+  { key: 'bomber',   prefix: '突進兵の', weight: 40 },
+  { key: 'summoner', prefix: '支配者の', weight: 30 },
+  { key: 'coward',   prefix: '弱虫の',   weight: 30 },
+]
+
+function maybeApplyPersonality(
+  enemy: { name: string; personality?: 'bomber' | 'summoner' | 'coward'; summonsLeft?: number },
+  floor: number,
+): void {
+  if (floor < PERSONALITY_MIN_FLOOR || Math.random() >= PERSONALITY_RATE) return
+  const total = PERSONALITY_POOL.reduce((s, p) => s + p.weight, 0)
+  let r = Math.random() * total
+  let pick = PERSONALITY_POOL[PERSONALITY_POOL.length - 1]
+  for (const p of PERSONALITY_POOL) { r -= p.weight; if (r <= 0) { pick = p; break } }
+  enemy.personality = pick.key
+  enemy.name = pick.prefix + enemy.name
+  if (pick.key === 'summoner') enemy.summonsLeft = 2
+}
+
+/** 支配者の召喚体を1体生成する（フロア相応の雑魚のステータス70%版・経験値ドロップなし） */
+export function makeMinionEnemy(floor: number) {
+  const available = ENEMY_TABLE.filter(e =>
+    e.minFloor <= floor && (floor > DEEP_FLOOR || e.maxFloor >= floor)
+  )
+  const base = available[Math.floor(Math.random() * available.length)] ?? ENEMY_TABLE[0]
+  const scale = deepScale(floor) * 0.7
+  return {
+    id: `minion_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    position: { x: 0, y: 0 },
+    hp:      Math.floor((base.hpBase  + floor) * scale),
+    maxHp:   Math.floor((base.hpBase  + floor) * scale),
+    attack:  Math.floor((base.atkBase + Math.floor(floor * 0.5)) * scale),
+    defense: Math.floor((base.defBase + Math.floor(floor / 4))   * scale),
+    str: Math.floor(base.str * scale),
+    vit: Math.floor(base.vit * scale),
+    agi: Math.floor(base.agi * scale),
+    luk: Math.floor(base.luk * scale),
+    slowedTurns: 0,
+    name: base.name,
+    isBoss: false,
+    isSummoned: true,
+  }
+}
+
 export function spawnEnemies(map: TileType[][], count: number, floor: number) {
   const floors: Position[] = []
   for (let y = 0; y < map.length; y++) {
@@ -452,7 +505,7 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
     const pos = floors[Math.floor(Math.random() * floors.length)]
     const base = available[Math.floor(Math.random() * available.length)]
     const scale = deepScale(floor) * f1Mult
-    enemies.push({
+    const enemy = {
       id: `enemy_${i}_${Date.now()}`,
       position: { ...pos },
       hp:      Math.floor((base.hpBase  + floor) * scale),
@@ -466,7 +519,9 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
       slowedTurns: 0,
       name: base.name,
       isBoss: false,
-    })
+    }
+    maybeApplyPersonality(enemy, floor)
+    enemies.push(enemy)
   }
   return enemies
 }

@@ -143,7 +143,18 @@ export interface Enemy {
   chargeTurns?: number
   // 大技のクールダウン残りターン（連続チャージによる遠距離ハメ狩り防止）
   chargeCd?: number
+  // 敵の「性格」：突進兵(bomber)=自爆／支配者(summoner)=召喚／弱虫(coward)=逃走+強化オーラ
+  personality?: EnemyPersonality
+  // 突進兵：自爆までの残りターン（プレイヤー発見時に3で点火。未発見はundefined）
+  fuseCount?: number
+  // 支配者：召喚までの残りターン／残り召喚回数
+  summonCount?: number
+  summonsLeft?: number
+  // 支配者に召喚された雑魚（経験値・ドロップなし＝召喚無限狩り対策）
+  isSummoned?: boolean
 }
+
+export type EnemyPersonality = 'bomber' | 'summoner' | 'coward'
 
 export interface GameState {
   player: Player
