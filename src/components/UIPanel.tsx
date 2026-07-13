@@ -241,7 +241,11 @@ export function UIPanel() {
             return (
               <div key={slot.key} className={`epc-row ${item ? 'epc-has' : 'epc-empty'}`}>
                 <span className="epc-icon">{slot.icon}</span>
-                <span className="epc-name">{item ? item.name : '─'}</span>
+                <span className="epc-name">
+                  {item ? item.name : '─'}
+                  {!!item?.refineLevel && <span className="icr-refine"> +{item.refineLevel}</span>}
+                  {item?.locked && ' 🔒'}
+                </span>
               </div>
             )
           })}
@@ -338,12 +342,30 @@ export function UIPanel() {
                     <div className={`icr icr-bag ${selId === item.id ? 'icr-sel' : ''}`}
                       onClick={() => selectItem(item.id)}>
                       <span>📦</span>
-                      <span className="icr-name">{item.name}</span>
+                      <span className="icr-name">
+                        {item.name}
+                        {!!item.refineLevel && <span className="icr-refine"> +{item.refineLevel}</span>}
+                      </span>
+                      {item.locked && <span className="icr-lock">🔒</span>}
                     </div>
                     {selId === item.id && (
                       <div className="icr-act-row">
                         <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
-                        <button className="icr-act icr-act-discard" onClick={() => { window.discardFromBag?.(item.id); setSelId(null) }}>すてる</button>
+                        {item.type === 'equip' && (
+                          <button
+                            className="icr-act icr-act-lock"
+                            title={item.locked ? 'ロックを解除' : 'ロックする（精錬の生贄・破棄から保護）'}
+                            onClick={() => { window.toggleLockItem?.(item.id) }}
+                          >
+                            {item.locked ? '🔓' : '🔒'}
+                          </button>
+                        )}
+                        <button
+                          className="icr-act icr-act-discard"
+                          disabled={!!item.locked}
+                          title={item.locked ? 'ロック中は捨てられません' : undefined}
+                          onClick={() => { window.discardFromBag?.(item.id); setSelId(null) }}
+                        >すてる</button>
                         <button className="icr-act icr-act-cancel" onClick={() => setSelId(null)}>キャンセル</button>
                       </div>
                     )}
