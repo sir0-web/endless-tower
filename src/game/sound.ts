@@ -9,9 +9,61 @@ let bgmName: string | null = null
 let _muted = false
 let fadeTimer: ReturnType<typeof setInterval> | null = null
 
-const BGM_VOLUME = 0.32   // BGMマスター音量（SEが聞き取りにくいとの要望でさらに下げる）
+// BGM: 0.32、SE: 各SE_VOLUMEの値が「これまでの調整済みデフォルト音量」。
+// スライダーはこれを100分率のパーセントとして扱い、BGMは50、SEは70を初期値（＝これまでの音量）とする。
+const BGM_BASE_VOLUME = 0.32
+const BGM_DEFAULT_PCT = 50
+const SE_DEFAULT_PCT  = 70
+const VOL_STORE_KEY = 'et_sound_volumes'
 
-// SE種別ごとの音量（1.0超はWeb Audioのgainで原音より増幅。上限は1.6でクリップ手前に抑える）
+function loadVolumePrefs(): { bgmPct: number; sePct: number } {
+  if (typeof localStorage === 'undefined') return { bgmPct: BGM_DEFAULT_PCT, sePct: SE_DEFAULT_PCT }
+  try {
+    const raw = localStorage.getItem(VOL_STORE_KEY)
+    if (!raw) return { bgmPct: BGM_DEFAULT_PCT, sePct: SE_DEFAULT_PCT }
+    const p = JSON.parse(raw) as { bgmPct?: number; sePct?: number }
+    return {
+      bgmPct: clampPct(p.bgmPct ?? BGM_DEFAULT_PCT),
+      sePct:  clampPct(p.sePct  ?? SE_DEFAULT_PCT),
+    }
+  } catch {
+    return { bgmPct: BGM_DEFAULT_PCT, sePct: SE_DEFAULT_PCT }
+  }
+}
+
+function clampPct(v: number): number { return Math.max(0, Math.min(100, Math.round(v))) }
+
+let { bgmPct: _bgmPct, sePct: _sePct } = loadVolumePrefs()
+
+function saveVolumePrefs(): void {
+  if (typeof localStorage === 'undefined') return
+  try { localStorage.setItem(VOL_STORE_KEY, JSON.stringify({ bgmPct: _bgmPct, sePct: _sePct })) } catch { /* noop */ }
+}
+
+/** 現在のBGM実効音量（0〜1）。スライダー50%＝これまでのデフォルト音量。 */
+function currentBgmVolume(): number { return BGM_BASE_VOLUME * (_bgmPct / BGM_DEFAULT_PCT) }
+/** 現在のSE倍率。スライダー70%＝これまでのデフォルト音量（等倍）。 */
+function currentSeMul(): number { return _sePct / SE_DEFAULT_PCT }
+
+export function getBgmVolumePct(): number { return _bgmPct }
+export function getSeVolumePct():  number { return _sePct }
+
+export function setBgmVolumePct(pct: number): void {
+  _bgmPct = clampPct(pct)
+  saveVolumePrefs()
+  if (bgmAudio && !_muted) {
+    if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null }
+    bgmAudio.volume = Math.max(0, Math.min(1, currentBgmVolume()))
+  }
+}
+
+export function setSeVolumePct(pct: number): void {
+  _sePct = clampPct(pct)
+  saveVolumePrefs()
+}
+
+
+// SE種別ごとの音量（1.0超はWeb Audioのgainで原音より増幅。currentSeMul()でスライダー倍率をさらに掛ける）
 const SE_VOLUME: Record<string, number> = {
   attack:  1.0,
   crit:    1.0,
@@ -53,7 +105,7 @@ export function toggleMute(): void {
       bgmAudio.loop = true
       bgmAudio.volume = 0
       void bgmAudio.play().catch(() => {})
-      rampVolume(bgmAudio, 0, BGM_VOLUME, 500)
+      rampVolume(bgmAudio, 0, currentBgmVolume(), 500)
     }
   }
 }
@@ -77,7 +129,7 @@ export function playBGM(name: string): void {
   next.volume = 0
   void next.play().catch(() => {})
   bgmAudio = next
-  fadeTimer = rampVolume(next, 0, BGM_VOLUME, 600)
+  fadeTimer = rampVolume(next, 0, currentBgmVolume(), 600)
 }
 
 export function stopBGM(): void {
@@ -147,7 +199,7 @@ function se(name: string, volMul = 1, rateMul = 1): void {
   src.buffer = buf
   src.playbackRate.value = rateMul
   const gain = ctx.createGain()
-  gain.gain.value = Math.max(0, Math.min(1.6, (SE_VOLUME[name] ?? 0.5) * volMul))
+  gain.gain.value = Math.max(0, Math.min(2.4, (SE_VOLUME[name] ?? 0.5) * volMul * currentSeMul()))
   src.connect(gain).connect(ctx.destination)
   src.start()
   src.onended = () => { src.disconnect(); gain.disconnect() }
