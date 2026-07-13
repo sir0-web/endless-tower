@@ -11,15 +11,15 @@ let fadeTimer: ReturnType<typeof setInterval> | null = null
 
 const BGM_VOLUME = 0.45   // BGMマスター音量（SEとのバランス）
 
-// SE種別ごとの音量（過大なものを抑える）
+// SE種別ごとの音量（BGMに対してSEが聞き取りにくいとの要望で全体的に引き上げ。1.0が上限）
 const SE_VOLUME: Record<string, number> = {
-  attack:  0.45,
-  crit:    0.6,
-  damage:  0.55,
-  levelup: 0.7,
-  stairs:  0.6,
-  potion:  0.6,
-  equip:   0.6,
+  attack:  0.65,
+  crit:    0.85,
+  damage:  0.75,
+  levelup: 0.9,
+  stairs:  0.8,
+  potion:  0.8,
+  equip:   0.8,
 }
 
 export function isMuted(): boolean { return _muted }
