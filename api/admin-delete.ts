@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 // 'rankings'(プレフィックスなし)は別ゲームのテーブルなので許可しない（誤削除防止）
-const ALLOWED_TABLES = ['ebt_rankings', 'world_notifications', 'reports']
+const ALLOWED_TABLES = ['ebt_rankings', 'world_notifications', 'reports', 'ebt_doppelgangers']
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).end()
