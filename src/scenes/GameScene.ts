@@ -1257,9 +1257,9 @@ export class GameScene extends Phaser.Scene {
     // (1) 至近距離ペナルティ：隣接(bump含む)では弓を引き絞れず威力半減 → 隣接戦は剣の領分
     const isPointBlank = dist === 1
     if (isPointBlank) this.addMessage('近すぎて弓を引き絞れない！（威力半減）')
-    // (2) 射撃コスト：1射撃ごとにスタミナ-2（通常のhungerTickは3ターンで-1なので6ターン分）。
+    // (2) 射撃コスト：1射撃ごとにスタミナ-5（通常のhungerTickは3ターンで-1なので15ターン分）。
     //     「射程の安全はスタミナ（＝食料経済）で買う」。低資源・長期戦では剣が有利になる。
-    player.stamina = Math.max(0, player.stamina - 2)
+    player.stamina = Math.max(0, player.stamina - 5)
 
     // ダメージは近接の対称式(str*1.5+level)よりやや低い係数(dex*1.4+level)。
     // 「安全な距離から先制できる」分の調整はBOW_RANGE/命中率側で行い、火力そのものは大きく削らない
@@ -1308,6 +1308,8 @@ export class GameScene extends Phaser.Scene {
       let dmg = isCrit ? Math.floor(raw * 1.8) : raw
       if (isOpeningShot) dmg = Math.floor(dmg * 1.3)
       if (isPointBlank)  dmg = Math.max(1, Math.floor(dmg * 0.5))
+      // 弓の総合火力調整：会心・先制・至近距離補正まで含めた最終ダメージを1/2に圧縮
+      dmg = Math.max(1, Math.floor(dmg / 2))
       enemy.hp = Math.max(0, enemy.hp - dmg)
       killingCrit = isCrit
       killVisualDelay = delay + flightMs
