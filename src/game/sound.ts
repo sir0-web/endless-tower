@@ -5,6 +5,7 @@
 // 起きていた「メディア要素の枯渇でSEだけ鳴らなくなる」問題を原理的に解消する。
 
 let bgmAudio: HTMLAudioElement | null = null
+let bgmGain: GainNode | null = null   // BGM音量はGainNodeで制御（iOSはaudio.volumeへの代入を無視するため）
 let bgmName: string | null = null
 let _muted = false
 let fadeTimer: ReturnType<typeof setInterval> | null = null
@@ -51,11 +52,19 @@ export function getSeVolumePct():  number { return _sePct }
 export function setBgmVolumePct(pct: number): void {
   _bgmPct = clampPct(pct)
   saveVolumePrefs()
-  if (bgmAudio && !_muted) {
-    if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null }
+  if (_muted) return
+  if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null }
+  if (bgmGain) {
+    // iOS対応：GainNode経由なら音量変更が即時反映される
+    bgmGain.gain.value = currentBgmVolume()
+  } else if (bgmAudio) {
+    // フォールバック（Web Audio非対応環境のみ。iOSではこの代入は無視される）
     bgmAudio.volume = Math.max(0, Math.min(1, currentBgmVolume()))
   }
 }
+
+/** SEスライダー調整用の試し打ち音（現在のSE音量設定で鳴る） */
+export function playSePreview(): void { se('attack') }
 
 export function setSeVolumePct(pct: number): void {
   _sePct = clampPct(pct)
@@ -76,7 +85,7 @@ const SE_VOLUME: Record<string, number> = {
 
 export function isMuted(): boolean { return _muted }
 
-/** audio の音量を from→to へ ms かけてランプ（クロスフェード用） */
+/** audio の音量を from→to へ ms かけてランプ（Web Audio非対応環境向けフォールバック） */
 function rampVolume(audio: HTMLAudioElement, from: number, to: number, ms: number, onDone?: () => void) {
   const steps = Math.max(1, Math.round(ms / 40))
   let i = 0
@@ -94,19 +103,79 @@ function rampVolume(audio: HTMLAudioElement, from: number, to: number, ms: numbe
   return iv
 }
 
+/** GainNode の音量を from→to へ ms かけてランプ（クロスフェード用） */
+function rampGain(g: GainNode, from: number, to: number, ms: number, onDone?: () => void) {
+  const steps = Math.max(1, Math.round(ms / 40))
+  let i = 0
+  g.gain.value = Math.max(0, from)
+  const iv = setInterval(() => {
+    i++
+    const t = i / steps
+    g.gain.value = Math.max(0, from + (to - from) * t)
+    if (i >= steps) {
+      clearInterval(iv)
+      g.gain.value = Math.max(0, to)
+      onDone?.()
+    }
+  }, 40)
+  return iv
+}
+
+/**
+ * BGM用HTMLAudioをWeb Audioのゲイン経由で出力に接続する。
+ * iOSはHTMLAudioElement.volumeへの代入をOS仕様で無視するため、音量制御はGainNodeで行う必要がある。
+ * 接続に失敗した環境ではnullを返し、従来のaudio.volume制御にフォールバックする。
+ */
+function attachBgmGain(audio: HTMLAudioElement): GainNode | null {
+  const ctx = getCtx()
+  if (!ctx) return null
+  try {
+    const src = ctx.createMediaElementSource(audio)
+    const g = ctx.createGain()
+    src.connect(g).connect(ctx.destination)
+    return g
+  } catch {
+    return null
+  }
+}
+
+/** BGMを指定曲で起動し、フェードインする（既存曲のフェードアウトは呼び出し側で行う） */
+function startBgm(name: string, fadeMs: number): void {
+  resumeAudio()
+  const next = new Audio(`/bgm/${name}.mp3`)
+  next.loop = true
+  const g = attachBgmGain(next)
+  bgmAudio = next
+  bgmGain = g
+  if (g) {
+    next.volume = 1   // 実音量はGainNodeで制御（iOSでも有効）
+    g.gain.value = 0
+    void next.play().catch(() => {})
+    fadeTimer = rampGain(g, 0, currentBgmVolume(), fadeMs)
+  } else {
+    next.volume = 0
+    void next.play().catch(() => {})
+    fadeTimer = rampVolume(next, 0, Math.min(1, currentBgmVolume()), fadeMs)
+  }
+}
+
+/** 現在のBGMをフェードアウトして停止する */
+function fadeOutBgm(fadeMs: number): void {
+  const oldAudio = bgmAudio
+  const oldGain = bgmGain
+  if (!oldAudio) return
+  if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null }
+  if (oldGain) rampGain(oldGain, oldGain.gain.value, 0, fadeMs, () => oldAudio.pause())
+  else rampVolume(oldAudio, oldAudio.volume, 0, fadeMs, () => oldAudio.pause())
+}
+
 export function toggleMute(): void {
   _muted = !_muted
   if (_muted) {
-    if (bgmAudio) { bgmAudio.pause(); bgmAudio = null }
+    if (bgmAudio) { bgmAudio.pause(); bgmAudio = null; bgmGain = null }
   } else {
     resumeAudio()
-    if (bgmName) {
-      bgmAudio = new Audio(`/bgm/${bgmName}.mp3`)
-      bgmAudio.loop = true
-      bgmAudio.volume = 0
-      void bgmAudio.play().catch(() => {})
-      rampVolume(bgmAudio, 0, currentBgmVolume(), 500)
-    }
+    if (bgmName) startBgm(bgmName, 500)
   }
 }
 
@@ -116,28 +185,14 @@ export function playBGM(name: string): void {
   bgmName = name
   if (_muted) return
 
-  const old = bgmAudio
-  // 旧BGMをフェードアウトして停止
-  if (old) {
-    if (fadeTimer) clearInterval(fadeTimer)
-    rampVolume(old, old.volume, 0, 600, () => { old.pause() })
-  }
-
-  // 新BGMをフェードインで開始
-  const next = new Audio(`/bgm/${name}.mp3`)
-  next.loop = true
-  next.volume = 0
-  void next.play().catch(() => {})
-  bgmAudio = next
-  fadeTimer = rampVolume(next, 0, currentBgmVolume(), 600)
+  fadeOutBgm(600)   // 旧BGMをフェードアウトして停止
+  startBgm(name, 600)
 }
 
 export function stopBGM(): void {
-  const old = bgmAudio
-  if (old) {
-    rampVolume(old, old.volume, 0, 400, () => { old.pause() })
-  }
+  fadeOutBgm(400)
   bgmAudio = null
+  bgmGain = null
   bgmName = null
 }
 
