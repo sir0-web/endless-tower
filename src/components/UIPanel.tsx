@@ -5,7 +5,7 @@ import { BonusVideo } from './BonusVideo'
 import { HoldRepeatButton } from './HoldRepeatButton'
 import { MailButton } from './MailButton'
 import { getDisplayName } from '../game/playerName'
-import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
+import { SoundMenu } from './SoundMenu'
 
 interface GameStateSnapshot {
   hp: number; maxHp: number
@@ -94,10 +94,7 @@ export function UIPanel() {
   const [healDetail, setHealDetail] = useState<string | null>(null)
   const [statsOpen, setStatsOpen] = useState(true)
   const [name, setName] = useState(getDisplayName)
-  const [mute, setMute] = useState(isMuted())
   const logRef = useRef<HTMLDivElement>(null)
-
-  const toggleMute = () => { soundToggleMute(); setMute(m => !m) }
 
   useEffect(() => {
     const update = () => { if (window.gameState) setGs({ ...window.gameState }) }
@@ -156,7 +153,7 @@ export function UIPanel() {
           <span className="badge name-badge">{name}</span>
           {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
           <MailButton className="pc-mute-btn" />
-          <button className="pc-mute-btn" onClick={toggleMute} title={mute ? 'ミュート中' : 'サウンドON'}>{mute ? '🔇' : '🔊'}</button>
+          <SoundMenu btnClassName="pc-mute-btn" />
           <button className="pc-save-btn" onClick={() => window.saveGame?.()}>セーブ</button>
         </div>
         <div className="bar-il-row">
