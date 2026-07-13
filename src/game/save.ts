@@ -1,4 +1,5 @@
 import type { Player, Item, Enemy, TileType } from '../types'
+import { EQUIP_ITEMS } from './items'
 
 const SAVE_KEY = 'endless-tower-save'
 
@@ -36,11 +37,28 @@ export function saveGame(data: Omit<SaveData, 'savedAt'>): boolean {
   }
 }
 
+/**
+ * 過去バグ（すかるぽりん報酬装備の weaponKind コピー漏れ）で欠落した武器種を、
+ * 名前からマスタ参照で修復する。接頭辞付き（例:「鋭利な天弓ガンディヴァ」）にも
+ * 対応するため includes 判定にしている。ローカル/クラウド両方のロード経路で呼ぶ。
+ */
+export function repairWeaponKind(data: SaveData): SaveData {
+  const fix = (it?: Item | null) => {
+    if (!it || it.equipSlot !== 'weapon' || it.weaponKind) return
+    const base = EQUIP_ITEMS.find(e => it.name.includes(e.name))
+    if (base?.weaponKind) it.weaponKind = base.weaponKind
+  }
+  fix(data.player?.equipment?.weapon)
+  data.bag?.forEach(fix)
+  data.items?.forEach(fix)
+  return data
+}
+
 export function loadGame(): SaveData | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as SaveData
+    return repairWeaponKind(JSON.parse(raw) as SaveData)
   } catch {
     return null
   }
