@@ -38,7 +38,12 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
   const onSe  = (v: number) => { setSe(v);  setSeVolumePct(v) }
 
   return (
-    <div className="sound-menu-wrap" ref={wrapRef}>
+    <div
+      className="sound-menu-wrap"
+      ref={wrapRef}
+      onTouchStartCapture={e => e.stopPropagation()}
+      onTouchMoveCapture={e => e.stopPropagation()}
+    >
       <button
         className={btnClassName}
         data-priority-tap
