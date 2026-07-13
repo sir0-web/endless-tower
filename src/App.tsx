@@ -223,6 +223,19 @@ function App() {
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
   }, [fullCanvas])
 
+  // クリックしたボタンにはブラウザ仕様でフォーカスが残り、以後スペースキーを押すたびに
+  // 「スペース＝フォーカス中のボタン押下」の標準動作で誤発動する
+  // （例：🔊ミュートを一度クリック→スペースで弓を撃つたびにサウンドがON/OFFされる報告）。
+  // クリック直後にフォーカスを外して、スペースは常に弓の発射だけになるようにする。
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement | null)?.closest?.('button')
+      if (btn instanceof HTMLButtonElement) btn.blur()
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [])
+
   // スクロールロック状態の監視（報告ボタンの有効/無効切替のため）
   useEffect(() => {
     const onChange = (e: Event) => {
