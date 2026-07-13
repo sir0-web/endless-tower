@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { SaveData } from './save'
+import { repairWeaponKind, type SaveData } from './save'
 
 // ── 端末を問わないクラウドセーブ ──
 // 名前（スロット名）＋パスワードで Supabase にセーブデータ(JSON)を保存し、
@@ -60,7 +60,7 @@ export async function cloudLoadGame(name: string, password: string): Promise<Sav
     // ロードで消費：サーバー行を削除し、ローカルの控えも消す（再開後はローカル自動セーブが進行を持つ）
     await supabase.rpc('cloud_delete', { p_name: name, p_hash: hash })
     forgetCloudKey()
-    return data as SaveData
+    return repairWeaponKind(data as SaveData)
   } catch (e) {
     console.warn('クラウド読込例外:', e)
     return null
