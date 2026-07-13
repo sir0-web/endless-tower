@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   isMuted, toggleMute as soundToggleMute,
-  getBgmVolumePct, setBgmVolumePct, getSeVolumePct, setSeVolumePct,
+  getBgmVolumePct, setBgmVolumePct, getSeVolumePct, setSeVolumePct, playSePreview,
 } from '../game/sound'
 
 /**
@@ -84,6 +84,8 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
               onChange={e => onSe(Number(e.target.value))}
               onTouchStart={e => e.stopPropagation()}
               onTouchMove={e => e.stopPropagation()}
+              onTouchEnd={() => playSePreview()}
+              onMouseUp={() => playSePreview()}
               className="sound-menu-slider"
             />
             <span className="sound-menu-val">{sePct}</span>
