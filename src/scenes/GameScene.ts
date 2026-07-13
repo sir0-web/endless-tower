@@ -1125,6 +1125,11 @@ export class GameScene extends Phaser.Scene {
     const hitRate       = Math.min(1.00, 0.90 + player.dex * 0.001)
     const critRate      = player.luk * 0.0015
     const playerPierce  = PIERCE_RATE + dexPierceBonus(player.dex)
+    // トドメ演出用：攻撃方向は連撃中不変なのでループ外で確定し、最後に命中したhitのクリット状態を控える
+    const kdx = Math.sign(enemy.position.x - player.position.x)
+    const kdy = Math.sign(enemy.position.y - player.position.y)
+    let killingCrit = false
+    let killVisualDelay = 0
 
     for (let hit = 0; hit < attackCount; hit++) {
       if (enemy.hp <= 0) break
@@ -1142,10 +1147,12 @@ export class GameScene extends Phaser.Scene {
       const raw    = Math.max(1, Math.round(effectiveAtk * playerPierce), effectiveAtk - enemyDef)
       const dmg    = isCrit ? Math.floor(raw * 1.5) : raw
       enemy.hp = Math.max(0, enemy.hp - dmg)
+      killingCrit = isCrit
 
       // ヒット演出：ヒットストップ＋ダメージ数字ポップ＋敵フラッシュ＋のけぞり＋火花（連撃は少し時間差で）
       if (hit === 0) this.hitStop(isCrit)
       const delay = hit * 70
+      killVisualDelay = delay
       this.time.delayedCall(delay, () => {
         if (this.isVisible(enemy.position.x, enemy.position.y)) {
           this.popDamageNumber(enemy.position.x, enemy.position.y, dmg, { crit: isCrit })
@@ -1177,7 +1184,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (enemy.hp <= 0) this.killEnemy(enemy)
+    if (enemy.hp <= 0) this.killEnemy(enemy, { crit: killingCrit, dx: kdx, dy: kdy, visualDelay: killVisualDelay })
   }
 
   /**
@@ -1265,6 +1272,11 @@ export class GameScene extends Phaser.Scene {
     const critRate     = player.luk * 0.0022
     // 割合貫通：基礎4%＋DEXボーナス（近接のdexPierceBonusを流用）。DEXが主力の弓は貫通が伸びやすい。
     const playerPierce = BOW_PIERCE_RATE + dexPierceBonus(player.dex)
+    // トドメ演出用：攻撃方向は連射中不変なのでループ外で確定し、最後に命中したhitのクリット状態を控える
+    const kdx = Math.sign(enemy.position.x - player.position.x)
+    const kdy = Math.sign(enemy.position.y - player.position.y)
+    let killingCrit = false
+    let killVisualDelay = 0
 
     for (let hit = 0; hit < attackCount; hit++) {
       if (enemy.hp <= 0) break
@@ -1297,6 +1309,8 @@ export class GameScene extends Phaser.Scene {
       if (isOpeningShot) dmg = Math.floor(dmg * 1.3)
       if (isPointBlank)  dmg = Math.max(1, Math.floor(dmg * 0.5))
       enemy.hp = Math.max(0, enemy.hp - dmg)
+      killingCrit = isCrit
+      killVisualDelay = delay + flightMs
 
       // 矢が飛び、着弾したタイミングでダメージ演出を出す（着弾瞬間にヒットストップ＋のけぞり）
       this.fireArrowEffect(player.position.x, player.position.y, enemy.position.x, enemy.position.y, delay, flightMs)
@@ -1340,7 +1354,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (enemy.hp <= 0) this.killEnemy(enemy)
+    if (enemy.hp <= 0) this.killEnemy(enemy, { crit: killingCrit, dx: kdx, dy: kdy, visualDelay: killVisualDelay })
     return true
   }
 
@@ -1433,7 +1447,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 敵を撃破：状態から除去し、撃破演出（縮小フェード＋破片）・経験値・レベルアップ処理を行う */
-  private killEnemy(enemy: import('../types').Enemy) {
+  private killEnemy(enemy: import('../types').Enemy, opts: { crit?: boolean; dx?: number; dy?: number; visualDelay?: number } = {}) {
     if (enemy.isDoppelganger) { this.killDoppelganger(enemy); return }
     const { player } = this.state
     this.state.enemies = this.state.enemies.filter(e => e.id !== enemy.id)
@@ -1482,31 +1496,92 @@ export class GameScene extends Phaser.Scene {
     if (g) {
       this.tweens.killTweensOf(g)
       if (g.visible) {
-        this.spawnBurst(g.x, g.y, {
-          color: enemy.isBoss ? 0xffcc44 : 0xff8866,
-          count: enemy.isBoss ? 14 : 7,
-          speed: this.rts * (enemy.isBoss ? 1.4 : 0.9),
-        })
-        if (enemy.isBoss) {
-          // ボス撃破：白フラッシュ＋スローモーション＋二重バースト（勝利の瞬間を刻む）
-          this.cameras.main.shake(220, 0.008)
-          this.cameras.main.flash(200, 255, 240, 190)
-          this.freezeTime(0.25, 450)
-          this.time.delayedCall(60, () => {
-            this.spawnBurst(g.x, g.y, { color: 0xffffff, count: 10, speed: this.rts * 2.0 })
+        // 弓の矢は着弾までflightMs分の飛翔時間があり、多段攻撃は1発ごとにdelay(hit*70ms)がある。
+        // トドメの演出をここで即時発火すると「矢が飛んでいる最中に敵が爆散して消える」という
+        // 演出上の矛盾（着弾前に消滅）が起きるため、命中演出と同じタイミングまで遅延させる。
+        // データ側（経験値・コインドロップ・敵配列からの除去等）は上ですでに確定済みなので、
+        // ここで遅延させるのは見た目の反応（バースト・カメラ演出・消滅トゥイーン）のみ。
+        const playDeathFx = () => {
+          // 遅延中にシーン遷移・ゲームオーバー等でグラフィックが既に破棄されている場合は何もしない
+          if (!g.active || !this.scene?.isActive()) return
+          this.spawnBurst(g.x, g.y, {
+            color: enemy.isBoss ? 0xffcc44 : 0xff8866,
+            count: enemy.isBoss ? 14 : 7,
+            speed: this.rts * (enemy.isBoss ? 1.4 : 0.9),
           })
+          this.countKillCombo(g.x, g.y)
+
+          if (enemy.isBoss) {
+            // ボス撃破：吹っ飛ばさず、質量を感じる「沈み込むような」崩れ落ち
+            this.cameras.main.shake(220, 0.008)
+            this.cameras.main.flash(200, 255, 240, 190)
+            this.freezeTime(0.25, 450)
+            this.time.delayedCall(60, () => {
+              if (g.active) this.spawnBurst(g.x, g.y, { color: 0xffffff, count: 10, speed: this.rts * 2.0 })
+            })
+            this.tweens.add({
+              targets: g,
+              y: g.y + this.rts * 0.18,
+              alpha: 0,
+              scaleX: g.scaleX * 0.3,
+              scaleY: g.scaleY * 0.2,
+              angle: g.angle + (Math.random() < 0.5 ? -8 : 8),
+              duration: 480,
+              ease: 'Cubic.In',
+              onComplete: () => g.destroy(),
+            })
+          } else if (opts.crit && (opts.dx || opts.dy)) {
+            // クリティカルの止め：一瞬の間 → 回転しながら攻撃方向へ吹き飛ぶ
+            this.freezeTime(0.15, 90)
+            this.cameras.main.shake(150, 0.007)
+            const spin = (Math.random() < 0.5 ? -1 : 1) * (420 + Math.random() * 220)
+            this.tweens.add({
+              targets: g,
+              x: g.x + (opts.dx ?? 0) * this.rts * 3.6,
+              y: g.y + (opts.dy ?? 0) * this.rts * 3.6,
+              angle: g.angle + spin,
+              scaleX: g.scaleX * 0.35,
+              scaleY: g.scaleY * 0.35,
+              alpha: 0,
+              duration: 420,
+              ease: 'Cubic.In',
+              onComplete: () => g.destroy(),
+            })
+            this.time.delayedCall(90, () => {
+              if (g.active) this.spawnBurst(g.x, g.y, { color: 0xffdd33, count: 5, speed: this.rts * 0.7 })
+            })
+          } else {
+            // 通常撃破：一瞬潰れてから崩れ落ちる、重さを感じる二段演出
+            this.freezeTime(0.3, 50)
+            this.cameras.main.shake(90, 0.005)
+            this.tweens.add({
+              targets: g,
+              scaleX: g.scaleX * 1.12,
+              scaleY: g.scaleY * 0.8,
+              duration: 45,
+              ease: 'Quad.Out',
+              onComplete: () => {
+                // squashトゥイーンの完了後にシーンが非アクティブ化している可能性をガード
+                if (!g.active) return
+                this.tweens.add({
+                  targets: g,
+                  alpha: 0,
+                  scaleX: g.scaleX * 0.15,
+                  scaleY: g.scaleY * 0.15,
+                  angle: g.angle + 100,
+                  y: g.y + this.rts * 0.1,
+                  duration: 260,
+                  ease: 'Quad.In',
+                  onComplete: () => g.destroy(),
+                })
+              },
+            })
+          }
         }
-        this.countKillCombo(g.x, g.y)
-        this.tweens.add({
-          targets: g,
-          alpha: 0,
-          scaleX: g.scaleX * 0.2,
-          scaleY: g.scaleY * 0.2,
-          angle: 90,
-          duration: 240,
-          ease: 'Quad.In',
-          onComplete: () => g.destroy(),
-        })
+
+        const vd = Math.max(0, opts.visualDelay ?? 0)
+        if (vd > 0) this.time.delayedCall(vd, playDeathFx)
+        else playDeathFx()
       } else {
         g.destroy()
       }
@@ -1523,6 +1598,9 @@ export class GameScene extends Phaser.Scene {
    * 最後の1つが終わった時だけ等速へ復帰する。
    */
   private freezeTime(scale: number, realMs: number) {
+    // 撃破演出の呼び出し頻度が増えたため、シーンが既に非アクティブ（フロア遷移直後・ゲームオーバー等）な
+    // 状態での誤発火を防ぐガードを追加。
+    if (!this.scene?.isActive()) return
     this.timeFreezeDepth++
     this.tweens.timeScale = scale
     this.time.timeScale = scale
@@ -1608,6 +1686,12 @@ export class GameScene extends Phaser.Scene {
     if (hot) {
       playCrit()
       this.cameras.main.flash(120, 255, 170, 60)
+    }
+    if (n >= 3) {
+      // 連続撃破の勢いをカメラの一瞬のズームパンチで表現
+      this.tweens.killTweensOf(this.cameras.main)
+      this.cameras.main.zoom = 1
+      this.tweens.add({ targets: this.cameras.main, zoom: 1.045, duration: 70, yoyo: true, ease: 'Quad.Out' })
     }
   }
 
@@ -2426,6 +2510,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private nextFloor() {
+    // 連続撃破ズームパンチのトゥイーンがフロア遷移で中断され、ズームが1に戻らないまま
+    // 固定されてしまう事故の保険（トゥイーンを止めて確実に等倍へ戻す）
+    this.tweens.killTweensOf(this.cameras.main)
+    this.cameras.main.zoom = 1
     // イベントフロアからの脱出 → 通常フロアへ
     if (this.isEventFloor) {
       this.isEventFloor = false
