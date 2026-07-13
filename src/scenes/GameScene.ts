@@ -454,6 +454,7 @@ export class GameScene extends Phaser.Scene {
     window.resolveEquip    = (equip: boolean) => this.resolveEquipModal(equip)
     window.equipFromBag   = (itemId: string) => this.equipFromBag(itemId)
     window.discardFromBag = (itemId: string) => this.discardFromBag(itemId)
+    window.toggleLockItem = (itemId: string) => this.toggleLockItem(itemId)
     window.applySlotEffect = (result: string) => this.applySlotEffect(result)
     window.applyArcanaResult = (points: number) => this.applyArcanaResult(points)
     window.gameMove        = (key: string)    => this.handleInput({ key } as KeyboardEvent)
@@ -1072,8 +1073,27 @@ export class GameScene extends Phaser.Scene {
     if (this.isPaused || this.isStatAllocOpen) return
     const item = this.state.bag.find(b => b.id === itemId)
     if (!item) return
+    if (item.locked) {
+      this.addMessage(`${item.name}はロック中のため捨てられない（🔒を解除してください）`)
+      this.updateWindowGameState()
+      return
+    }
     this.state.bag = this.state.bag.filter(b => b.id !== itemId)
     this.addMessage(`${item.name}を捨てた`)
+    this.updateWindowGameState()
+  }
+
+  /** 装備品のロックON/OFF切替。ロック中は精錬の生贄に選べず、捨てることもできない（誤操作防止） */
+  private toggleLockItem(itemId: string) {
+    if (this.isPaused || this.isStatAllocOpen) return
+    // バッグ内・装備中のどちらの装備品もロック対象にできる
+    const item =
+      this.state.bag.find(b => b.id === itemId) ??
+      (Object.values(this.state.player.equipment) as (import('../types').Item | null)[])
+        .find(e => e?.id === itemId) ?? null
+    if (!item || item.type !== 'equip') return
+    item.locked = !item.locked
+    this.addMessage(item.locked ? `${item.name}をロックした 🔒` : `${item.name}のロックを解除した`)
     this.updateWindowGameState()
   }
 
@@ -2798,6 +2818,10 @@ export class GameScene extends Phaser.Scene {
     if (!target) return null
     const sacrifice = bag.find(b => b.id === sacrificeId && b.type === 'equip')
     if (!sacrifice) return null
+    if (sacrifice.locked) {
+      this.addMessage(`${sacrifice.name}はロック中のため生贄にできない`)
+      return null
+    }
 
     // 精錬の生贄として消費
     this.state.bag = bag.filter(b => b.id !== sacrificeId)
@@ -2829,7 +2853,7 @@ export class GameScene extends Phaser.Scene {
     const ids = [...new Set(sacrificeIds)].slice(0, 10)
     const sacrifices = ids
       .map(id => bag.find(b => b.id === id && b.type === 'equip'))
-      .filter((b): b is import('../types').Item => !!b)
+      .filter((b): b is import('../types').Item => !!b && !b.locked)
     if (sacrifices.length === 0) return null
 
     // 生贄をまとめて消費
