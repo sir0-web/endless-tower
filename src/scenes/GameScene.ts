@@ -1558,13 +1558,23 @@ export class GameScene extends Phaser.Scene {
   private recoilEnemy(enemyId: string, dx: number, dy: number, strength = 0.22) {
     const g = this.enemyGraphics.get(enemyId)
     if (!g || !g.visible) return
+    // 相対トゥイーン(+=)は多段ヒットやボスの反撃突進と飛行中に重なると
+    // 「ズレた位置」を開始点として記録し、恒久的な位置ズレが蓄積する。
+    // タイル座標由来の正位置(home)へ一度スナップしてから絶対座標で弾き、完了時に必ず戻す。
+    const enemy = this.state.enemies.find(e => e.id === enemyId)
+    const home = enemy
+      ? this.tileToWorld(enemy.position.x, enemy.position.y)
+      : { x: g.x, y: g.y }
+    this.tweens.killTweensOf(g)
+    g.setPosition(home.x, home.y)
     this.tweens.add({
       targets: g,
-      x: `+=${dx * this.rts * strength}`,
-      y: `+=${dy * this.rts * strength}`,
+      x: home.x + dx * this.rts * strength,
+      y: home.y + dy * this.rts * strength,
       duration: 55,
       yoyo: true,
       ease: 'Quad.Out',
+      onComplete: () => { if (g.active) g.setPosition(home.x, home.y) },
     })
   }
 
@@ -3229,6 +3239,7 @@ export class GameScene extends Phaser.Scene {
         type: 'equip',
         position: { x: 0, y: 0 },
         equipSlot: base.equipSlot,
+        weaponKind: base.weaponKind,
         hpBonus:  base.hpBonus,
         strBonus: base.strBonus,
         agiBonus: base.agiBonus,
