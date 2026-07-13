@@ -853,6 +853,17 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.state.map[ny][nx] === 'wall') return
 
+    // イベントフロアNPC：タイルには進入できない（当たり判定）。体当たりで話しかける。
+    // 以前は同じタイルに乗って起動する方式だったため、会話後にそのまま通過できてしまっていた。
+    if (this.isEventFloor) {
+      const facility = this.eventFacilities.find(f => f.position.x === nx && f.position.y === ny)
+      if (facility) {
+        if (event.repeat) return   // キーリピートでモーダルを連続オープンしない
+        window.dispatchEvent(new CustomEvent('facility-open', { detail: facility.kind }))
+        return
+      }
+    }
+
     const enemy = this.state.enemies.find(e => e.position.x === nx && e.position.y === ny)
     let didAttack = false
     if (enemy) {
@@ -903,8 +914,6 @@ export class GameScene extends Phaser.Scene {
         })
         return
       }
-
-      if (this.checkEventFacility()) return
 
       this.pickupItem()
       if (!this.awaitingEquipModal) this.checkTrap()
@@ -2760,18 +2769,6 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  /** イベントフロアの施設に話しかけたときの処理（移動と同じ操作で起動） */
-  private checkEventFacility(): boolean {
-    if (!this.isEventFloor) return false
-    const { player } = this.state
-    const facility = this.eventFacilities.find(
-      f => f.position.x === player.position.x && f.position.y === player.position.y
-    )
-    if (!facility) return false
-    window.dispatchEvent(new CustomEvent('facility-open', { detail: facility.kind }))
-    return true
-  }
-
   // ── 精錬チャレンジ ──
   private readonly REFINE_BONUS_KEYS = ['hpBonus', 'strBonus', 'agiBonus', 'dexBonus', 'intBonus', 'vitBonus', 'lukBonus'] as const
 
@@ -4576,10 +4573,15 @@ export class GameScene extends Phaser.Scene {
           const { x: wx, y: wy } = this.tileToWorld(facility.position.x, facility.position.y)
           const tex = facility.texture
           if (tex && !this.failedTextures.has(tex) && this.textures.exists(tex)) {
-            // 可視領域でプレイヤーと同サイズになるよう透過パディング分を補正
+            // 主人公と同じ見た目サイズに合わせる。主人公は 1.25×1.38タイルの枠に
+            // 透過パディング込みで描画されるため（可視部分は枠より小さい）、枠サイズではなく
+            // 「主人公の可視部分の大きさ」を目標にし、NPC側のパディングも補正して一致させる。
+            // 旧実装は枠サイズ(1.25×1.38)を可視部分の目標にしていたため、NPCだけ一回り大きく見えていた。
+            const pKey = this.hasPlayerAnims ? this.getPlayerAnimKeys(this.playerDir).idleKey : 'player'
+            const pf = this.getVisibleFraction(pKey)
             const { wFrac, hFrac } = this.getVisibleFraction(tex)
-            const targetW = rts * 1.25
-            const targetH = rts * 1.38
+            const targetW = rts * 1.25 * pf.wFrac
+            const targetH = rts * 1.38 * pf.hFrac
             g = this.add.image(wx, wy, tex)
               .setDisplaySize(targetW / wFrac, targetH / hFrac).setOrigin(0.5).setDepth(4)
           } else {

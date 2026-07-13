@@ -217,7 +217,11 @@ export function RefineModal() {
                 ? `${result.itemName} は ＋${result.refineLevel} になった！`
                 : `${result.itemName} の精錬は失敗に終わった（現在 ＋${result.refineLevel}）`}
             </p>
-            <button className="facility-close-btn" onClick={close}>閉じる</button>
+            <div className="facility-btns">
+              {/* 話しかけ直さなくても連続で精錬できるよう、選択画面へ戻る動線を用意する */}
+              <button className="facility-go-btn" onClick={() => { setResult(null); setSacrificeId(null); setStep('select') }}>つづけて精錬する</button>
+              <button className="facility-close-btn" onClick={close}>閉じる</button>
+            </div>
           </div>
         )}
 
@@ -232,7 +236,10 @@ export function RefineModal() {
                 </li>
               ))}
             </ul>
-            <button className="facility-close-btn" onClick={close}>閉じる</button>
+            <div className="facility-btns">
+              <button className="facility-go-btn" onClick={() => { setBulkResult(null); setBulkSacrificeIds([]); setStep('select') }}>つづけて精錬する</button>
+              <button className="facility-close-btn" onClick={close}>閉じる</button>
+            </div>
           </div>
         )}
       </div>
@@ -334,7 +341,11 @@ export function ShadowEquipModal() {
             <p className="facility-result-sub">
               {result.success ? '全ステータスが＋3された！' : 'ボーナスポイントを失った...'}
             </p>
-            <button className="facility-close-btn" onClick={close}>閉じる</button>
+            <div className="facility-btns">
+              {/* 話しかけ直さなくても連続で挑戦できるよう、メイン画面へ戻る動線を用意する */}
+              <button className="facility-go-btn" onClick={() => { setResult(null); setStep('main') }}>つづける</button>
+              <button className="facility-close-btn" onClick={close}>閉じる</button>
+            </div>
           </div>
         )}
 
@@ -351,7 +362,10 @@ export function ShadowEquipModal() {
                 </li>
               ))}
             </ul>
-            <button className="facility-close-btn" onClick={close}>閉じる</button>
+            <div className="facility-btns">
+              <button className="facility-go-btn" onClick={() => { setBulkResult(null); setBulkCount(1); setStep('main') }}>つづける</button>
+              <button className="facility-close-btn" onClick={close}>閉じる</button>
+            </div>
           </div>
         )}
       </div>
@@ -487,7 +501,11 @@ export function SpellbookModal() {
                 ? `${result.lostName} → ${result.gainedName} を手に入れた！`
                 : `${result.lostName} は燃え尽きてしまった...`}
             </p>
-            <button className="facility-close-btn" onClick={close}>閉じる</button>
+            <div className="facility-btns">
+              {/* 話しかけ直さなくても連続で交換できるよう、選択画面へ戻る動線を用意する */}
+              <button className="facility-go-btn" onClick={() => { setResult(null); setSpellId(null) }}>つづける</button>
+              <button className="facility-close-btn" onClick={close}>閉じる</button>
+            </div>
           </div>
         )}
       </div>
