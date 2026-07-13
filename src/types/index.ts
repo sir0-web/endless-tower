@@ -49,6 +49,8 @@ export interface Item {
   spellType?: SpellType
   // 精錬値（装備品のみ。精錬チャレンジで増減する）
   refineLevel?: number
+  // ロック（装備品のみ）。ONの間は精錬の生贄に選べず、捨てることもできない誤操作防止
+  locked?: boolean
   // 女神のコイン：使うとスロットを1回回す消費アイテム
   coin?: boolean
   // 羽アイテム：fly=同じ階の階段そばへワープ / butterfly=今いる階を再生成
@@ -206,6 +208,7 @@ declare global {
     resolveEquip?: (equip: boolean) => void
     equipFromBag?: (itemId: string) => void
     discardFromBag?: (itemId: string) => void
+    toggleLockItem?: (itemId: string) => void
     isGameSceneActive?: boolean
     onEnemyKilled?: () => void
     applySlotEffect?: (result: string) => void
