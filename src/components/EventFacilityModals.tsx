@@ -131,15 +131,18 @@ export function RefineModal() {
                   {sacrificeCandidates.length === 0 && <p className="facility-empty">生贄にできる装備品がバッグにありません</p>}
                   {sacrificeCandidates.map(item => {
                     const selected = bulkSacrificeIds.includes(item.id)
-                    const disabled = !selected && bulkSacrificeIds.length >= BULK_REFINE_MAX
+                    const disabled = item.locked || (!selected && bulkSacrificeIds.length >= BULK_REFINE_MAX)
                     return (
                       <button
                         key={item.id}
                         className={`facility-item${selected ? ' selected' : ''}`}
                         disabled={disabled}
+                        title={item.locked ? 'ロック中のため生贄にできません' : undefined}
                         onClick={() => toggleBulkSacrifice(item.id)}
                       >
                         <span className="fi-name">{item.name}</span>
+                        {!!item.refineLevel && <span className="fi-refine">+{item.refineLevel}</span>}
+                        {item.locked && <span className="fi-lock">🔒</span>}
                       </button>
                     )
                   })}
@@ -165,9 +168,13 @@ export function RefineModal() {
                     <button
                       key={item.id}
                       className={`facility-item${sacrificeId === item.id ? ' selected' : ''}`}
+                      disabled={!!item.locked}
+                      title={item.locked ? 'ロック中のため生贄にできません' : undefined}
                       onClick={() => setSacrificeId(item.id)}
                     >
                       <span className="fi-name">{item.name}</span>
+                      {!!item.refineLevel && <span className="fi-refine">+{item.refineLevel}</span>}
+                      {item.locked && <span className="fi-lock">🔒</span>}
                     </button>
                   ))}
                 </div>
