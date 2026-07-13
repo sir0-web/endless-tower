@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { isMuted, toggleMute as soundToggleMute } from '../game/sound'
 import { getDisplayName } from '../game/playerName'
 import { MailButton } from './MailButton'
+import { SoundMenu } from './SoundMenu'
 
 interface StatusSnap {
   hp: number; maxHp: number
@@ -15,7 +15,6 @@ const DEFAULT: StatusSnap = { hp: 0, maxHp: 0, stamina: 0, maxStamina: 0, floor:
 export function MobileStatusBar() {
   const [s, setS]       = useState<StatusSnap>(DEFAULT)
   const [active, setActive] = useState(false)
-  const [mute, setMute] = useState(isMuted())
   const [name, setName] = useState(getDisplayName)
   const [displayFloor, setDisplayFloor] = useState(1)
   const [numAnim, setNumAnim]           = useState(false)
@@ -62,7 +61,6 @@ export function MobileStatusBar() {
     }
   }, [])
 
-  const toggleMute = () => { soundToggleMute(); setMute(p => !p) }
   const handleSave = () => { window.saveGame?.() }
 
   const hpPct  = s.maxHp      > 0 ? Math.max(0, Math.round((s.hp      / s.maxHp)      * 100)) : 0
@@ -86,7 +84,7 @@ export function MobileStatusBar() {
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
         <span className="badge name-badge mob-badge">{name}</span>
         <MailButton className="mob-mute-btn" />
-        <button className="mob-mute-btn" data-priority-tap onClick={toggleMute}>{mute ? '🔇' : '🔊'}</button>
+        <SoundMenu btnClassName="mob-mute-btn" />
         <button className="mob-save-btn" data-priority-tap onClick={handleSave}>セーブ</button>
       </div>
       <div className="mob-bar-row">
