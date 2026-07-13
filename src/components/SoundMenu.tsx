@@ -48,7 +48,7 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
         {mute ? '🔇' : '🔊'}
       </button>
       {open && (
-        <div className="sound-menu-popover" onClick={e => e.stopPropagation()}>
+        <div className="sound-menu-popover" data-priority-tap onClick={e => e.stopPropagation()}>
           <div className="sound-menu-row sound-menu-mute-row">
             <span>ミュート</span>
             <button className="sound-menu-mute-toggle" onClick={toggleMute}>
