@@ -9,17 +9,17 @@ let bgmName: string | null = null
 let _muted = false
 let fadeTimer: ReturnType<typeof setInterval> | null = null
 
-const BGM_VOLUME = 0.45   // BGMマスター音量（SEとのバランス）
+const BGM_VOLUME = 0.32   // BGMマスター音量（SEが聞き取りにくいとの要望でさらに下げる）
 
-// SE種別ごとの音量（BGMに対してSEが聞き取りにくいとの要望で全体的に引き上げ。1.0が上限）
+// SE種別ごとの音量（1.0超はWeb Audioのgainで原音より増幅。上限は1.6でクリップ手前に抑える）
 const SE_VOLUME: Record<string, number> = {
-  attack:  0.65,
-  crit:    0.85,
-  damage:  0.75,
-  levelup: 0.9,
-  stairs:  0.8,
-  potion:  0.8,
-  equip:   0.8,
+  attack:  1.0,
+  crit:    1.0,
+  damage:  1.1,
+  levelup: 1.1,
+  stairs:  1.1,
+  potion:  1.1,
+  equip:   1.1,
 }
 
 export function isMuted(): boolean { return _muted }
@@ -147,7 +147,7 @@ function se(name: string, volMul = 1, rateMul = 1): void {
   src.buffer = buf
   src.playbackRate.value = rateMul
   const gain = ctx.createGain()
-  gain.gain.value = Math.max(0, Math.min(1, (SE_VOLUME[name] ?? 0.5) * volMul))
+  gain.gain.value = Math.max(0, Math.min(1.6, (SE_VOLUME[name] ?? 0.5) * volMul))
   src.connect(gain).connect(ctx.destination)
   src.start()
   src.onended = () => { src.disconnect(); gain.disconnect() }
