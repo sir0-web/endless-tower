@@ -38,6 +38,7 @@ async function fetchInitial() {
 }
 
 function start() {
+  if (channel) return
   void fetchInitial()
   channel = supabase
     .channel('world_notif')
@@ -67,10 +68,24 @@ function stop() {
   if (channel) { supabase.removeChannel(channel); channel = null }
 }
 
+// ── バックグラウンド時はWebSocket購読を切って発熱・電池消費を抑える ──
+// 復帰時は start() が fetchInitial() でログを取り直すため、非表示中の取りこぼしは
+// ワールドログ側では復元される（テロップは非表示中の分だけ流れないが、見えていないので実害なし）。
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stop()
+    } else if (refCount > 0) {
+      start()
+    }
+  })
+}
+
 /** フィードの利用開始（参照カウント+1。最初の1人で購読を張る）。 */
 export function acquireFeed(): void {
   refCount++
-  if (refCount === 1) start()
+  // 非表示中に購読者が現れても張らない（復帰時のvisibilitychangeで張る）
+  if (refCount === 1 && !document.hidden) start()
 }
 
 /** フィードの利用終了（参照カウント-1。最後の1人で購読を解除）。 */

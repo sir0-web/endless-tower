@@ -91,6 +91,12 @@ function App() {
         // タッチポインタを複数確保する。既定は1本のため、prompt等で touchend が
         // 飲まれてポインタが1本スタックしただけで全タップが死んでいた。予備を持たせる。
         input: { activePointers: 3 },
+        // ── スマホ発熱対策 ──
+        // ターン制のため高リフレッシュは不要。無制限だと120Hz端末で毎秒120回フル描画され
+        // 端末が発熱する。40fpsならtween/フェードの滑らかさはほぼ維持される。PCは無制限のまま。
+        ...(mobile ? { fps: { limit: 40 } } : {}),
+        // GPUに省電力動作をヒント（ブラウザ実装依存。効かない環境でも無害）。スマホのみ。
+        ...(mobile ? { render: { powerPreference: 'low-power' } } : {}),
         scale: {
           // PC: 外側ラッパーの transform:scale が全体を拡縮するため、Phaserは等倍(NONE)の
           //     固定サイズで描画する。FITだと transform後に縮んだ親サイズを測って二重スケールし、

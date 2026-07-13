@@ -474,9 +474,11 @@ export class GameScene extends Phaser.Scene {
     window.triggerSkulporinCheck = () => { void this.sendSkulporinHeartbeat() }
 
     // すかるぽりん heartbeat（30秒ごと）
+    // ※スポーン配布のほかADMINコマンド・いいね報酬・状態スナップショットも運ぶため常時稼働
     this.skulporinHeartbeatTimer = setInterval(() => this.sendSkulporinHeartbeat(), 30_000)
-    // 逃走タイマー監視（1秒ごと）
-    this.skulporinEscapeTimer = setInterval(() => this.checkSkulporinEscape(), 1_000)
+    // 逃走タイマー監視（1秒ごと）は常時ではなく、すかるぽりん出現中のみ起動する（発熱対策）。
+    // 時間切れ個体のDB側掃除は /api/skulporin-heartbeat が全プレイヤーの心拍で行うため、
+    // このタイマーが止まっていても全鯖排他（uniq_skulporin_active）は詰まらない。
 
     // 開発サーバー限定：コンソールから warpFloor(階数) で好きな階に飛べる
     if (import.meta.env.DEV) {
@@ -508,6 +510,7 @@ export class GameScene extends Phaser.Scene {
         }
         this.skulporinSpawnId  = -1
         this.skulporinEscapeAt = Date.now() + 3 * 60 * 1000
+        this.startSkulporinEscapeTimer()
         this.spawnSkulporinOnFloor()
         fireWorldNotification('event', '[緊急]すかるぽりんが出現しました！', 'どこかのフロアに「すかるぽりん」が出現したようです！冒険者の皆さんは至急討伐に向かってください！')
         console.log('[DEV] すかるぽりんを強制スポーンしました')
@@ -3159,6 +3162,7 @@ export class GameScene extends Phaser.Scene {
       if (this.state.enemies.some(e => e.isSkulporin)) return
       this.skulporinSpawnId  = -1
       this.skulporinEscapeAt = Date.now() + 3 * 60 * 1000
+      this.startSkulporinEscapeTimer()
       this.spawnSkulporinOnFloor()
       return
     }
@@ -3210,6 +3214,7 @@ export class GameScene extends Phaser.Scene {
     // 逃走タイムスタンプを保存
     this.skulporinSpawnId  = spawn.id
     this.skulporinEscapeAt = new Date(spawn.escapes_at).getTime()
+    this.startSkulporinEscapeTimer()
 
     this.spawnSkulporinOnFloor()
   }
@@ -3289,6 +3294,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.skulporinSpawnId  = null
     this.skulporinEscapeAt = null
+    this.stopSkulporinEscapeTimer()
 
     // 経験値なし・コインなし（代わりに下の報酬ポップアップ）
     this.addMessage('すかるぽりんを倒した！豪華な報酬をゲット！')
@@ -3321,6 +3327,7 @@ export class GameScene extends Phaser.Scene {
     this.state.enemies = this.state.enemies.filter(e => !e.isSkulporin)
     this.skulporinSpawnId  = null
     this.skulporinEscapeAt = null
+    this.stopSkulporinEscapeTimer()
 
     if (spawnId !== null) {
       this.resolvedSkulporinIds.add(spawnId)   // 反映前の再出現を防ぐ
@@ -3334,13 +3341,24 @@ export class GameScene extends Phaser.Scene {
     this.renderMap()
   }
 
+  // 逃走監視タイマー（1秒間隔）を出現中だけ回す。常時intervalは発熱・電池の無駄になるため。
+  private startSkulporinEscapeTimer(): void {
+    if (this.skulporinEscapeTimer) return
+    this.skulporinEscapeTimer = setInterval(() => this.checkSkulporinEscape(), 1_000)
+  }
+
+  private stopSkulporinEscapeTimer(): void {
+    if (this.skulporinEscapeTimer) { clearInterval(this.skulporinEscapeTimer); this.skulporinEscapeTimer = null }
+  }
+
   private checkSkulporinEscape(): void {
-    if (this.skulporinEscapeAt === null) return
+    if (this.skulporinEscapeAt === null) { this.stopSkulporinEscapeTimer(); return }
     if (Date.now() < this.skulporinEscapeAt) return
     if (!this.state.enemies.some(e => e.isSkulporin)) {
       // すでに倒されていた場合はリセットのみ
       this.skulporinEscapeAt = null
       this.skulporinSpawnId  = null
+      this.stopSkulporinEscapeTimer()
       return
     }
     this.handleSkulporinEscape()

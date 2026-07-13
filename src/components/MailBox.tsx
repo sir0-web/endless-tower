@@ -34,7 +34,8 @@ export function MailBox() {
   useEffect(() => {
     window.showMailBox = () => { void openBox() }
     void refreshUnread()
-    pollRef.current = setInterval(() => { if (!open) void refreshUnread() }, 60_000)
+    // バックグラウンド中はポーリングしない（無線起動＝発熱・電池対策。復帰後の次周期で追いつく）
+    pollRef.current = setInterval(() => { if (!open && !document.hidden) void refreshUnread() }, 60_000)
     return () => {
       window.showMailBox = undefined
       if (pollRef.current) clearInterval(pollRef.current)

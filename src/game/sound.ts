@@ -273,6 +273,7 @@ if (typeof window !== 'undefined') {
 // ── 低HP心音（WebAudio合成：音源ファイル不要） ──
 // 「ドクン・ドクン」を2連のローシンセで合成。既存の低HPビネットの脈動と同じテンポ感。
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+let heartbeatActive = false   // 論理状態（バックグラウンド中もtrueを保持し、復帰時にタイマーを再開する）
 
 function thump(when: number, vol: number): void {
   const ctx = getCtx()
@@ -291,12 +292,7 @@ function thump(when: number, vol: number): void {
   osc.onended = () => { osc.disconnect(); gain.disconnect() }
 }
 
-/** 低HP時の心音ループを開始/停止する（HP25%以下の緊張演出）。 */
-export function setHeartbeat(active: boolean): void {
-  if (!active) {
-    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
-    return
-  }
+function startHeartbeatTimer(): void {
   if (heartbeatTimer) return
   const beat = () => {
     if (_muted) return
@@ -308,6 +304,28 @@ export function setHeartbeat(active: boolean): void {
   }
   beat()
   heartbeatTimer = setInterval(beat, 1300)  // ビネットの脈動(650ms yoyo)と同周期
+}
+
+function stopHeartbeatTimer(): void {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
+}
+
+/** 低HP時の心音ループを開始/停止する（HP25%以下の緊張演出）。 */
+export function setHeartbeat(active: boolean): void {
+  heartbeatActive = active
+  if (!active) { stopHeartbeatTimer(); return }
+  // バックグラウンド中は鳴らさない（発熱・電池対策）。復帰時のvisibilitychangeで再開する。
+  if (typeof document !== 'undefined' && document.hidden) return
+  startHeartbeatTimer()
+}
+
+// バックグラウンドでは心音intervalを完全停止する（音は元々suspendで鳴らないが、
+// タイマー起動自体がCPU/電池を消費するため）。復帰時に論理状態から復元する。
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopHeartbeatTimer()
+    else if (heartbeatActive) startHeartbeatTimer()
+  })
 }
 
 export function playAttack():  void { se('attack')  }
