@@ -134,7 +134,7 @@ export function resumeAudio(): void {
   if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {})
 }
 
-function se(name: string, volMul = 1): void {
+function se(name: string, volMul = 1, rateMul = 1): void {
   if (_muted) return
   const ctx = getCtx()
   if (!ctx) return
@@ -145,6 +145,7 @@ function se(name: string, volMul = 1): void {
 
   const src  = ctx.createBufferSource()
   src.buffer = buf
+  src.playbackRate.value = rateMul
   const gain = ctx.createGain()
   gain.gain.value = Math.max(0, Math.min(1, (SE_VOLUME[name] ?? 0.5) * volMul))
   src.connect(gain).connect(ctx.destination)
@@ -205,6 +206,9 @@ export function setHeartbeat(active: boolean): void {
 export function playAttack():  void { se('attack')  }
 export function playCrit():    void { se('attack', 1.5) }  // クリは attack を大きめに鳴らして強調（専用音源なし）
 export function playDamage():  void { se('damage')  }
+// 撃破専用音源は無いため、damage音をピッチダウン＋音量増で「ドスッ」という低い止め音に加工する。
+// hit音（ヒット時）とは別に、トドメの瞬間に必ず追加で鳴らすことで撃破の重さを耳で確定させる。
+export function playKill(heavy = false): void { se('damage', heavy ? 1.0 : 0.85, heavy ? 0.72 : 0.8) }
 export function playLevelUp(): void { se('levelup') }
 export function playStairs():  void { se('stairs')  }
 export function playPotion():  void { se('potion')  }
