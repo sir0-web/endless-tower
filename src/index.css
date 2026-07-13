@@ -681,13 +681,17 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 .pc-mute-btn + .pc-mute-btn { margin-left: 6px; }
 
 /* ── サウンドメニュー（🔈ボタン＋BGM/SEスライダーのポップオーバー。PC/スマホ共通） ── */
-.sound-menu-wrap { position: relative; display: inline-flex; flex-shrink: 0; margin-left: 6px; }
+/* pointer-events: auto は必須。スマホの .mob-status-bar が pointer-events: none のため、
+   明示しないとポップオーバー(スライダー)へのタッチが素通りして下のキャンバス＝ジョイスティックに奪われる */
+.sound-menu-wrap { position: relative; display: inline-flex; flex-shrink: 0; margin-left: 6px; pointer-events: auto; }
 .sound-menu-popover {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
   z-index: 60;
   width: 200px;
+  pointer-events: auto;
+  touch-action: auto;
   background: rgba(15, 15, 25, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 8px;
