@@ -37,7 +37,12 @@ export interface DoppelgangerRecord {
  * fire-and-forget想定（失敗してもゲーム進行を妨げない）。
  */
 export async function registerDeadCharacter(playerName: string, player: Player): Promise<void> {
-  const reward = Math.max(0, Math.floor(player.totalStatPointsEarned ?? player.statPoints ?? 0))
+  // 継承報酬は「自力で稼いだ分」のみ：ドッペル撃破で得た分（doppelPointsGained）を除外する。
+  // 除外しないと A(500P)→Bが撃破→B死亡(自力800+継承500=1300P)→… と世代を跨いで
+  // 複利で膨らみ、10000P超のバランスブレイカーが必然的に生まれる。
+  const total        = Math.max(0, Math.floor(player.totalStatPointsEarned ?? player.statPoints ?? 0))
+  const doppelGained = Math.max(0, Math.floor(player.doppelPointsGained ?? 0))
+  const reward = Math.max(0, total - doppelGained)
   const floor = player.floor
 
   const { error } = await supabase.from('ebt_doppelgangers').insert({

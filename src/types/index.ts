@@ -112,6 +112,9 @@ export interface Player {
   statPoints: number
   // 生涯累計で獲得したステータスポイント（消費しても減らない）。ドッペルゲンガー撃破報酬の元データ。
   totalStatPointsEarned?: number
+  // うちドッペルゲンガー撃破で得た分。死亡時の登録では継承対象から除外する
+  // （継承分を再継承させると倒すたびに雪だるま式に膨らむ複利インフレになるため）。
+  doppelPointsGained?: number
   // 自己最高到達階。これ未満のフロア（蝶の羽で戻った踏破済み階）はXP大幅減＆ドロップなし
   maxFloorReached?: number
   // このプレイでのジャックポット当選回数（ランキング表示用。セーブに永続化）

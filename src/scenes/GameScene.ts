@@ -587,6 +587,7 @@ export class GameScene extends Phaser.Scene {
         jackpotWins: 0,
         statPoints: 0,
         totalStatPointsEarned: 0,
+        doppelPointsGained: 0,
         healingTurns: 0,
         blessingTurns: 0,
         blessingBonus: { str: 0, int: 0, dex: 0, agi: 0 },
@@ -626,6 +627,9 @@ export class GameScene extends Phaser.Scene {
         // 本機能導入前のセーブ互換：生涯累計が未記録なら、現在の未消費ステータスポイントを
         // 下限の概算値としてバックフィルする（0スタートだと以後の少量獲得だけで頭打ちになるため）
         totalStatPointsEarned: saved.player.totalStatPointsEarned ?? saved.player.statPoints ?? 0,
+        // 本フィールド導入前のセーブは0扱い（過去のドッペル取得分は継承候補に残るが、
+        // 出現時のクランプ（spawnDoppelganger）が上限を抑えるため実害は限定的）
+        doppelPointsGained: saved.player.doppelPointsGained ?? 0,
       },
       enemies: saved.enemies,
       items: saved.items,
@@ -3461,7 +3465,13 @@ export class GameScene extends Phaser.Scene {
       slowedTurns: 0,
       name: `ドッペルゲンガー「${record.player_name}」`,
       isDoppelganger: true,
-      doppelStatReward: Math.max(0, Math.floor(record.stat_point_reward)),
+      // 受取時クランプ：報酬は死亡階×10を上限とする（深層で死んだ強者ほど高報酬の設計は維持）。
+      // 複利遮断（doppelPointsGained除外）導入前に肥大化した既存記録への対策で、
+      // DBを書き換えなくても過去データ・新データとも同じ天井に収まる。
+      doppelStatReward: Math.min(
+        Math.max(0, Math.floor(record.stat_point_reward)),
+        Math.max(1, Math.floor(record.floor)) * 10,
+      ),
     }
     this.state.enemies.push(enemy)
     dedupeEnemyPositions(this.state.enemies, map, player.position)
@@ -3488,7 +3498,12 @@ export class GameScene extends Phaser.Scene {
     if (idMatch) this.defeatedDoppelgangerIds.add(Number(idMatch[1]))
 
     const reward = enemy.doppelStatReward ?? 0
-    if (reward > 0) this.grantStatPoints(reward)
+    if (reward > 0) {
+      this.grantStatPoints(reward)
+      // 継承分は自分の死亡時に再継承させない（複利インフレ防止。registerDeadCharacter参照）
+      const p = this.state.player
+      p.doppelPointsGained = (p.doppelPointsGained ?? 0) + reward
+    }
     this.addMessage(`ドッペルゲンガーを倒した！生前のステータスポイント${reward}を引き継いだ！`)
     window.showEventMessage?.(`ドッペルゲンガー討伐！ステータスポイント+${reward}`, '#cc88ff')
 
