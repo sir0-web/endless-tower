@@ -43,15 +43,21 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
         className={btnClassName}
         data-priority-tap
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        onTouchStart={e => e.stopPropagation()}
         title="サウンド設定"
       >
         {mute ? '🔇' : '🔊'}
       </button>
       {open && (
-        <div className="sound-menu-popover" data-priority-tap onClick={e => e.stopPropagation()}>
+        <div
+          className="sound-menu-popover"
+          data-priority-tap
+          onClick={e => e.stopPropagation()}
+          onTouchStart={e => e.stopPropagation()}
+        >
           <div className="sound-menu-row sound-menu-mute-row">
             <span>ミュート</span>
-            <button className="sound-menu-mute-toggle" onClick={toggleMute}>
+            <button className="sound-menu-mute-toggle" onClick={toggleMute} onTouchStart={e => e.stopPropagation()}>
               {mute ? 'OFF' : 'ON'}
             </button>
           </div>
@@ -60,6 +66,8 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
             <input
               type="range" min={0} max={100} step={1} value={bgmPct}
               onChange={e => onBgm(Number(e.target.value))}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchMove={e => e.stopPropagation()}
               className="sound-menu-slider"
             />
             <span className="sound-menu-val">{bgmPct}</span>
@@ -69,6 +77,8 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
             <input
               type="range" min={0} max={100} step={1} value={sePct}
               onChange={e => onSe(Number(e.target.value))}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchMove={e => e.stopPropagation()}
               className="sound-menu-slider"
             />
             <span className="sound-menu-val">{sePct}</span>
