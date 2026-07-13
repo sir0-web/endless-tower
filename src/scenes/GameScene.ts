@@ -4783,13 +4783,28 @@ export class GameScene extends Phaser.Scene {
 
     // ── プレイヤー描画 ──
     const { x: px, y: py } = this.tileToWorld(player.position.x, player.position.y)
+    // 剣と弓でスプライト素材の生ピクセル解像度が大きく異なる（例：剣231×346 vs 弓177×237）。
+    // setDisplaySizeは呼んだ瞬間のフレームサイズからscaleを逆算するだけで、setTextureでの
+    // フレーム差し替え時にscaleは再計算されないため、武器切替・攻撃アニメのコマ送りのたびに
+    // 見た目サイズがブレる（剣基準で固定されると弓が縮んで見える＝報告の逆転現象）。
+    // 毎回呼び直して常に同じ表示サイズへ強制することで解消する。
+    const PLAYER_DISPLAY_W = rts * 1.25
+    const PLAYER_DISPLAY_H = rts * 1.38
     if (!this.playerGraphic) {
       if (this.hasPlayerAnims) {
         const { idleKey, flipX } = this.getPlayerAnimKeys(this.playerDir)
         const sprite = this.add.sprite(px, py, idleKey)
-          .setDisplaySize(rts * 1.25, rts * 1.38)
+          .setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
           .setDepth(6)
         if (flipX) sprite.setFlipX(true)
+        // 歩行・攻撃アニメはコマごとに素材解像度が異なるため、フレームが切り替わるたびに
+        // displaySizeを固定値へ再適用してサイズのブレを防ぐ（開始コマ・以降コマの両方をケア）
+        sprite.on('animationstart', () => {
+          sprite.setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
+        })
+        sprite.on('animationupdate', () => {
+          sprite.setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
+        })
         this.playerGraphic = sprite
       } else {
         this.playerGraphic = this.add.rectangle(px, py, rts - 2, rts - 2, 0x44ff44).setDepth(6)
@@ -4816,6 +4831,8 @@ export class GameScene extends Phaser.Scene {
           g.setTexture(idleKey)
           g.setFlipX(flipX)
         }
+        // テクスチャ切替のたびにdisplaySizeを再固定（剣⇔弓で素材解像度が違うため）
+        g.setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
       }
     }
     this.snapNextRender = false
