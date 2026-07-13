@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { MONSTER_REGISTRY } from '../game/dungeon'
 import { RichTextEditor, RichTextView } from './RichText'
@@ -48,7 +48,7 @@ const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'dm' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database'
+type Tab = 'maintenance' | 'message' | 'dm' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database' | 'doppel'
 type DbTab = 'monster' | 'equip' | 'item' | 'spell'
 
 interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
@@ -77,6 +77,16 @@ interface Report {
   id: number; category: string; content: string
   player_name: string | null; image_url: string | null
   status: 'new' | 'read' | 'done'; created_at: string
+}
+
+// ebt_doppelgangers の1レコード（登録状況確認タブ用）
+interface DoppelRow {
+  id: number; player_id: string; player_name: string
+  floor: number; level: number
+  str: number; agi: number; dex: number; intelligence: number; vit: number; luk: number
+  max_hp: number; stat_point_reward: number
+  equipment: Record<string, { name: string; refineLevel?: number } | null> | null
+  created_at: string
 }
 
 async function adminDelete(table: string, ids: number[]): Promise<{ deleted?: number; error?: string }> {
@@ -179,6 +189,12 @@ export function AdminPanel() {
   const [rankings, setRankings]           = useState<RankingEntry[]>([])
   const [rLoading, setRLoading]           = useState(false)
   const [rSearch, setRSearch]             = useState('')
+  // ドッペルゲンガー登録状況タブ
+  const [doppels, setDoppels]             = useState<DoppelRow[]>([])
+  const [dopLoading, setDopLoading]       = useState(false)
+  const [dopMsg, setDopMsg]               = useState('')
+  const [dopSearch, setDopSearch]         = useState('')
+  const [dopDetailId, setDopDetailId]     = useState<number | null>(null)
   const [rMsg, setRMsg]                   = useState('')
   const [editingRanking, setEditingRanking] = useState<EditingRanking | null>(null)
 
@@ -339,6 +355,27 @@ export function AdminPanel() {
     setRankSelected(new Set())
     setRLoading(false)
   }, [db])
+
+  /** ドッペルゲンガー登録状況を読み込む（死亡階の深い順・最大500件） */
+  const loadDoppels = useCallback(async (search = '') => {
+    setDopLoading(true); setDopMsg('')
+    let q = db.from('ebt_doppelgangers').select('*').order('floor', { ascending: false }).limit(500)
+    if (search) q = q.ilike('player_name', `%${search}%`)
+    const { data, error } = await q
+    if (error) setDopMsg(`読み込みエラー: ${error.message}`)
+    setDoppels((data ?? []) as DoppelRow[])
+    setDopDetailId(null)
+    setDopLoading(false)
+  }, [db])
+
+  const deleteDoppel = async (id: number) => {
+    if (!confirm('このドッペルゲンガー記録を削除しますか？（該当プレイヤーの分身が出現しなくなります）')) return
+    const { deleted, error } = await adminDelete('ebt_doppelgangers', [id])
+    if (error) { setDopMsg(`削除エラー: ${error}`); return }
+    if (!deleted) { setDopMsg('削除できませんでした'); return }
+    setDopMsg('削除しました ✓')
+    setDoppels(ds => ds.filter(d => d.id !== id))
+  }
 
   const deleteRanking = async (id: number) => {
     if (!confirm('このランキングエントリを削除しますか？')) return
@@ -919,8 +956,9 @@ export function AdminPanel() {
     if (tab === 'event')       loadOnlinePlayers()
     if (tab === 'news')        loadNews()
     if (tab === 'database')    loadDbRows()
+    if (tab === 'doppel')      loadDoppels()
     if (tab === 'dm')          { loadOnlinePlayers(); loadDmInbox() }
-  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews, loadDbRows, loadDmInbox])
+  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews, loadDbRows, loadDmInbox, loadDoppels])
 
   const now = Date.now()
   const isOpen = windows.some(w => winActive(w, now))
@@ -941,7 +979,7 @@ export function AdminPanel() {
   const TAB_LABELS: Record<Tab, string> = {
     maintenance: 'メンテナンス', message: 'メッセージ配信', dm: `DM${dmUnread > 0 ? `(${dmUnread})` : ''}`, event: 'イベント',
     ranking: 'ランキング', worldlog: 'ワールドログ',
-    users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ', database: 'データベース',
+    users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ', database: 'データベース', doppel: 'ドッペル',
   }
 
   const REP_STATUS_COLOR: Record<string, string> = {
@@ -1360,6 +1398,110 @@ export function AdminPanel() {
                     </tr>
                   ))}
                   {rankings.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* ══ ドッペルゲンガー登録状況 ══ */}
+        {tab === 'doppel' && (
+          <div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input value={dopSearch} onChange={e => setDopSearch(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && loadDoppels(dopSearch)}
+                placeholder="プレイヤー名で検索" style={{ ...S.input, flex: 1 }} />
+              <button onClick={() => loadDoppels(dopSearch)} style={S.btnPrimary}>検索</button>
+              <button onClick={() => { setDopSearch(''); loadDoppels('') }} style={S.btnSm}>全件</button>
+            </div>
+
+            {dopMsg && <div style={{ color: dopMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 8 }}>{dopMsg}</div>}
+
+            {/* 10階バンドごとの保持状況（各バンド最大10件で古い順に自動削除される仕様） */}
+            {!dopLoading && doppels.length > 0 && (
+              <div style={{ ...S.card, marginBottom: 12 }}>
+                <div style={S.cardTitle}>バンド別保持状況（各バンド上限10件・登録数: 全{doppels.length}件）</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {Object.entries(
+                    doppels.reduce<Record<string, number>>((acc, d) => {
+                      const bandEnd = Math.ceil(d.floor / 10) * 10
+                      const key = `${bandEnd - 9}〜${bandEnd}F`
+                      acc[key] = (acc[key] ?? 0) + 1
+                      return acc
+                    }, {})
+                  )
+                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                    .map(([band, count]) => (
+                      <span key={band} style={{
+                        padding: '3px 10px', borderRadius: 12, fontSize: 12,
+                        background: count >= 10 ? 'rgba(239,68,68,0.15)' : 'rgba(79,70,229,0.15)',
+                        border: `1px solid ${count >= 10 ? '#ef4444' : '#4f46e5'}`,
+                        color: count >= 10 ? '#fca5a5' : '#c7d2fe',
+                      }}>
+                        {band}: {count}/10
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {dopLoading ? <p style={S.muted}>読み込み中…</p> : (
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>ID</th>
+                  <th style={S.th}>プレイヤー名</th>
+                  <th style={S.th}>死亡階</th>
+                  <th style={S.th}>Lv</th>
+                  <th style={S.th}>HP</th>
+                  <th style={S.th}>報酬SP</th>
+                  <th style={S.th}>登録日時 (JST)</th>
+                  <th style={S.th}></th>
+                </tr></thead>
+                <tbody>
+                  {doppels.map(d => (
+                    <Fragment key={d.id}>
+                      <tr style={dopDetailId === d.id ? { background: 'rgba(79,70,229,0.08)' } : {}}>
+                        <td style={{ ...S.td, color: '#666' }}>{d.id}</td>
+                        <td style={S.td}>{d.player_name}</td>
+                        <td style={S.td}>B{d.floor}F</td>
+                        <td style={S.td}>Lv{d.level}</td>
+                        <td style={S.td}>{d.max_hp}</td>
+                        <td style={S.td}>{d.stat_point_reward}</td>
+                        <td style={S.td}>{fmtJstDate(d.created_at)}</td>
+                        <td style={S.td}>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => setDopDetailId(id => id === d.id ? null : d.id)} style={S.btnSm}>
+                              {dopDetailId === d.id ? '閉じる' : '詳細'}
+                            </button>
+                            <button onClick={() => deleteDoppel(d.id)} style={S.btnDanger}>削除</button>
+                          </div>
+                        </td>
+                      </tr>
+                      {dopDetailId === d.id && (
+                        <tr>
+                          <td colSpan={8} style={{ ...S.td, background: 'rgba(79,70,229,0.05)' }}>
+                            <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+                              <div>
+                                <b>ステータス:</b>{' '}
+                                STR {d.str} / AGI {d.agi} / DEX {d.dex} / INT {d.intelligence} / VIT {d.vit} / LUK {d.luk}
+                              </div>
+                              <div>
+                                <b>装備:</b>{' '}
+                                {d.equipment && Object.values(d.equipment).some(Boolean)
+                                  ? Object.values(d.equipment)
+                                      .filter((e): e is NonNullable<typeof e> => !!e)
+                                      .map(e => `${e.name}${e.refineLevel ? `+${e.refineLevel}` : ''}`)
+                                      .join(' / ')
+                                  : 'なし'}
+                              </div>
+                              <div style={{ color: '#666' }}><b>player_id:</b> {d.player_id}</div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                  {doppels.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>登録データなし</td></tr>}
                 </tbody>
               </table>
             )}
