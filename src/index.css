@@ -1268,6 +1268,36 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   background: #301010; color: #ff8888; border-color: #aa3333;
 }
 .icr-act-discard:hover { background: #4a1818; color: #ffffff; }
+.icr-act-discard:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.icr-act-discard:disabled:hover { background: #301010; color: #ff8888; }
+
+/* 装備ロックボタン・表示（精錬の生贄などへの誤使用防止）。
+   PCのアイテム欄は狭く4ボタン均等割だとはみ出すため、ロックはアイコンのみの固定幅にする */
+.icr-act-lock {
+  background: #2a2410; color: #ffd966; border-color: #aa8833;
+}
+.icr-act-row .icr-act-lock {
+  flex: 0 0 34px;
+  min-width: 34px;
+}
+.icr-act-lock:hover { background: #3d3418; color: #ffffff; }
+.icr-refine {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff66ff;
+}
+.icr-lock {
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.fi-lock {
+  font-size: 12px;
+  flex-shrink: 0;
+}
 
 .icr-act-cancel {
   background: #1a1a1a; color: #aaaaaa; border-color: #444444;
