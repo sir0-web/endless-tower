@@ -4,7 +4,7 @@ import { weaponKindOf } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
-import { playAttack, playCrit, playDamage, playLevelUp, playStairs, playPotion, playEquip, playBGM, setHeartbeat } from '../game/sound'
+import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playBGM, setHeartbeat } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { cloudSaveGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { logEvent, getPlayerId } from '../game/supabase'
@@ -1515,6 +1515,7 @@ export class GameScene extends Phaser.Scene {
 
           if (enemy.isBoss) {
             // ボス撃破：吹っ飛ばさず、質量を感じる「沈み込むような」崩れ落ち
+            playKill(true)
             this.cameras.main.shake(220, 0.008)
             this.cameras.main.flash(200, 255, 240, 190)
             this.freezeTime(0.25, 450)
@@ -1534,8 +1535,10 @@ export class GameScene extends Phaser.Scene {
             })
           } else if (opts.crit && (opts.dx || opts.dy)) {
             // クリティカルの止め：一瞬の間 → 回転しながら攻撃方向へ吹き飛ぶ
-            this.freezeTime(0.15, 90)
-            this.cameras.main.shake(150, 0.007)
+            // ヒットストップは60fpsで3フレーム(50ms)では知覚できないため150ms程度まで伸ばす
+            playKill()
+            this.freezeTime(0.12, 150)
+            this.cameras.main.shake(160, 0.012)
             const spin = (Math.random() < 0.5 ? -1 : 1) * (420 + Math.random() * 220)
             this.tweens.add({
               targets: g,
@@ -1554,8 +1557,10 @@ export class GameScene extends Phaser.Scene {
             })
           } else {
             // 通常撃破：一瞬潰れてから崩れ落ちる、重さを感じる二段演出
-            this.freezeTime(0.3, 50)
-            this.cameras.main.shake(90, 0.005)
+            // 旧: freezeTime(0.3,50)/shake(90,0.005) は短すぎ・弱すぎて知覚できていなかった
+            playKill()
+            this.freezeTime(0.25, 120)
+            this.cameras.main.shake(110, 0.011)
             this.tweens.add({
               targets: g,
               scaleX: g.scaleX * 1.12,
