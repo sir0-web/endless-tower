@@ -3731,6 +3731,7 @@ export class GameScene extends Phaser.Scene {
       slowedTurns: 0,
       isSkulporin: true,
     })
+    dedupeEnemyPositions(this.state.enemies, map, player.position)
 
     this.addMessage('【すかるぽりんが出現した！】逃げる前に倒そう！')
     this.renderMap()
