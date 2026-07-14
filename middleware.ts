@@ -26,8 +26,8 @@ const DEFAULT_MAINTENANCE_MSG: MaintenanceMsg = {
 }
 
 export const config = {
-  // 静的アセット・Vercel内部パス・管理画面は素通し
-  matcher: ['/((?!_vercel|assets/|admin).*)'],
+  // 静的アセット・Vercel内部パス・管理画面（画面本体+管理用API）は素通し
+  matcher: ['/((?!_vercel|assets/|admin|api/admin).*)'],
 }
 
 // to === null は「開始時刻以降ずっと公開（無期限）」を表す
@@ -56,6 +56,30 @@ async function fetchWindows(): Promise<Window[] | null> {
   }
 }
 
+type Announcement = { title: string; body_html: string; published_at: string }
+
+// メンテ画面にもゲーム内お知らせ（ebt_announcements）を表示する。取得失敗時は単に非表示にする（フォールバックなし）。
+async function fetchAnnouncements(): Promise<Announcement[]> {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_ANON_KEY
+  if (!url || !key) return []
+
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/ebt_announcements?is_published=eq.true&select=title,body_html,published_at&order=published_at.desc&limit=10`,
+      {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(2500),
+      }
+    )
+    if (!res.ok) return []
+    const data = (await res.json()) as Announcement[]
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
 async function fetchMaintenanceMessage(): Promise<MaintenanceMsg | null> {
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_ANON_KEY
@@ -80,9 +104,10 @@ async function fetchMaintenanceMessage(): Promise<MaintenanceMsg | null> {
 
 export default async function middleware(request: Request): Promise<Response> {
   const now = Date.now()
-  const [windows, msg] = await Promise.all([
+  const [windows, msg, announcements] = await Promise.all([
     fetchWindows().then(w => w ?? FALLBACK_WINDOWS),
     fetchMaintenanceMessage().then(m => m ?? DEFAULT_MAINTENANCE_MSG),
+    fetchAnnouncements(),
   ])
 
   const isOpen     = windows.some(w => now >= w.from && (w.to === null || now < w.to))
@@ -90,7 +115,7 @@ export default async function middleware(request: Request): Promise<Response> {
 
   if (isOpen) return next()
 
-  return new Response(maintenanceHtml(now, windows, upcoming, msg), {
+  return new Response(maintenanceHtml(now, windows, upcoming, msg, announcements), {
     status: 503,
     headers: {
       'content-type': 'text/html; charset=utf-8',
@@ -117,7 +142,30 @@ function nl2br(s: string): string {
   return esc(s).replace(/\n/g, '<br>')
 }
 
-function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | null, msg: MaintenanceMsg): string {
+function formatAnnouncementDateJst(iso: string): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  const d = new Date(Date.parse(iso) + JST_OFFSET_MS)
+  return `${d.getUTCFullYear()}/${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}`
+}
+
+function announcementsHtml(announcements: Announcement[]): string {
+  if (announcements.length === 0) return ''
+  const items = announcements.map((a, i) => `
+      <details class="news-item"${i === 0 ? ' open' : ''}>
+        <summary>
+          <span class="news-date">${formatAnnouncementDateJst(a.published_at)}</span>
+          <span class="news-title">${esc(a.title)}</span>
+        </summary>
+        <div class="news-body">${a.body_html}</div>
+      </details>`).join('')
+  return `
+    <section class="news">
+      <h2>お知らせ</h2>
+      ${items}
+    </section>`
+}
+
+function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | null, msg: MaintenanceMsg, announcements: Announcement[]): string {
   const realUpcoming = upcoming && upcoming.from > now ? upcoming : null
   const openLabel    = realUpcoming ? formatWindowJst(realUpcoming) : '未定'
   const FROM = realUpcoming ? realUpcoming.from : 0
@@ -137,7 +185,7 @@ function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | nul
   html, body { margin: 0; height: 100%; }
   body {
     min-height: 100dvh;
-    display: flex; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: 24px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
     color: #e8e8f8;
@@ -166,6 +214,29 @@ function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | nul
   .window small { font-size: 12px; color: #9a9ad0; font-weight: 400; }
   .status { font-size: 15px; font-weight: 700; color: #ffd95a; margin: 0 0 16px; min-height: 1.4em; }
   .note { font-size: 12px; color: #8a8ab0; margin: 0; line-height: 1.7; }
+  .news { width: 100%; max-width: 440px; margin-top: 18px; text-align: left; }
+  .news h2 {
+    font-size: 13px; letter-spacing: 0.1em; color: #8e8ec8; margin: 0 0 10px; padding: 0 4px;
+  }
+  .news-item {
+    background: rgba(18, 18, 38, 0.72);
+    border: 1px solid rgba(150, 150, 255, 0.20);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .news-item summary {
+    list-style: none; cursor: pointer; padding: 12px 14px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .news-item summary::-webkit-details-marker { display: none; }
+  .news-date { font-size: 11px; color: #8a8ab0; flex-shrink: 0; }
+  .news-title { font-size: 13px; color: #dcdcf8; font-weight: 600; }
+  .news-body {
+    padding: 0 14px 14px; font-size: 12px; color: #b9b9dd; line-height: 1.8;
+    border-top: 1px solid rgba(150, 150, 255, 0.14); padding-top: 10px;
+  }
+  .news-body img { max-width: 100%; border-radius: 6px; }
   @media (max-width: 380px) {
     .card { padding: 30px 18px 24px; }
     h1 { font-size: 20px; }
@@ -187,6 +258,7 @@ function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | nul
     <p id="status" class="status">読み込み中…</p>
     <p class="note">${nl2br(msg.note)}</p>
   </main>
+  ${announcementsHtml(announcements)}
   <script>
     var FROM = ${FROM}, TO = ${TO};
     function pad(n){ return (n < 10 ? '0' : '') + n; }

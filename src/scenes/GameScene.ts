@@ -4,7 +4,7 @@ import { weaponKindOf } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
-import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playBGM, setHeartbeat } from '../game/sound'
+import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playFall, playBGM, setHeartbeat } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { cloudSaveGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { logEvent, getPlayerId } from '../game/supabase'
@@ -59,6 +59,23 @@ function floorTierTint(floor: number): number {
   return darkenColor(FLOOR_TINT_TIERS[last], factor)
 }
 
+// ── 洞窟タイルセットのテーマ（階層帯で見た目が変わる）──
+// v2タイル（/assets/dungeon/v2/）が読めた場合のみ有効。無ければ従来タイルへフォールバック。
+type DungeonTheme = 'brown' | 'gray' | 'blue'
+const DUNGEON_THEMES: DungeonTheme[] = ['brown', 'gray', 'blue']
+function dungeonTheme(floor: number): DungeonTheme {
+  if (floor <= 30) return 'brown'   // 土の洞窟
+  if (floor <= 70) return 'gray'    // 岩窟
+  return 'blue'                     // 水晶洞
+}
+
+/** ティントを白方向へ寄せて弱める。テーマ付きタイルは絵自体に色があるため、
+ *  従来の帯ティントをフルに掛けると絵柄が潰れる（緑床×青テーマ等）。 */
+function softenTint(color: number, amount: number): number {
+  const mix = (c: number) => Math.round(c + (255 - c) * amount)
+  return (mix((color >> 16) & 0xff) << 16) | (mix((color >> 8) & 0xff) << 8) | mix(color & 0xff)
+}
+
 /** 階に応じた瘴気オーバーレイの色とアルファ（薄め。暗くしすぎない）。1-10Fは無し */
 function floorMiasma(floor: number): { color: number; alpha: number } {
   const tier = Math.max(0, Math.floor((floor - 1) / 10))
@@ -76,8 +93,9 @@ const PIERCE_RATE = 0.06
 
 // 強敵判定：この敵の通常攻撃1発の実ダメージ(enemyTurn()と同じ式。クリティカル・鈍足debuffは除く
 // ＝敵本来の実力で判定)が3発でプレイヤーの最大HPを超えるなら「強敵」とみなす。
-function isDangerousEnemy(enemy: Enemy, player: Player): boolean {
-  if (enemy.isSkulporin) return false   // 固定で最大HPの3%ダメージのため対象外
+/** 敵の通常攻撃1発分の想定ダメージ（防御・貫通・真ダメージ込み）。危険判定の共通元データ。 */
+function enemyHitDamage(enemy: Enemy, player: Player): number {
+  if (enemy.isSkulporin) return 0   // 固定で最大HPの3%ダメージのため対象外
   const effectiveDef = player.vit + Math.floor(player.level / 2)
   const floorNow = player.floor
   const pierce   = Math.min(0.20, PIERCE_RATE + Math.max(0, floorNow - 100) * 0.002)
@@ -86,8 +104,46 @@ function isDangerousEnemy(enemy: Enemy, player: Player): boolean {
     : 0
   const baseAtk = enemy.attack + Math.floor(enemy.str * 0.5)
   const raw     = Math.max(1, Math.round(baseAtk * pierce), baseAtk - effectiveDef)
-  return (raw + trueDmg) * 3 >= player.maxHp
+  return raw + trueDmg
 }
+
+/** 3発以内で最大HPを削り切る強敵（💀の表示条件）。 */
+function isDangerousEnemy(enemy: Enemy, player: Player): boolean {
+  if (enemy.isSkulporin) return false
+  return enemyHitDamage(enemy, player) * 3 >= player.maxHp
+}
+
+/** 現在HPに対して1発で致死しうる敵（💀＋赤オーラの表示条件）。今受けたら死ぬ、の警告。 */
+function isLethalEnemy(enemy: Enemy, player: Player): boolean {
+  if (enemy.isSkulporin) return false
+  return enemyHitDamage(enemy, player) >= player.hp
+}
+
+// ── あるかなひろばの住人カタログ（救済で増える）──
+// icon=画像未ロード時の絵文字フォールバック。texture=/assets/characters/enemies/<key>.webp。
+// 新NPC(miner/junk/toolshop)の画像はユーザー提供待ち→当面は絵文字で表示される。
+// hasModal=衝突で専用モーダルを開くか（minerは泉設置のみでモーダル無し）。
+// person=救出イベントで表示する「助けた相手」の名前。
+const NPC_CATALOG: Record<import('../types').NpcKind, {
+  name: string; icon: string; texture: string; hasModal: boolean; person: string
+}> = {
+  refine:    { name: '鍛冶屋ハンマー', icon: '🔨', texture: 'refine',   hasModal: true,  person: '鍛冶屋ハンマー' },
+  shadow:    { name: '影の仕立て屋',   icon: '🌑', texture: 'shadow',   hasModal: true,  person: '影の仕立て屋' },
+  spellbook: { name: '古書の魔導士',   icon: '📖', texture: 'spellbook', hasModal: true,  person: '古書の魔導士' },
+  merchant:  { name: '行商人とるいぬ', icon: '🛒', texture: 'merchant', hasModal: true,  person: '行商人とるいぬ' },
+  miner:     { name: '採掘師',         icon: '⛏️', texture: 'miner',    hasModal: false, person: '採掘師ドリー' },
+  junk:      { name: 'がらくた屋',     icon: '♻️', texture: 'junk',     hasModal: true,  person: 'がらくた屋ジャンク' },
+  toolshop:  { name: 'どうぐや',       icon: '🧪', texture: 'toolshop', hasModal: true,  person: 'どうぐやポーラ' },
+}
+const ALL_NPC_KINDS = Object.keys(NPC_CATALOG) as import('../types').NpcKind[]
+
+// どうぐやの品揃え（女神のコインで購入）
+const TOOLSHOP_ITEMS: { key: string; name: string; icon: string; cost: number; desc: string }[] = [
+  { key: 'red',   name: '赤ポーション', icon: '🧪', cost: 1, desc: 'HPを8回復' },
+  { key: 'yellow', name: '黄ポーション', icon: '💊', cost: 2, desc: 'HPを15回復' },
+  { key: 'white', name: '白ポーション', icon: '⚗️', cost: 3, desc: 'HPを30回復' },
+  { key: 'stamina', name: 'スタミナポーション', icon: '🍵', cost: 2, desc: 'スタミナ+30%' },
+]
 
 // モンスター別の表示サイズ係数（1.0=標準）。可視部分=主人公サイズ補正の上に掛かる。
 // 大きすぎ/小さすぎる個体をモンスター名で個別調整する（ADMIN上書き画像にも適用）。
@@ -164,6 +220,8 @@ export class GameScene extends Phaser.Scene {
   private attackMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // 強敵警告マーク（3発で瀕死/即死級の攻撃力を持つ敵の頭上に💀）
   private dangerMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
+  // 1撃死警告オーラ（現在HPを1発で削り切る敵の💀背後に赤い発光）
+  private dangerGlows: Map<string, Phaser.GameObjects.Image> = new Map()
   // ボス大技チャージ警告（溜め中の敵の頭上に⚠️）
   private chargeMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // 性格カウントダウン数字（突進兵=赤・支配者=紫。頭上に3→2→1）
@@ -220,6 +278,18 @@ export class GameScene extends Phaser.Scene {
   private isEventFloor = false   // イベントフロア（ベースキャンプ「あるかなひろば」）滞在中フラグ
   private floorIsCleared = false  // 現在のフロアが踏破済み（自己最高到達階未満）か。XP大幅減＆ドロップなし
   private eventFacilities: { id: string; kind: import('../types').FacilityKind; name: string; icon: string; texture?: string; position: import('../types').Position }[] = []
+  // ── 救済システム（このフロア限定・セーブしない。救済結果 rescuedNpcs は state 側で永続）──
+  private floorRescue: { kind: import('../types').NpcKind; position: import('../types').Position } | null = null   // 徘徊NPC（衝突で救出＝パターン1）
+  private pendingClearRescue: import('../types').NpcKind | null = null   // 全敵撃破で救出（パターン2）
+  private jailCell: { kind: import('../types').NpcKind; doorPos: import('../types').Position; npcPos: import('../types').Position } | null = null   // 牢屋（パターン3）
+  private jailNpcSprite: Phaser.GameObjects.GameObject | null = null
+  private rescueSprite: Phaser.GameObjects.GameObject | null = null
+  private plazaDecor: Phaser.GameObjects.GameObject[] = []   // 町の装飾スプライト（プラザ滞在中のみ）
+  private plazaBlocked = new Set<string>()   // 町で通行不可なタイル（木/池/街灯/花/建物）"x,y"
+  private plazaPath = new Set<string>()      // 町の石畳パス（十字通路）"x,y"。createTileSpritesの見た目切替に使う
+  private signboardPos: import('../types').Position | null = null   // 広場の掲示板の位置。体当たりで捜し人一覧を開く
+  private signboardMark: Phaser.GameObjects.Text | null = null   // 看板上に浮かせる未読「！」マーク
+  private skipNextStairsSound = false   // 落とし穴転落直後のpopulateFloorで汎用階段音を重ねないためのフラグ
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private loadedEnemyKeys = new Set<string>()  // 先読み済みの敵テクスチャキー（通信量削減の遅延ロード用）
   private loadedEnemyFloorTo = 0                // 敵テクスチャを先読み済みのフロア上限
@@ -273,6 +343,7 @@ export class GameScene extends Phaser.Scene {
     this.itemGraphics       = new Map()
     this.attackMarkers      = new Map()
     this.dangerMarkers      = new Map()
+    this.dangerGlows        = new Map()
     this.chargeMarkers      = new Map()
     this.countdownMarkers   = new Map()
     this.mistSprites        = new Map()
@@ -296,6 +367,15 @@ export class GameScene extends Phaser.Scene {
     this.isGameOver         = false
     this.isAnimating        = false
     this.isEventFloor       = false
+    this.floorRescue        = null
+    this.pendingClearRescue = null
+    this.jailCell           = null
+    this.jailNpcSprite      = null
+    this.rescueSprite       = null
+    this.plazaDecor         = []
+    this.plazaBlocked       = new Set<string>()
+    this.plazaPath          = new Set<string>()
+    this.signboardPos       = null
     this.eventFacilities    = []
     this.rts                = window.innerWidth < 768 ? Math.round(TILE_SIZE * 1.5) : TILE_SIZE
     this.lastMoveAt            = 0
@@ -309,22 +389,40 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    // 床タイル（3種ランダム）— /assets/dungeon/floor/
-    this.load.image('tile-floor1', '/assets/dungeon/floor/floor1.webp')
-    this.load.image('tile-floor2', '/assets/dungeon/floor/floor2.webp')
-    this.load.image('tile-floor3', '/assets/dungeon/floor/floor3.webp')
-    // 壁 — /assets/dungeon/wall/wall.webp
+    // 旧タイルは表示に使う壁・階段のみ読み込む。床・罠・泥・泉・落とし穴・宝箱は
+    // v2タイルへ完全移行済みのため旧画像（計約580KB）の並行ロードを廃止（通信量・発熱対策）。
+    // 万一v2が読めない場合も、renderMapの単色矩形フォールバックでゲームは継続できる。
     this.load.image('tile-wall',   '/assets/dungeon/wall/wall.webp')
-    // 階段 — /assets/dungeon/stairs/stairs.webp
     this.load.image('tile-stairs', '/assets/dungeon/stairs/stairs.webp')
-    // box.webp — アイテム表示用（床に落ちている全アイテム）
-    this.load.image('tile-box', '/assets/dungeon/box/box.webp')
-    // trap.webp — ベノムダスト（ハズレ時は紫Graphicsにフォールバック）
-    this.load.image('trap', '/assets/dungeon/trap/trap.webp')
-    this.load.image('tile-mud',        '/assets/dungeon/mud/mud.webp')
-    this.load.image('tile-spring',     '/assets/dungeon/spring/spring.webp')
-    this.load.image('tile-spring-dry', '/assets/dungeon/spring/spring_dry.webp')
-    this.load.image('tile-pitfall',    '/assets/dungeon/pitfall/pitfall.webp')
+
+    // ── 新洞窟タイルセット（テーマ別 v2）──
+    // 採用範囲：床・落とし穴・泥（砂利）・毒罠（紫池）・泉（緑池）・宝箱
+    // （壁・階段はユーザー確認の結果、従来タイルを継続）
+    // 読み込み失敗時は failedTextures 経由で上の旧タイルへ自動フォールバックする
+    for (const th of DUNGEON_THEMES) {
+      for (const n of [1, 2, 3]) this.load.image(`t2-floor-${th}-${n}`, `/assets/dungeon/v2/floor_${th}_${n}.webp`)
+      this.load.image(`t2-pitfall-${th}`,    `/assets/dungeon/v2/pitfall_${th}.webp`)
+      this.load.image(`t2-mud-${th}`,        `/assets/dungeon/v2/mud_${th}.webp`)
+      this.load.image(`t2-trap-${th}`,       `/assets/dungeon/v2/trap_${th}.webp`)
+      this.load.image(`t2-spring-${th}`,     `/assets/dungeon/v2/spring_${th}.webp`)
+      this.load.image(`t2-spring-dry-${th}`, `/assets/dungeon/v2/spring_dry_${th}.webp`)
+    }
+    this.load.image('t2-box', '/assets/dungeon/v2/box.webp')   // 宝箱（アイテム表示）
+
+    // ── あるかなひろば（町）プロップ。未配置でも読み込み失敗＝描画スキップで安全 ──
+    for (const p of ['grass', 'path', 'tree', 'well', 'lamp', 'fence', 'pond', 'flowers',
+      'stonepath', 'hedge', 'topiary', 'bench', 'signboard', 'fountain', 'cave', 'rockwall']) {
+      const file = p === 'grass' ? 'ground_grass' : p === 'path' ? 'ground_path'
+        : p === 'stonepath' ? 'path_stone' : p === 'hedge' ? 'hedge_h'
+        : p === 'cave' ? 'deco_cave_entrance_big' : p === 'rockwall' ? 'deco_rockwall'
+        : 'deco_' + p
+      this.load.image(`town-${p}`, `/assets/town/props/${file}.webp`)
+    }
+    // 建物は参考画像から抜いた高品質ランドマーク版(ref_building_*)を優先。無ければ旧簡易版にフォールバック。
+    for (const k of ALL_NPC_KINDS) {
+      this.load.image(`town-b-${k}`, `/assets/town/props/ref_building_${k}.webp`)
+      this.load.image(`town-bf-${k}`, `/assets/town/props/building_${k}.webp`)
+    }
 
     // プレイヤー画像（スタティック・フォールバック用）
     this.load.image('player', '/assets/characters/player.webp')
@@ -353,10 +451,13 @@ export class GameScene extends Phaser.Scene {
     // 現在地から先のフロア帯だけを先読みする（loadEnemyTexturesAround 参照）。
     // イベントフロアNPC・徘徊モンスターはフロアと無関係に出現しうるので常時ロードする。
     const alwaysLoadEnemyImages: [string, string][] = [
-      ['horu',       '/assets/characters/enemies/horu.webp'],
-      ['master',     '/assets/characters/enemies/master.webp'],
-      ['maho',       '/assets/characters/enemies/maho.webp'],
+      ['refine',     '/assets/characters/enemies/refine.webp'],
+      ['shadow',     '/assets/characters/enemies/shadow.webp'],
+      ['spellbook',  '/assets/characters/enemies/spellbook.webp'],
       ['merchant',   '/assets/characters/enemies/merchant.webp'],
+      ['miner',      '/assets/characters/enemies/miner.webp'],
+      ['junk',       '/assets/characters/enemies/junk.webp'],
+      ['toolshop',   '/assets/characters/enemies/toolshop.webp'],
       ['scullporin', '/assets/characters/enemies/scullporin.webp'],
     ]
     for (const [key, path] of alwaysLoadEnemyImages) this.load.image(key, path)
@@ -437,6 +538,12 @@ export class GameScene extends Phaser.Scene {
     this.fogGraphics = this.add.graphics().setDepth(7)
     this.bowRangeGraphics = this.add.graphics().setDepth(2)
     this.applyMonsterTextureOverrides()
+    // プレイヤーアニメは initGame より前に用意する。
+    // initGame は新章で開始プラザ生成→renderMap を即実行するため、ここで先に整えておかないと
+    // 主人公が歩行スプライトではなく矩形フォールバックで生成され、以後スプライト化されない
+    // （初期の町で主人公が表示されない不具合になる）。
+    this.removePlayerBackgrounds()
+    this.createPlayerAnims()
     this.initGame()
     this.createLowHpVignette()
     document.addEventListener('visibilitychange', this.onVisibilityChange)
@@ -469,6 +576,12 @@ export class GameScene extends Phaser.Scene {
     window.runBulkShadowChallenge = (times)            => this.runBulkShadowChallenge(times)
     window.runSpellbookChallenge = (spellId)          => this.runSpellbookChallenge(spellId)
     window.buyMerchantItem      = (key)               => this.buyMerchantItem(key)
+    window.runJunkConvert       = (itemId)            => this.runJunkConvert(itemId)
+    window.getToolShopItems     = ()                  => TOOLSHOP_ITEMS
+    window.buyToolItem          = (key)               => this.buyToolItem(key)
+    window.getJailUnlockState   = ()                  => this.getJailUnlockState()
+    window.tryJailUnlock        = (method, sacId)     => this.tryJailUnlock(method, sacId)
+    window.getRescueList        = ()                  => this.getRescueList()
 
     // ADMINパネルからの即時チェック用（強制出現後に即反映）
     window.triggerSkulporinCheck = () => { void this.sendSkulporinHeartbeat() }
@@ -523,8 +636,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createPauseOverlay()
     this.createInventoryPanel()
-    this.removePlayerBackgrounds()
-    this.createPlayerAnims()
+    // removePlayerBackgrounds / createPlayerAnims は initGame より前へ移動済み（初期の町で主人公が出ない対策）
 
     this.renderMap()
     this.updateWindowGameState()
@@ -608,10 +720,14 @@ export class GameScene extends Phaser.Scene {
       floorType,
       driedSprings: [],
       miasmaFloor: false,   // 1Fは瘴気フロアにしない（序盤の理不尽さ回避）
+      rescuedNpcs: [],
+      signboardUnread: true,   // 初回は未読扱いで「！」を出す
     }
-    dedupeEnemyPositions(this.state.enemies, map, this.state.player.position)   // 敵が重なって始まらないように
-    this.buildFloorVariants(map)
-    this.createTileSprites(map)
+    // 新章：スタート地点は「あるかなひろば」。最初は住人0人＋B1Fへの階段のみ。
+    // 上で組んだ通常フロアはプラザ生成で上書きされる（floor=0からnextFloorでB1Fへ）。
+    this.state.player.floor = 0
+    this.state.player.maxFloorReached = 0
+    this.enterEventFloor()
   }
 
   // セーブデータからの再開：保存時点のマップ・敵・アイテム配置をそのまま復元する
@@ -643,6 +759,9 @@ export class GameScene extends Phaser.Scene {
       floorType: saved.floorType,
       driedSprings: saved.driedSprings ?? [],
       miasmaFloor: saved.miasmaFloor ?? false,
+      rescuedNpcs: saved.rescuedNpcs ?? [],
+      // 本フィールド導入前のセーブは一度も見ていない扱いにして「！」で気づかせる
+      signboardUnread: saved.signboardUnread ?? true,
     }
     // 再開フロアはそのスナップショットを復元するだけなので踏破済みペナルティ対象にしない
     this.floorIsCleared = false
@@ -654,8 +773,8 @@ export class GameScene extends Phaser.Scene {
   // TOPのSETTINGSで ON/OFF 切替（localStorage 'autoSave'。未設定=ON）。完了時はプレイ枠左上に薄く通知。
   private autoSave() {
     if ((localStorage.getItem('autoSave') ?? 'on') === 'off') return
-    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
-    const ok = saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor })
+    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor, rescuedNpcs, signboardUnread } = this.state
+    const ok = saveGame({ player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor, rescuedNpcs, signboardUnread })
     if (ok) window.showAutoSaveToast?.()
   }
 
@@ -663,8 +782,8 @@ export class GameScene extends Phaser.Scene {
   // ローカル（この端末の中断データ）に保存しつつ、名前＋パスワードでクラウドにも保存し、
   // 別端末でも「クラウド再開」から続けられるようにする。
   private async doSaveGame() {
-    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor } = this.state
-    const snapshot = { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor }
+    const { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor, rescuedNpcs, signboardUnread } = this.state
+    const snapshot = { player, enemies, items, map, spells, heals, bag, turn, areaBossFloors, floorType, driedSprings, miasmaFloor, rescuedNpcs, signboardUnread }
     const localOk = saveGame(snapshot)
 
     const localMsg = localOk
@@ -693,6 +812,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showTelopIfNeeded() {
+    if (this.isEventFloor) return   // あるかなひろば（プラザ）では階層テロップを出さない
     const { player, areaBossFloors, floorType, miasmaFloor } = this.state
     const bossMsg = getFloorTelopMessage(player.floor, areaBossFloors)
 
@@ -853,15 +973,47 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.state.map[ny][nx] === 'wall') return
 
+    // 町（あるかなひろば）の掲示板：体当たりで捜し人一覧（救出状況）を開く
+    if (this.isEventFloor && this.signboardPos && this.signboardPos.x === nx && this.signboardPos.y === ny) {
+      if (event.repeat) return
+      window.dispatchEvent(new Event('signboard-open'))
+      this.state.signboardUnread = false
+      this.updateSignboardMark()
+      return
+    }
+
+    // 町（あるかなひろば）の装飾・建物タイルは通行不可（木/池/街灯/花/建物）
+    if (this.isEventFloor && this.plazaBlocked.has(`${nx},${ny}`)) return
+
+    // 牢屋の柵（jail）：進入不可。体当たりで開錠モーダルを開く（パターン3）。
+    if (this.state.map[ny][nx] === 'jail') {
+      if (event.repeat) return
+      window.dispatchEvent(new Event('jail-open'))
+      return
+    }
+
     // イベントフロアNPC：タイルには進入できない（当たり判定）。体当たりで話しかける。
     // 以前は同じタイルに乗って起動する方式だったため、会話後にそのまま通過できてしまっていた。
     if (this.isEventFloor) {
       const facility = this.eventFacilities.find(f => f.position.x === nx && f.position.y === ny)
       if (facility) {
         if (event.repeat) return   // キーリピートでモーダルを連続オープンしない
+        if (facility.kind === 'miner') { this.addMessage('採掘師「この泉、私が掘り当てたんだ。ゆっくり浸かってくれ」'); return }
         window.dispatchEvent(new CustomEvent('facility-open', { detail: facility.kind }))
         return
       }
+    }
+
+    // 徘徊する迷子NPC（パターン1）：体当たりで救出。
+    if (this.floorRescue && this.floorRescue.position.x === nx && this.floorRescue.position.y === ny) {
+      if (event.repeat) return
+      const kind = this.floorRescue.kind
+      this.floorRescue = null
+      if (this.rescueSprite) { this.rescueSprite.destroy(); this.rescueSprite = null }
+      this.rescueNpc(kind, '迷子になっていた冒険者を助けた。')
+      this.renderMap()
+      this.updateWindowGameState()
+      return
     }
 
     const enemy = this.state.enemies.find(e => e.position.x === nx && e.position.y === ny)
@@ -886,6 +1038,14 @@ export class GameScene extends Phaser.Scene {
       player.position.y = ny
 
       if (this.state.map[ny][nx] === 'stairs') {
+        if (this.isEventFloor) {
+          // あるかなひろばの洞窟口は壁バンドに埋め込んで描画しているため、即時遷移だと
+          // 「入り口に足が届く前にダンジョンへ移動した」ように感じてしまう。
+          // 一度その場の移動を描画してから少し間を置いて遷移し、入り口に踏み込む動きを見せる。
+          this.renderMap()
+          this.time.delayedCall(220, () => this.nextFloor())
+          return
+        }
         this.nextFloor()
         return
       }
@@ -894,12 +1054,16 @@ export class GameScene extends Phaser.Scene {
         const fallDepth = 1 + Math.floor(Math.random() * 3)
         const fromFloor = this.state.player.floor
         const toFloor   = fromFloor + fallDepth
+        playFall()
         this.isAnimating = true
         if (this.animatingTimer) clearTimeout(this.animatingTimer)
         this.animatingTimer = setTimeout(() => { this.isAnimating = false; this.animatingTimer = null }, 5000)
         this.renderMap()
         this.spinPlayer(3, 600, () => {
           this.state.player.floor += fallDepth - 1
+          // 落とし穴は専用の落下音（playFall）を既に鳴らしているため、
+          // populateFloor内の汎用「階段音」を重ねて鳴らさないよう抑制する
+          this.skipNextStairsSound = true
           this.enterNormalFloor()
           this.time.delayedCall(80, () => {
             this.spinPlayer(3, 600, () => {
@@ -1139,10 +1303,11 @@ export class GameScene extends Phaser.Scene {
         player.hp = player.maxHp
         this.state.driedSprings.push(key)
         this.addMessage('回復の泉に浸かった')
-        // 泉が枯れる見た目に切り替え
+        // 泉が枯れる見た目に切り替え（テーマ付きv2があれば優先）
         const sprite = this.tileSprites[player.position.y]?.[player.position.x]
-        if (sprite && !this.failedTextures.has('tile-spring-dry') && this.textures.exists('tile-spring-dry')) {
-          sprite.setTexture('tile-spring-dry').setDisplaySize(this.rts + 6, this.rts + 6)
+        const dryKey = this.themedTileKey('spring-dry', 'tile-spring-dry')
+        if (sprite && this.textureOk(dryKey)) {
+          sprite.setTexture(dryKey).setDisplaySize(this.rts + 6, this.rts + 6)
         }
       }
     }
@@ -1633,6 +1798,14 @@ export class GameScene extends Phaser.Scene {
     this.checkLevelUp()
     window.onEnemyKilled?.()
     logEvent('kill', { floor: this.state.player.floor, enemy_name: enemy.name, is_boss: enemy.isBoss })
+
+    // パターン2：このフロアの敵を全滅させたら救出イベント発生（主人公の隣に現れて即救済）
+    if (this.pendingClearRescue && this.state.enemies.length === 0) {
+      const kind = this.pendingClearRescue
+      this.pendingClearRescue = null
+      this.rescueNpc(kind, 'モンスターにつかまっていた冒険者を助けた。')
+      this.renderMap()
+    }
   }
 
   /**
@@ -1666,7 +1839,7 @@ export class GameScene extends Phaser.Scene {
   /** 敵に付随する全マーカー・エフェクト（⚔️💀⚠️・カウントダウン・もや・💢）を破棄する */
   private destroyEnemyDecor(id: string) {
     const maps: Map<string, Phaser.GameObjects.Text | Phaser.GameObjects.Image>[] = [
-      this.attackMarkers, this.dangerMarkers, this.chargeMarkers,
+      this.attackMarkers, this.dangerMarkers, this.dangerGlows, this.chargeMarkers,
       this.countdownMarkers, this.mistSprites, this.buffMarkers,
     ]
     for (const m of maps) {
@@ -2590,6 +2763,18 @@ export class GameScene extends Phaser.Scene {
     this.isEventFloor = false
     this.eventFacilities = []
     this.state.driedSprings = []
+    // 前フロアの救済スプライト/状態と町装飾を掃除（rollFloorRescueで再抽選される）
+    if (this.rescueSprite) { this.rescueSprite.destroy(); this.rescueSprite = null }
+    if (this.jailNpcSprite) { this.jailNpcSprite.destroy(); this.jailNpcSprite = null }
+    for (const d of this.plazaDecor) d.destroy()
+    this.plazaDecor = []
+    this.plazaBlocked = new Set<string>()
+    this.signboardPos = null
+    this.signboardMark?.destroy()
+    this.signboardMark = null
+    this.floorRescue = null
+    this.jailCell = null
+    this.pendingClearRescue = null
     const floor = this.state.player.floor
     this.ensureEnemyTexturesForFloor(floor)
     // 踏破済みフロア（蝶の羽で自己最高到達階より下に戻ったケース）→ XP大幅減＆ドロップなし
@@ -2643,7 +2828,8 @@ export class GameScene extends Phaser.Scene {
     this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10
     this.buildFloorVariants(map)
     this.createTileSprites(map)
-    playStairs()
+    if (this.skipNextStairsSound) this.skipNextStairsSound = false
+    else playStairs()
     this.snapNextRender = true
     this.renderMap()
     this.updateWindowGameState()
@@ -2661,72 +2847,253 @@ export class GameScene extends Phaser.Scene {
 
     // ドッペルゲンガー：踏破済み（周回済み）フロアは farming 対策で対象外にする
     if (!this.floorIsCleared) void this.checkDoppelgangerSpawn()
+
+    // ── あるかなひろばの住人 救済抽選（このフロアで助けられるか）──
+    this.rollFloorRescue()
+  }
+
+  // ── 住人救済システム ──
+  private unrescuedNpcs(): import('../types').NpcKind[] {
+    return ALL_NPC_KINDS.filter(k => !this.state.rescuedNpcs.includes(k))
+  }
+
+  /** フロア入場ごとに救済チャンスを抽選。30%で発生、内訳 1:30% / 2:30% / 3:40%。対象は未救済からランダム。 */
+  private rollFloorRescue() {
+    this.floorRescue = null
+    this.pendingClearRescue = null
+    this.jailCell = null
+    if (this.floorIsCleared) return                 // 踏破済みフロアは対象外
+    const pool = this.unrescuedNpcs()
+    if (pool.length === 0) return                    // 全員救済済み → 打ち止め
+    if (Math.random() >= 0.30) return                // 70%は何も起きない
+    const kind = pool[Math.floor(Math.random() * pool.length)]
+    const r = Math.random()
+    if (r < 0.30) {
+      this.spawnWanderingRescue(kind)                // パターン1
+    } else if (r < 0.60) {
+      this.pendingClearRescue = kind                 // パターン2（全敵撃破で発生）
+    } else {
+      this.carveJail(kind)                           // パターン3（牢屋）
+    }
+  }
+
+  private randomFloorTile(pred?: (x: number, y: number) => boolean): import('../types').Position | null {
+    const { map, player } = this.state
+    const cand: import('../types').Position[] = []
+    for (let y = 0; y < map.length; y++) for (let x = 0; x < map[y].length; x++) {
+      if (map[y][x] !== 'floor') continue
+      if (x === player.position.x && y === player.position.y) continue
+      if (this.state.enemies.some(e => e.position.x === x && e.position.y === y)) continue
+      if (pred && !pred(x, y)) continue
+      cand.push({ x, y })
+    }
+    return cand.length ? cand[Math.floor(Math.random() * cand.length)] : null
+  }
+
+  /** パターン1：フロアに迷子NPCを1体配置（衝突で救出）。 */
+  private spawnWanderingRescue(kind: import('../types').NpcKind) {
+    const pos = this.randomFloorTile()
+    if (!pos) return
+    this.floorRescue = { kind, position: pos }
+  }
+
+  /** パターン3：8方を岩で囲み1方だけ柵(jail)のある牢屋を生成し、中に未救済NPCを配置。 */
+  private carveJail(kind: import('../types').NpcKind) {
+    const { map } = this.state
+    // 中心候補：3x3が全て床で、かつ外周に脱出用の床が隣接する場所
+    const spot = this.randomFloorTile((cx, cy) => {
+      if (cx < 2 || cy < 2 || cx >= MAP_WIDTH - 2 || cy >= MAP_HEIGHT - 2) return false
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (map[cy + dy][cx + dx] !== 'floor') return false
+      }
+      // 下側(cy+2)が床＝そこから柵に接近できる
+      return map[cy + 2]?.[cx] === 'floor'
+    })
+    if (!spot) return
+    const { x: cx, y: cy } = spot
+    // 3x3の外周を岩で囲む（中心はNPC、下辺中央を柵にする）
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue
+      map[cy + dy][cx + dx] = 'wall'
+    }
+    map[cy + 1][cx] = 'jail'          // 下辺中央＝柵（ドア）。プレイヤーは cy+2 から接近
+    this.jailCell = { kind, doorPos: { x: cx, y: cy + 1 }, npcPos: { x: cx, y: cy } }
+  }
+
+  /** NPCを救済（rescuedNpcsへ追加）。message は救出パターンごとの文言。 */
+  private rescueNpc(kind: import('../types').NpcKind, message: string) {
+    if (this.state.rescuedNpcs.includes(kind)) return
+    this.state.rescuedNpcs.push(kind)
+    const c = NPC_CATALOG[kind]
+    this.addMessage(`${message} あるかなひろばの住人が増えた！（${c.name}）`)
+    window.showEventMessage?.(`${c.person}を助けた！住人が増えた`, '#ffd766')
+    // 救出＝さがし人一覧の更新なので、看板の「！」を再表示する
+    this.state.signboardUnread = true
+    this.updateSignboardMark()
+    this.updateWindowGameState()
+  }
+
+  /** 看板の上に浮かせる「！」マークの表示/非表示を更新する（未読時のみ表示） */
+  private updateSignboardMark() {
+    this.signboardMark?.setVisible(this.isEventFloor && !!this.signboardPos && this.state.signboardUnread)
+  }
+
+  private coinCount(): number { return this.state.heals.filter(h => h.coin).length }
+  private addCoins(n: number) {
+    for (let i = 0; i < n; i++) {
+      this.state.heals.push({ id: `coin_${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`, name: '女神のコイン', type: 'heal', position: { x: 0, y: 0 }, coin: true })
+    }
+  }
+  private consumeCoins(n: number): boolean {
+    if (this.coinCount() < n) return false
+    let left = n
+    this.state.heals = this.state.heals.filter(h => { if (h.coin && left > 0) { left--; return false } return true })
+    return true
+  }
+
+  /** がらくた屋：いらない装備を女神のコインに換金（コイン = 1 + 精錬値）。 */
+  private runJunkConvert(itemId: string): { ok: boolean; coins?: number } | null {
+    const item = this.state.bag.find(b => b.id === itemId && b.type === 'equip')
+    if (!item || item.locked) return { ok: false }
+    const coins = 1 + Math.max(0, item.refineLevel ?? 0)
+    this.state.bag = this.state.bag.filter(b => b.id !== itemId)
+    this.addCoins(coins)
+    this.addMessage(`${item.name}をがらくた屋に売った。女神のコイン+${coins}枚！`)
+    this.updateWindowGameState()
+    return { ok: true, coins }
+  }
+
+  /** どうぐや：女神のコインで回復薬を購入。同名10個上限。 */
+  private buyToolItem(key: string): { ok: boolean; reason?: 'coin' | 'limit' } | null {
+    const def = TOOLSHOP_ITEMS.find(t => t.key === key)
+    if (!def) return { ok: false }
+    if (this.coinCount() < def.cost) return { ok: false, reason: 'coin' }
+    const base = HEAL_ITEMS.find(h => h.name === def.name)
+    if (this.state.heals.filter(h => h.name === def.name).length >= 10) return { ok: false, reason: 'limit' }
+    if (!this.consumeCoins(def.cost)) return { ok: false, reason: 'coin' }
+    this.state.heals.push({
+      id: `buy_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      name: def.name, type: 'heal', position: { x: 0, y: 0 },
+      healAmount: base?.healAmount ?? 0,
+      ...(base && 'staminaPercent' in base ? { staminaPercent: (base as { staminaPercent: number }).staminaPercent } : {}),
+    })
+    this.addMessage(`どうぐやで${def.name}を購入した（🪙${def.cost}）`)
+    this.updateWindowGameState()
+    return { ok: true }
+  }
+
+  private getJailUnlockState(): { npcName: string; bagEquips: { id: string; name: string }[]; coins: number; statPoints: number } | null {
+    if (!this.jailCell) return null
+    return {
+      npcName: NPC_CATALOG[this.jailCell.kind].person,
+      bagEquips: this.state.bag.filter(b => b.type === 'equip' && !b.locked).map(b => ({ id: b.id, name: b.name })),
+      coins: this.coinCount(),
+      statPoints: this.state.player.statPoints,
+    }
+  }
+
+  /** 広場の掲示板：全住人の捜索/救助状況一覧（カタログ順で安定表示） */
+  private getRescueList(): { person: string; role: string; rescued: boolean }[] {
+    return ALL_NPC_KINDS.map(kind => {
+      const c = NPC_CATALOG[kind]
+      return { person: c.person, role: c.name, rescued: this.state.rescuedNpcs.includes(kind) }
+    })
+  }
+
+  /** 牢屋の柵を開錠。成功で柵撤去＋救済。失敗でも資源は消費（確率は非公開）。 */
+  private tryJailUnlock(method: 'equip' | 'coin' | 'point', sacrificeId?: string): { ok: boolean; message: string; broke?: boolean } | null {
+    if (!this.jailCell) return null
+    const success = (): { ok: boolean; message: string; broke?: boolean } => {
+      const kind = this.jailCell!.kind
+      const { doorPos } = this.jailCell!
+      this.state.map[doorPos.y][doorPos.x] = 'floor'   // 柵を撤去して通行可能に
+      if (this.jailNpcSprite) { this.jailNpcSprite.destroy(); this.jailNpcSprite = null }
+      this.jailCell = null
+      this.rescueNpc(kind, 'モンスターに囚われていた冒険者を助けた。')
+      // タイルスプライトを再構築（柵→床の反映）
+      this.createTileSprites(this.state.map)
+      this.renderMap()
+      return { ok: true, message: '柵が開いた！' }
+    }
+    if (method === 'equip') {
+      const item = this.state.bag.find(b => b.id === sacrificeId && b.type === 'equip' && !b.locked)
+      if (!item) return { ok: false, message: '生贄にできる装備がない' }
+      this.state.bag = this.state.bag.filter(b => b.id !== item.id)
+      this.updateWindowGameState()
+      if (Math.random() < 0.10) { this.addMessage(`${item.name}で柵をブチ破った！`); return success() }
+      this.addMessage(`${item.name}は堅牢な柵に負けて破損してしまった…`)
+      return { ok: false, message: `${item.name}は壊れてしまった…`, broke: true }
+    }
+    if (method === 'coin') {
+      if (!this.consumeCoins(3)) return { ok: false, message: '女神のコインが足りない' }
+      this.updateWindowGameState()
+      if (Math.random() < 0.50) { return success() }
+      this.addMessage('コインは柵に吸い込まれてしまった…')
+      return { ok: false, message: 'コインはそのまま吸い込まれた…' }
+    }
+    // point
+    if (this.state.player.statPoints < 5) return { ok: false, message: 'ステータスポイントが足りない' }
+    this.state.player.statPoints -= 5
+    this.updateWindowGameState()
+    if (Math.random() < 0.80) { return success() }
+    this.addMessage('光は柵に弾かれた…何も起きなかった。')
+    return { ok: false, message: '何も起きなかった…' }
   }
 
   // ── イベントフロア（ベースキャンプ「あるかなひろば」）──
+  // NPCは固定プロットに配置し、救済済みのNPCだけがそのプロットに登場。
+  // プロットごとに専用の建物プロップ（露店/工房）を building_<kind> で描く。
+  // 中央の縦通路(x=15)を挟んで2列4行にゆったり配置（NPC同士2〜4マス空け、密集させない）
+  private static readonly PLAZA_PLOTS: Record<import('../types').NpcKind, import('../types').Position> = {
+    refine:    { x: 10, y: 10 },
+    shadow:    { x: 20, y: 10 },
+    spellbook: { x: 10, y: 15 },
+    merchant:  { x: 20, y: 15 },
+    toolshop:  { x: 10, y: 20 },
+    junk:      { x: 20, y: 20 },
+    miner:     { x: 15, y: 20 },
+  }
+
   private enterEventFloor() {
     this.isEventFloor = true
     this.floorIsCleared = false   // ベースキャンプはペナルティ対象外
     const map = this.generateEventFloorMap()
-    const playerPos = { x: 9, y: 16 }
+    // さがし人一覧の看板(rx+4, ry+3)の正面（1マス南）からスタートする
+    const { rx, ry } = GameScene.PLAZA_RECT
+    const playerPos = { x: rx + 4, y: ry + 4 }
 
-    // ── 施設NPC位置をランダム化（部屋上半分・横2タイル以上離す）──
-    const rx = 5, ry = 7, rw = 10
-    const shuffleArr = <T>(a: T[]): T[] => {
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]]
-      }
-      return a
-    }
-    const npcPool: { x: number; y: number }[] = []
-    for (let dy = 0; dy < 4; dy++)
-      for (let dx = 0; dx < rw - 2; dx++)
-        npcPool.push({ x: rx + 1 + dx, y: ry + 2 + dy })
-    shuffleArr(npcPool)
-    const npcPositions: { x: number; y: number }[] = []
-    const npcUsed = new Set<string>()
-    // 1stパス：他NPCと周囲1マス以内に被らない位置を選ぶ（見栄え優先で離す）
-    for (const p of npcPool) {
-      if (npcPositions.length >= 4) break
-      if (npcUsed.has(`${p.x},${p.y}`)) continue
-      if (npcPositions.some(q => Math.abs(p.x - q.x) <= 1 && Math.abs(p.y - q.y) <= 1)) continue
-      npcPositions.push(p); npcUsed.add(`${p.x},${p.y}`)
-    }
-    // 2ndパス：4体に満たなければ「タイル重複しないこと」だけを条件に補充（必ず別タイルになる）
-    for (const p of npcPool) {
-      if (npcPositions.length >= 4) break
-      if (npcUsed.has(`${p.x},${p.y}`)) continue
-      npcPositions.push(p); npcUsed.add(`${p.x},${p.y}`)
-    }
-
-    // ── 回復の泉を部屋下半分にランダム配置（NPC・プレイヤー初期位置を除く）──
-    const npcSet = new Set(npcPositions.map(p => `${p.x},${p.y}`))
-    const springPool: { x: number; y: number }[] = []
-    for (let dy = 0; dy < 4; dy++)
-      for (let dx = 0; dx < rw - 2; dx++) {
-        const p = { x: rx + 1 + dx, y: ry + 6 + dy }
-        if (!(p.x === playerPos.x && p.y === playerPos.y) && !npcSet.has(`${p.x},${p.y}`))
-          springPool.push(p)
-      }
-    shuffleArr(springPool)
-    const sp = springPool[0] ?? { x: rx + 4, y: ry + 8 }
-    map[sp.y][sp.x] = 'spring'
+    const rescued = ALL_NPC_KINDS.filter(k => this.state.rescuedNpcs.includes(k))
 
     this.state.map = map
     this.state.player.position = { ...playerPos }
     this.state.enemies = []
     this.state.items = []
-    this.eventFacilities = [
-      { id: 'facility_refine',    kind: 'refine',    name: '鍛冶屋ハンマー', icon: '🔨', texture: 'horu',     position: npcPositions[0] },
-      { id: 'facility_shadow',    kind: 'shadow',    name: '影の仕立て屋',   icon: '🌑', texture: 'master',   position: npcPositions[1] },
-      { id: 'facility_spellbook', kind: 'spellbook', name: '古書の魔導士',   icon: '📖', texture: 'maho',     position: npcPositions[2] },
-      { id: 'facility_merchant',  kind: 'merchant',  name: '行商人とるいぬ',   icon: '🛒', texture: 'merchant', position: npcPositions[3] },
-    ]
+    // 救済済み住人を固定プロットへ配置
+    this.eventFacilities = rescued.map(kind => {
+      const c = NPC_CATALOG[kind]
+      return { id: `facility_${kind}`, kind: kind as import('../types').FacilityKind, name: c.name, icon: c.icon, texture: c.texture, position: { ...GameScene.PLAZA_PLOTS[kind] } }
+    })
+
+    // ── 回復の泉：採掘師を救済済みのときだけ設置する（採掘師の2マス下を優先、ダメなら隣接マスへ） ──
+    if (rescued.includes('miner')) {
+      const mp = GameScene.PLAZA_PLOTS.miner
+      const occupied = new Set(this.eventFacilities.map(f => `${f.position.x},${f.position.y}`))
+      const canPlace = (nx: number, ny: number) =>
+        map[ny]?.[nx] === 'floor' && !occupied.has(`${nx},${ny}`) && !(nx === playerPos.x && ny === playerPos.y)
+      for (const [dx, dy] of [[0, 2], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = mp.x + dx, ny = mp.y + dy
+        if (canPlace(nx, ny)) {
+          map[ny][nx] = 'spring'
+          break
+        }
+      }
+    }
     this.state.floorType = 'normal'
     this.state.miasmaFloor = false   // ベースキャンプは瘴気なし（フル視界）
+    this.computePlazaPath()   // createTileSprites より前に石畳パスの座標を確定させる
     this.buildFloorVariants(map)
     this.createTileSprites(map)
+    this.buildPlazaDecor(rescued)
     this.addMessage('ベースキャンプ「あるかなひろば」に到着した...')
     this.snapNextRender = true
     this.renderMap()
@@ -2736,16 +3103,128 @@ export class GameScene extends Phaser.Scene {
     this.showMidgardTitle()
   }
 
-  /** イベントフロア専用の固定マップ（宿屋の一室）を生成する */
+  /** 町の石畳パス（十字通路）の座標を確定する。createTileSprites より前に呼ぶこと。
+   *  洞窟口(15,7)→中央広場の噴水(15,14)→プレイヤー開始位置(15,22)の縦の大通りに、
+   *  各NPC列（y=10/15/20）へ抜ける横の小道を接続する（参考画像の十字型導線を踏襲）。 */
+  private computePlazaPath() {
+    this.plazaPath = new Set<string>()
+    const add = (x: number, y: number) => this.plazaPath.add(`${x},${y}`)
+    for (let y = 8; y <= 21; y++) {
+      if (y === 13 || y === 14) continue   // 噴水の手前で通路を止める（水面には敷石を置かない）
+      add(15, y)
+    }
+    for (const y of [10, 15, 20]) {
+      for (let x = 11; x <= 19; x++) add(x, y)
+    }
+  }
+
+  /** 町の建物テクスチャキーを決める。参考画像から抜いた高品質版(town-b-)があればそれを、
+   *  無ければ簡易版(town-bf-)にフォールバックする（採掘師は簡易版のみ）。 */
+  private buildingTextureFor(kind: import('../types').NpcKind): string {
+    return this.textureOk(`town-b-${kind}`) ? `town-b-${kind}` : `town-bf-${kind}`
+  }
+
+  /** 町の装飾（石畳パス・噴水・生垣・トピアリー・救済NPCごとの建物）を生成する。プラザ滞在中のみ。
+   *  配置したタイルは plazaBlocked に登録し通行不可にする（床以外は通り抜け不可、木は枝先まで含めた
+   *  footprint全体をブロック）。方針：装飾は要所に絞って密集させず、各NPCには背後に1棟の建物ランド
+   *  マーク（参考画像から抜いた高品質素材）を添えて「お店」らしさを出す。 */
+  private buildPlazaDecor(rescued: import('../types').NpcKind[]) {
+    for (const d of this.plazaDecor) d.destroy()
+    this.plazaDecor = []
+    this.plazaBlocked = new Set<string>()
+    this.signboardMark?.destroy()
+    this.signboardMark = null
+    const place = (key: string, tx: number, ty: number, scale: number, depth: number) => {
+      if (!this.textureOk(key)) return
+      const { x, y } = this.tileToWorld(tx, ty)
+      const img = this.add.image(x, y, key).setOrigin(0.5, 0.85).setDepth(depth)
+      const natW = img.width || 1, natH = img.height || 1
+      const nat = Math.max(natW, natH)
+      const k = (scale * this.rts) / nat
+      const dispW = natW * k, dispH = natH * k
+      img.setDisplaySize(dispW, dispH)
+      this.plazaDecor.push(img)
+      // 当たり判定は見た目の footprint 全体をブロックする（木の枝先だけ通れてしまう等を防ぐ）。
+      // origin(0.5, 0.85) なので画像の大部分は ty より上に伸びる。横は tx を中心に、
+      // 縦は ty を最下段として footH タイル分ぶん上へ広げる。
+      const footW = Math.max(1, Math.round(dispW / this.rts))
+      const footH = Math.max(1, Math.round(dispH / this.rts))
+      const halfW = Math.floor((footW - 1) / 2)
+      for (let dy = 0; dy < footH; dy++) {
+        for (let dx = -halfW; dx <= footW - 1 - halfW; dx++) {
+          this.plazaBlocked.add(`${tx + dx},${ty - dy}`)
+        }
+      }
+    }
+    const { rx, ry, rh, rw } = GameScene.PLAZA_RECT
+    // 洞窟口：階段マス自体は草地の見た目のまま（地面が空洞にならないよう）にし、
+    // ドアの絵は壁バンドの中だけに収め、横の岩壁と同じ下端ラインで揃える（草地側へはみ出させない）。
+    if (this.textureOk('town-cave')) {
+      const entranceTx = rx + Math.floor(rw / 2)
+      const { x: caveX } = this.tileToWorld(entranceTx, ry)
+      const boundaryY = ry * this.rts
+      const caveImg = this.add.image(caveX, boundaryY, 'town-cave')
+        .setOrigin(0.5, 1)
+        .setDisplaySize(this.rts * 0.75, this.rts)
+        .setDepth(2)
+      this.plazaDecor.push(caveImg)
+    }
+    // 常設デコ：広場の四隅の木、洞窟口を挟むトピアリー、入口の看板、噴水そばのベンチ
+    place('town-tree',      rx + 1,  ry + 2,      1.8, 4)
+    place('town-tree',      rx + 14, ry + 2,      1.8, 4)
+    place('town-tree',      rx + 1,  ry + rh - 3, 1.8, 6)
+    place('town-tree',      rx + 14, ry + rh - 3, 1.8, 6)
+    place('town-topiary',   rx + 6,  ry + 2,      1.1, 4)
+    place('town-topiary',   rx + 10, ry + 2,      1.1, 4)
+    place('town-signboard', rx + 6,  ry + 3,      0.72, 4)
+    // 体当たりで捜し人一覧を開く（当たり判定はplace()内で登録済み。テクスチャ未読込時はplace()が無視するため位置も設定しない）
+    this.signboardPos = this.textureOk('town-signboard') ? { x: rx + 6, y: ry + 3 } : null
+    // 看板の未読「！」：初回・新しい救出があるまで表示。上下にふわふわ揺らす
+    if (this.signboardPos) {
+      const { x: markX, y: markY } = this.tileToWorld(this.signboardPos.x, this.signboardPos.y)
+      const mark = this.add.text(markX, markY - this.rts * 1.1, '！', {
+        fontSize: `${Math.round(this.rts * 0.6)}px`,
+        color: '#ff4444',
+        fontStyle: 'bold',
+        stroke: '#ffffff',
+        strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(6)
+      this.tweens.add({ targets: mark, y: markY - this.rts * 1.35, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+      this.signboardMark = mark
+      this.updateSignboardMark()
+    }
+    place('town-fountain',  15,      14,          2.4, 3)
+    place('town-bench',     13,      15,          1.1, 3)
+    place('town-flowers',   rx + 5,  ry + 6,      0.9, 3)
+    place('town-flowers',   rx + 12, ry + 6,      0.9, 3)
+    // 生垣：各NPC列の手前にワンポイントで（境界線は張らず、控えめなアクセントに留める）
+    place('town-hedge', rx + 2,      12, 1.0, 3)
+    place('town-hedge', rx + 13,     12, 1.0, 3)
+    place('town-hedge', rx + 2,      18, 1.0, 3)
+    place('town-hedge', rx + 13,     18, 1.0, 3)
+    // 救済NPCごとの建物：NPCの2マス上に大きめのランドマークとして配置（NPCは建物の前に立つ構図）
+    // 採掘師は店を構えないNPC（回復の泉のとなりで機能する）で、専用の建物素材が
+    // 素朴な岩塊しかなく「謎の巨大岩」に見えてしまうため、建物は置かない。
+    for (const kind of rescued) {
+      if (kind === 'miner') continue
+      const p = GameScene.PLAZA_PLOTS[kind]
+      place(this.buildingTextureFor(kind), p.x, p.y - 2, 2.3, 3)
+    }
+  }
+
+  // あるかなひろばの矩形（旧10x11から倍近くに拡張。町らしい余白を持たせるため）
+  private static readonly PLAZA_RECT = { rx: 7, ry: 6, rw: 16, rh: 18 }
+
+  /** イベントフロア専用の固定マップ（町の広場）を生成する */
   private generateEventFloorMap(): import('../types').TileType[][] {
     const map: import('../types').TileType[][] = Array.from({ length: MAP_HEIGHT }, () =>
       Array(MAP_WIDTH).fill('wall')
     )
-    const rx = 5, ry = 7, rw = 10, rh = 11
-    for (let y = ry; y < ry + rh; y++) {
+    const { rx, ry, rw } = GameScene.PLAZA_RECT
+    for (let y = ry; y < ry + GameScene.PLAZA_RECT.rh; y++) {
       for (let x = rx; x < rx + rw; x++) map[y][x] = 'floor'
     }
-    map[ry + 1][rx + Math.floor(rw / 2)] = 'stairs'
+    map[ry][rx + Math.floor(rw / 2)] = 'stairs'
     return map
   }
 
@@ -4104,7 +4583,8 @@ export class GameScene extends Phaser.Scene {
         this.makeTransparent(`attack_${dir}_${i}`)
       }
     }
-    for (const key of ['horu', 'master', 'maho', 'merchant', 'deviling', 'masterring']) {
+    // refine/shadow/spellbook/miner/junk/toolshop は npc.png から切り出し済みで透過処理不要
+    for (const key of ['merchant', 'deviling', 'masterring']) {
       this.makeTransparent(key)
     }
   }
@@ -4207,6 +4687,23 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** プレイヤー表示の基準サイズ（rts依存のため毎回算出） */
+  private playerDisplayH(): number { return this.rts * 1.38 }
+  private playerDisplayW(): number { return this.rts * 1.25 }
+
+  /** プレイヤー描画の拡縮率。攻撃コマごとの生フレーム高さではなく、振りかぶり等で
+   *  縦に伸びにくい基準フレーム（右斬り/歩行）の高さから算出した「武器種ごとに一定の倍率」を使う。
+   *  上下・斜め攻撃は剣や矢が縦方向に大きく伸びてフレーム自体の高さが増えるため、コマごとの高さで
+   *  正規化すると振りかぶるたびキャラ本体が縮んで見える不具合があった（固定倍率にすることで解消）。 */
+  private getPlayerFitScale(): number {
+    const refKey = this.useArcherSprites() ? 'archer_walk_down_1' : 'attack_right_1'
+    if (this.textures.exists(refKey)) {
+      const f = this.textures.get(refKey).get()
+      if (f && f.height > 0) return this.playerDisplayH() / f.height
+    }
+    return 1
+  }
+
   /** 弓装備＆弓グラ読込済みか（プレイヤーの見た目セット切り替え判定） */
   private useArcherSprites(): boolean {
     return this.hasArcherAnims && weaponKindOf(this.state?.player?.equipment?.weapon) === 'bow'
@@ -4290,8 +4787,25 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
+  /** テクスチャが利用可能か（読込失敗を除外） */
+  private textureOk(key: string): boolean {
+    return !this.failedTextures.has(key) && this.textures.exists(key)
+  }
+
+  /** 現在階のテーマ付きv2タイルキーを返す。v2が無ければ従来キーへフォールバック */
+  private themedTileKey(kind: 'pitfall' | 'mud' | 'trap' | 'spring' | 'spring-dry', legacy: string): string {
+    const v2 = `t2-${kind}-${dungeonTheme(this.state?.player?.floor ?? 1)}`
+    return this.textureOk(v2) ? v2 : legacy
+  }
+
   private buildFloorVariants(map: import('../types').TileType[][]) {
-    const keys = ['tile-floor1', 'tile-floor2', 'tile-floor3']
+    // 同一テーマ内の微バリエーション3種をタイルごとにランダム配置
+    // （テーマ自体は階層帯で固定：茶→灰→青。旧「3色ランダム混合」は柄がうるさいため廃止）
+    const theme = dungeonTheme(this.state?.player?.floor ?? 1)
+    const keys = [1, 2, 3].map(n => {
+      const v2 = `t2-floor-${theme}-${n}`
+      return this.textureOk(v2) ? v2 : `tile-floor${n}`
+    })
     this.floorVariantMap = map.map(row =>
       row.map(tile =>
         tile === 'floor' ? keys[Math.floor(Math.random() * keys.length)] : ''
@@ -4309,14 +4823,22 @@ export class GameScene extends Phaser.Scene {
     this.tileSprites = map.map((row, y) =>
       row.map((tile, x) => {
         let key: string
-        if      (tile === 'wall')    key = 'tile-wall'
+        // あるかなひろば（町）は草地。十字通路は石畳、階段は洞窟口グラフィックに差し替える
+        // （「階段を降りる」ではなく「洞窟に入る」見せ方にするため）。プロップ未配置なら通常表示へフォールバック。
+        // 階段マスの見た目は下地の草地のままにし、洞窟口グラフィックは buildPlazaDecor() 側で
+        // 壁バンドに埋め込む形の装飾として別レイヤーに重ねる（このマスの地面を空洞にしないため）。
+        if      (this.isEventFloor && tile === 'floor' && this.plazaPath.has(`${x},${y}`) && this.textureOk('town-stonepath')) key = 'town-stonepath'
+        else if (this.isEventFloor && (tile === 'floor' || tile === 'stairs') && this.textureOk('town-grass')) key = 'town-grass'
+        else if (tile === 'wall')    key = 'tile-wall'
         else if (tile === 'floor')   key = this.floorVariantMap[y]?.[x] ?? 'tile-floor1'
         else if (tile === 'stairs')  key = 'tile-stairs'
-        else if (tile === 'trap')    key = 'trap'
-        else if (tile === 'mud')     key = 'tile-mud'
+        else if (tile === 'trap')    key = this.themedTileKey('trap', 'trap')
+        else if (tile === 'mud')     key = this.themedTileKey('mud', 'tile-mud')
         // 泉：使用済み（枯渇）はセーブ復元時もそのまま枯れ画像で表示する
-        else if (tile === 'spring')  key = this.state?.driedSprings?.includes(`${x},${y}`) ? 'tile-spring-dry' : 'tile-spring'
-        else if (tile === 'pitfall') key = 'tile-pitfall'
+        else if (tile === 'spring')  key = this.state?.driedSprings?.includes(`${x},${y}`)
+          ? this.themedTileKey('spring-dry', 'tile-spring-dry')
+          : this.themedTileKey('spring', 'tile-spring')
+        else if (tile === 'pitfall') key = this.themedTileKey('pitfall', 'tile-pitfall')
         else return null
 
         if (this.failedTextures.has(key) || !this.textures.exists(key)) return null
@@ -4325,8 +4847,12 @@ export class GameScene extends Phaser.Scene {
           .setDisplaySize(rts + 6, rts + 6)
           .setDepth(-1)
           .setVisible(false)
-        if      (tile === 'floor') img.setTint(floorTint)
-        else if (tile === 'wall')  img.setTint(wallTint)
+        // 町の草地・石畳・洞窟口は帯ティントを掛けない（元の色をそのまま活かす）
+        if (this.isEventFloor && (key === 'town-grass' || key === 'town-stonepath' || key === 'town-cave')) return img
+        // v2テーマタイルは絵自体に色があるため帯ティントを白方向へ65%弱めて質感を残す
+        const v2 = key.startsWith('t2-')
+        if      (tile === 'floor') img.setTint(v2 ? softenTint(floorTint, 0.65) : floorTint)
+        else if (tile === 'wall')  img.setTint(v2 ? softenTint(wallTint, 0.65) : wallTint)
         return img
       })
     )
@@ -4440,6 +4966,7 @@ export class GameScene extends Phaser.Scene {
       this.stairsGlow = null
     }
     this.stairsGlowPos = null
+    if (this.isEventFloor) return   // あるかなひろばの洞窟口は素の見た目のまま（ダンジョン階段の魔法陣グローは出さない）
     for (let y = 0; y < map.length && !this.stairsGlowPos; y++) {
       for (let x = 0; x < map[y].length; x++) {
         if (map[y][x] === 'stairs') { this.stairsGlowPos = { x, y }; break }
@@ -4519,6 +5046,7 @@ export class GameScene extends Phaser.Scene {
         else if (tile === 'mud')     this.graphics.fillStyle(0x8B4513)
         else if (tile === 'spring')  this.graphics.fillStyle(0x00ccaa)
         else if (tile === 'pitfall') this.graphics.fillStyle(0x111111)
+        else if (tile === 'jail')    this.graphics.fillStyle(0x7a5a2a)   // 牢屋の柵（木/鉄格子色）
         else continue
         this.graphics.fillRect(x * rts, y * rts, rts, rts)
       }
@@ -4530,7 +5058,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ── アイテム描画（ワールド座標固定＋ふわふわ浮遊）──
-    const boxReady = !this.failedTextures.has('tile-box') && this.textures.exists('tile-box')
+    // 宝箱はv2の木箱を優先（縦横比を保ってタイル枠に収める）。無ければ旧boxへフォールバック
+    const boxKey = this.textureOk('t2-box') ? 't2-box' : 'tile-box'
+    const boxReady = this.textureOk(boxKey)
     const liveItemIds = new Set(items.map(i => i.id))
     for (const [id, g] of this.itemGraphics) {
       if (!liveItemIds.has(id)) { this.tweens.killTweensOf(g); g.destroy(); this.itemGraphics.delete(id) }
@@ -4540,8 +5070,10 @@ export class GameScene extends Phaser.Scene {
       if (!g) {
         const { x: wx, y: wy } = this.tileToWorld(item.position.x, item.position.y)
         if (boxReady) {
-          g = this.add.image(wx, wy, 'tile-box')
-            .setDisplaySize(rts - 2, rts - 2).setDepth(3)
+          const img = this.add.image(wx, wy, boxKey).setDepth(3)
+          const s = (rts - 2) / Math.max(img.width || 1, img.height || 1)
+          img.setDisplaySize((img.width || 1) * s, (img.height || 1) * s)
+          g = img
         } else {
           const icon = item.coin ? '🪙' : item.type === 'heal' ? '💊' : item.type === 'spell' ? '📖' : item.weaponKind === 'bow' ? '🏹' : '⚔️'
           g = this.add.text(wx, wy, icon, { fontSize: `${Math.round(rts * 0.6)}px` }).setOrigin(0.5).setDepth(3)
@@ -4593,6 +5125,35 @@ export class GameScene extends Phaser.Scene {
         g.setVisible(true)
       }
     }
+
+    // ── 救済NPC描画（徘徊＝パターン1／牢屋内＝パターン3）。画像未提供のため絵文字表示。──
+    const drawRescueNpc = (
+      cur: Phaser.GameObjects.GameObject | null,
+      pos: import('../types').Position | null,
+      kind: import('../types').NpcKind | null,
+    ): Phaser.GameObjects.GameObject | null => {
+      if (!pos || !kind) { if (cur) cur.destroy(); return null }
+      const { x: wx, y: wy } = this.tileToWorld(pos.x, pos.y)
+      const c = NPC_CATALOG[kind]
+      const tex = c.texture
+      let g = cur
+      if (!g) {
+        if (!this.failedTextures.has(tex) && this.textures.exists(tex)) {
+          const pf = this.getVisibleFraction(this.hasPlayerAnims ? this.getPlayerAnimKeys(this.playerDir).idleKey : 'player')
+          const { wFrac, hFrac } = this.getVisibleFraction(tex)
+          g = this.add.image(wx, wy, tex).setDisplaySize(rts * 1.25 * pf.wFrac / wFrac, rts * 1.38 * pf.hFrac / hFrac).setOrigin(0.5).setDepth(5)
+        } else {
+          g = this.add.text(wx, wy, c.icon, { fontSize: `${Math.round(rts * 0.7)}px` }).setOrigin(0.5).setDepth(5)
+        }
+      } else {
+        (g as Phaser.GameObjects.Image | Phaser.GameObjects.Text).setPosition(wx, wy)
+      }
+      const vis = this.isVisible(pos.x, pos.y)
+      ;(g as Phaser.GameObjects.Image | Phaser.GameObjects.Text).setVisible(vis)
+      return g
+    }
+    this.rescueSprite  = drawRescueNpc(this.rescueSprite,  this.floorRescue?.position ?? null, this.floorRescue?.kind ?? null)
+    this.jailNpcSprite = drawRescueNpc(this.jailNpcSprite, this.jailCell?.npcPos ?? null,      this.jailCell?.kind ?? null)
 
     // ── 敵描画 ──
     const liveEnemyIds = new Set(enemies.map(e => e.id))
@@ -4830,9 +5391,13 @@ export class GameScene extends Phaser.Scene {
         buff.setVisible(false)
       }
 
-      // 強敵警告マーク：3発以内でプレイヤーの最大HPを削り切る攻撃力を持つ敵の頭上に💀
-      const isDanger = vis && isDangerousEnemy(enemy, player)
+      // 強敵警告マーク：3発以内でプレイヤーの最大HPを削り切る敵の頭上に💀。
+      // さらに現在HPを1発で削り切る（＝今受けたら即死）敵には赤いオーラを重ねて最大警告。
+      const isLethal = vis && isLethalEnemy(enemy, player)
+      const isDanger = isLethal || (vis && isDangerousEnemy(enemy, player))
+      const markerY  = ey - rts * 0.95
       let danger = this.dangerMarkers.get(enemy.id)
+      let dglow  = this.dangerGlows.get(enemy.id)
       if (isDanger) {
         if (!danger) {
           danger = this.add.text(ex, ey, '💀', { fontSize: `${Math.round(rts * 0.55)}px` })
@@ -4840,10 +5405,30 @@ export class GameScene extends Phaser.Scene {
           this.tweens.add({ targets: danger, scale: 1.3, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
           this.dangerMarkers.set(enemy.id, danger)
         }
-        danger.setPosition(ex, ey - rts * 0.95)
+        danger.setPosition(ex, markerY)
         danger.setVisible(true)
-      } else if (danger) {
-        danger.setVisible(false)
+
+        if (isLethal) {
+          // 赤い放射グロー（加算合成）を💀の背後で強く脈動させる
+          this.ensureGlowTexture()
+          if (!dglow) {
+            dglow = this.add.image(ex, markerY, 'miasma-glow')
+              .setDepth(7)                            // 💀(depth8)の一段下
+              .setBlendMode(Phaser.BlendModes.ADD)
+              .setTint(0xff2222)
+              .setDisplaySize(rts * 1.6, rts * 1.6)
+            // 強い脈動はアルファで表現（scaleのtweenはsetDisplaySizeを打ち消すため使わない）
+            this.tweens.add({ targets: dglow, alpha: { from: 0.5, to: 1 }, duration: 360, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+            this.dangerGlows.set(enemy.id, dglow)
+          }
+          dglow.setPosition(ex, markerY)
+          dglow.setVisible(true)
+        } else if (dglow) {
+          dglow.setVisible(false)
+        }
+      } else {
+        if (danger) danger.setVisible(false)
+        if (dglow)  dglow.setVisible(false)
       }
     }
 
@@ -4854,23 +5439,27 @@ export class GameScene extends Phaser.Scene {
     // フレーム差し替え時にscaleは再計算されないため、武器切替・攻撃アニメのコマ送りのたびに
     // 見た目サイズがブレる（剣基準で固定されると弓が縮んで見える＝報告の逆転現象）。
     // 毎回呼び直して常に同じ表示サイズへ強制することで解消する。
-    const PLAYER_DISPLAY_W = rts * 1.25
-    const PLAYER_DISPLAY_H = rts * 1.38
+    const PLAYER_DISPLAY_W = this.playerDisplayW()
+    const PLAYER_DISPLAY_H = this.playerDisplayH()
+    // 武器種ごとに一定の拡縮率（getPlayerFitScale）を全コマへ一律適用する。
+    // フレームごとの生高さで正規化すると、上下/斜め攻撃で剣や矢が縦に伸びてbboxが増えた分だけ
+    // キャラ本体が縮んで見える不具合になるため、基準フレームから求めた固定倍率のみを使う。
+    const fitPlayer = (sp: Phaser.GameObjects.Sprite) => {
+      const fw = sp.frame?.width || 0
+      const fh = sp.frame?.height || 0
+      const scale = this.getPlayerFitScale()
+      if (fw > 0 && fh > 0) sp.setDisplaySize(fw * scale, fh * scale)
+      else sp.setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
+    }
     if (!this.playerGraphic) {
       if (this.hasPlayerAnims) {
         const { idleKey, flipX } = this.getPlayerAnimKeys(this.playerDir)
-        const sprite = this.add.sprite(px, py, idleKey)
-          .setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
-          .setDepth(6)
+        const sprite = this.add.sprite(px, py, idleKey).setDepth(6)
+        fitPlayer(sprite)
         if (flipX) sprite.setFlipX(true)
-        // 歩行・攻撃アニメはコマごとに素材解像度が異なるため、フレームが切り替わるたびに
-        // displaySizeを固定値へ再適用してサイズのブレを防ぐ（開始コマ・以降コマの両方をケア）
-        sprite.on('animationstart', () => {
-          sprite.setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
-        })
-        sprite.on('animationupdate', () => {
-          sprite.setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
-        })
+        // 歩行・攻撃アニメはコマごとに素材解像度が異なるため、フレーム切替のたびに縦基準で再フィット
+        sprite.on('animationstart',  () => fitPlayer(sprite))
+        sprite.on('animationupdate', () => fitPlayer(sprite))
         this.playerGraphic = sprite
       } else {
         this.playerGraphic = this.add.rectangle(px, py, rts - 2, rts - 2, 0x44ff44).setDepth(6)
@@ -4897,8 +5486,8 @@ export class GameScene extends Phaser.Scene {
           g.setTexture(idleKey)
           g.setFlipX(flipX)
         }
-        // テクスチャ切替のたびにdisplaySizeを再固定（剣⇔弓で素材解像度が違うため）
-        g.setDisplaySize(PLAYER_DISPLAY_W, PLAYER_DISPLAY_H)
+        // テクスチャ切替のたびに縦基準で再フィット（剣⇔弓で素材解像度が違うため）
+        fitPlayer(g)
       }
     }
     this.snapNextRender = false

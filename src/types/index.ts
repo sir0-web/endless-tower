@@ -1,4 +1,7 @@
-export type TileType = 'floor' | 'wall' | 'stairs' | 'trap' | 'mud' | 'spring' | 'pitfall'
+export type TileType = 'floor' | 'wall' | 'stairs' | 'trap' | 'mud' | 'spring' | 'pitfall' | 'jail'
+
+// あるかなひろばの住人（救済して増やす）。既存4種＋新規3種。
+export type NpcKind = 'refine' | 'shadow' | 'spellbook' | 'merchant' | 'miner' | 'junk' | 'toolshop'
 
 export interface Position {
   x: number
@@ -57,7 +60,7 @@ export interface Item {
   wing?: 'fly' | 'butterfly'
 }
 
-export type FacilityKind = 'refine' | 'shadow' | 'spellbook' | 'merchant'
+export type FacilityKind = 'refine' | 'shadow' | 'spellbook' | 'merchant' | 'miner' | 'junk' | 'toolshop'
 
 // いいね報酬（サーバー抽選）。potion時のみ reward_name に色名が入る。
 export interface LikeReward {
@@ -176,6 +179,10 @@ export interface GameState {
   driedSprings: string[]
   // 瘴気が強いフロア（デバフ）：視界が通常より2マス狭くなり紫フォグがかかる。normalフロアでのみ抽選
   miasmaFloor: boolean
+  // あるかなひろばで救済済みの住人（周回ごとにリセット。プラザに登場＆機能する）
+  rescuedNpcs: NpcKind[]
+  // さがし人看板：初回・未読の更新があるとtrue（看板の上に「！」を表示）。看板を開くとfalseになる
+  signboardUnread: boolean
 }
 
 export interface WindowGameState {
@@ -260,5 +267,16 @@ declare global {
     runSpellbookChallenge?: (spellId: string) => SpellbookResult | null
     // ── 行商人：女神のコインで羽を購入（所持上限はWING_ITEMS.holdMax）──
     buyMerchantItem?: (key: 'fly' | 'butterfly') => { ok: boolean; reason?: 'coin' | 'limit' }
+    // ── 新NPC（あるかなひろば救済で増える）──
+    // がらくた屋：いらない装備を女神のコインに換金
+    runJunkConvert?: (itemId: string) => { ok: boolean; coins?: number } | null
+    // どうぐや：女神のコインで回復薬を購入
+    getToolShopItems?: () => { key: string; name: string; icon: string; cost: number; desc: string }[]
+    buyToolItem?: (key: string) => { ok: boolean; reason?: 'coin' | 'limit' } | null
+    // 牢屋：柵の開錠（3手段）。失敗しても資源は消費、成功で解放
+    getJailUnlockState?: () => { npcName: string; bagEquips: { id: string; name: string }[]; coins: number; statPoints: number } | null
+    tryJailUnlock?: (method: 'equip' | 'coin' | 'point', sacrificeId?: string) => { ok: boolean; message: string; broke?: boolean } | null
+    // 広場の掲示板：捜し人（住人救済）一覧
+    getRescueList?: () => { person: string; role: string; rescued: boolean }[]
   }
 }

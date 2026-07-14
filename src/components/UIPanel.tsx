@@ -93,8 +93,20 @@ export function UIPanel() {
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
   const [healDetail, setHealDetail] = useState<string | null>(null)
   const [statsOpen, setStatsOpen] = useState(true)
+  // スロット筐体の折りたたみ（PC。畳むとログ/インベントリが広がる。スマホはCSSで常時表示＝影響なし）
+  const [slotOpen, setSlotOpen] = useState(() => localStorage.getItem('ebt_slot_open') !== '0')
+  const toggleSlot = () => setSlotOpen(o => { const n = !o; localStorage.setItem('ebt_slot_open', n ? '1' : '0'); return n })
   const [name, setName] = useState(getDisplayName)
+  // PC/スマホでパネル配置を出し分ける（スマホは従来配置を厳守して非影響を担保）
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
   const logRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const on = () => setIsMobile(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
 
   useEffect(() => {
     const update = () => { if (window.gameState) setGs({ ...window.gameState }) }
@@ -142,6 +154,227 @@ export function UIPanel() {
   const expNeeded = gs.level * 30 + 10
   const expPct   = Math.min(100, Math.round((gs.exp / expNeeded) * 100))
 
+  // ── 各パネルをJSX変数化し、PC/スマホで「配置だけ」を変える（内容は共通＝重複なし）──
+  const statPanel = (
+    <div className="stat-panel">
+      <p className="stat-panel-label">ステータス</p>
+      {ALLOC_STATS.map(({ key, label }) => {
+        const d = statDiff(key)
+        return (
+          <div key={key} className={`sp-row ${gs.statPoints > 0 ? 'sp-has-pts' : ''}`}>
+            <span className="sp-label">{label}</span>
+            <span className="sp-val">{gs[key]}</span>
+            {d !== 0 && (
+              <span className="sp-diff" style={{ color: d > 0 ? '#44ff88' : '#ff5555' }}>
+                {d > 0 ? `+${d}` : d}
+              </span>
+            )}
+            {gs.statPoints > 0 && (
+              <HoldRepeatButton className="stat-plus-btn" onPress={() => window.allocateStat?.(key)}>＋</HoldRepeatButton>
+            )}
+          </div>
+        )
+      })}
+      <div className="sp-row">
+        <span className="sp-label">残pt</span>
+        <span className="sp-val" style={{ color: gs.statPoints > 0 ? '#ffdd00' : '#8888aa' }}>{gs.statPoints}</span>
+      </div>
+      {hpDiff !== 0 && (
+        <div className="sp-row">
+          <span className="sp-label" style={{ color: '#8888a8' }}>HP上限</span>
+          <span className="sp-diff" style={{ color: hpDiff > 0 ? '#44ff88' : '#ff5555' }}>
+            {hpDiff > 0 ? `+${hpDiff}` : hpDiff}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+
+  const equipPanel = (
+    <div className="equip-panel-compact">
+      <p className="equip-panel-label">装備</p>
+      {SLOTS.map(slot => {
+        const item = gs.equipment[slot.key]
+        return (
+          <div key={slot.key} className={`epc-row ${item ? 'epc-has' : 'epc-empty'}`}>
+            <span className="epc-icon">{slot.icon}</span>
+            <span className="epc-name">
+              {item ? item.name : '─'}
+              {!!item?.refineLevel && <span className="icr-refine"> +{item.refineLevel}</span>}
+              {item?.locked && ' 🔒'}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const logPanel = (
+    <div className="log-panel">
+      <p className="section-title-sm">ログ</p>
+      <div className="log-list" ref={logRef}>
+        {gs.messages.length === 0
+          ? <div className="log-entry" style={{ color: '#666688' }}>─ ログなし ─</div>
+          : [...gs.messages].reverse().map((msg, i) => (
+              <div key={i} className="log-entry" style={{ color: getLogColor(msg) }}>{msg}</div>
+            ))
+        }
+      </div>
+    </div>
+  )
+
+  const inventoryPanel = (
+    <div className="items-panel">
+
+      <p className="section-title-sm ip-inventory-title">インベントリ</p>
+
+      <div className="ip-tabs ip-tabs-indent">
+        {ACCORDION_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            className={`ip-tab ${openTab === key ? 'ip-tab-open' : ''}`}
+            onClick={() => setOpenTab(t => t === key ? null : key)}
+          >
+            <span className="ip-tab-label">{label}</span>
+            <span className="ip-tab-toggle">{openTab === key ? '－' : '＋'}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="ip-accordion-body">
+        {openTab === 'item' && (
+          <div className="ip-scroll">
+            {Object.entries(healGroups).map(([name, items]) => {
+              const isSelected = selId === items[0].id
+              const showDetail = isSelected && healDetail === name
+              const info = getHealInfo(items[0])
+              return (
+                <div key={name}>
+                  <div className={`icr icr-heal ${isSelected ? 'icr-sel' : ''}`}
+                    onClick={() => selectItem(items[0].id)}>
+                    <span>{info.icon}</span>
+                    <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                  </div>
+                  {isSelected && (
+                    <>
+                      <div className="icr-act-row">
+                        <button className="icr-act"
+                          onClick={() => { window.useHeal?.(items[0].id); setSelId(null); setHealDetail(null) }}>
+                          使う
+                        </button>
+                        <button className="icr-act icr-act-detail"
+                          onClick={() => setHealDetail(s => s === name ? null : name)}>
+                          詳細
+                        </button>
+                        <button className="icr-act icr-act-cancel"
+                          onClick={() => { setSelId(null); setHealDetail(null) }}>
+                          キャンセル
+                        </button>
+                      </div>
+                      {showDetail && (
+                        <div className="spell-detail-panel">
+                          <div className="spell-detail-title">{info.icon} {name}</div>
+                          <div className="spell-detail-desc">{info.desc}</div>
+                          <div className="spell-detail-effect">{info.effect}</div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })}
+            {gs.heals.length === 0 && <p className="icr-empty">なし</p>}
+          </div>
+        )}
+
+        {openTab === 'equip' && (
+          <div className="ip-scroll">
+            {gs.bag.map(item => (
+              <div key={item.id}>
+                <div className={`icr icr-bag ${selId === item.id ? 'icr-sel' : ''}`}
+                  onClick={() => selectItem(item.id)}>
+                  <span>📦</span>
+                  <span className="icr-name">
+                    {item.name}
+                    {!!item.refineLevel && <span className="icr-refine"> +{item.refineLevel}</span>}
+                  </span>
+                  {item.locked && <span className="icr-lock">🔒</span>}
+                </div>
+                {selId === item.id && (
+                  <div className="icr-act-row">
+                    <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
+                    {item.type === 'equip' && (
+                      <button
+                        className="icr-act icr-act-lock"
+                        title={item.locked ? 'ロックを解除' : 'ロックする（精錬の生贄・破棄から保護）'}
+                        onClick={() => { window.toggleLockItem?.(item.id) }}
+                      >
+                        {item.locked ? '🔓' : '🔒'}
+                      </button>
+                    )}
+                    <button
+                      className="icr-act icr-act-discard"
+                      disabled={!!item.locked}
+                      title={item.locked ? 'ロック中は捨てられません' : undefined}
+                      onClick={() => { window.discardFromBag?.(item.id); setSelId(null) }}
+                    >すてる</button>
+                    <button className="icr-act icr-act-cancel" onClick={() => setSelId(null)}>キャンセル</button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {gs.bag.length === 0 && <p className="icr-empty">なし</p>}
+          </div>
+        )}
+
+        {openTab === 'spell' && (
+          <div className="ip-scroll">
+            {Object.entries(spellGroups).map(([name, items]) => {
+              const info = SPELL_INFO[name]
+              const isSelected = selId === items[0].id
+              const showDetail = isSelected && spellDetail === name
+              return (
+                <div key={name}>
+                  <div className={`icr icr-spell-book ${isSelected ? 'icr-sel' : ''}`}
+                    onClick={() => selectItem(items[0].id)}>
+                    <span>📖</span>
+                    <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
+                  </div>
+                  {isSelected && (
+                    <>
+                      <div className="icr-act-row">
+                        <button className="icr-act icr-act-spell"
+                          onClick={() => { window.useSpell?.(items[0].id); setSelId(null); setSpellDetail(null) }}>
+                          使う
+                        </button>
+                        <button className="icr-act icr-act-detail"
+                          onClick={() => setSpellDetail(s => s === name ? null : name)}>
+                          詳細
+                        </button>
+                      </div>
+                      {showDetail && info && (
+                        <div className="spell-detail-panel">
+                          <div className="spell-detail-title">{info.icon} {name}</div>
+                          <div className="spell-detail-desc">{info.desc}</div>
+                          <div className="spell-detail-effect">{info.effect}</div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })}
+            {gs.spells.length === 0 && <p className="icr-empty">なし</p>}
+          </div>
+        )}
+
+        {!openTab && <p className="icr-empty">タップして表示</p>}
+      </div>
+
+    </div>
+  )
+
   return (
     <div className="ui-panel">
 
@@ -173,255 +406,79 @@ export function UIPanel() {
         </div>
       </div>
 
-      {/* ── スロット筐体（背景画像 + リール + 液晶） ── */}
-      <SlotMachine>
-        <BonusVideo />
-      </SlotMachine>
+      {/* ── スロット筐体（背景画像 + リール + 液晶）──
+          PCでは折りたたみトグルで縦スペースをログ/インベントリへ譲れる。
+          SlotMachineは常時マウントのまま（撃破連動のスピン処理を止めないため）、
+          折りたたみ時はCSSで非表示にする。スマホはCSSでトグル非表示＋常時表示。 */}
+      <button
+        type="button"
+        className={`slot-toggle-btn ${slotOpen ? 'slot-open' : ''}`}
+        onClick={toggleSlot}
+      >
+        <span>{slotOpen ? '女神の加護（スロット）を隠す' : '女神の加護（スロット）を表示'}</span>
+        <span className="slot-toggle-arrow">{slotOpen ? '▲' : '▼'}</span>
+      </button>
+      <div className={`slot-wrap ${slotOpen ? '' : 'slot-collapsed'}`}>
+        <SlotMachine>
+          <BonusVideo />
+        </SlotMachine>
+      </div>
 
-      {/* ── 中段：ステータス（左50%）＋装備（右50%） ── */}
-      <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
-
-        {/* PC版：折りたたみトグル */}
-        <button
-          type="button"
-          className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
-          onClick={() => setStatsOpen(o => !o)}
-        >
-          <span className="se-title">ステータス / 装備</span>
-          {!statsOpen && gs.statPoints > 0 && (
-            <span className="se-pt-alert">⚡ 未付与ポイントあり</span>
-          )}
-          {!statsOpen && gs.bag.length > 0 && (
-            <span className="se-badge se-badge-bag">📦 {gs.bag.length}</span>
-          )}
-          <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
-        </button>
-
-        <div className="stats-equip-inner">
-
-        {/* 左：STR/AGI/DEX/VIT/INT/LUK + EXP */}
-        <div className="stat-panel">
-          <p className="stat-panel-label">ステータス</p>
-          {ALLOC_STATS.map(({ key, label }) => {
-            const d = statDiff(key)
-            return (
-              <div key={key} className={`sp-row ${gs.statPoints > 0 ? 'sp-has-pts' : ''}`}>
-                <span className="sp-label">{label}</span>
-                <span className="sp-val">{gs[key]}</span>
-                {d !== 0 && (
-                  <span className="sp-diff" style={{ color: d > 0 ? '#44ff88' : '#ff5555' }}>
-                    {d > 0 ? `+${d}` : d}
-                  </span>
-                )}
-                {gs.statPoints > 0 && (
-                  <HoldRepeatButton className="stat-plus-btn" onPress={() => window.allocateStat?.(key)}>＋</HoldRepeatButton>
-                )}
-              </div>
-            )
-          })}
-          <div className="sp-row">
-            <span className="sp-label">残pt</span>
-            <span className="sp-val" style={{ color: gs.statPoints > 0 ? '#ffdd00' : '#8888aa' }}>{gs.statPoints}</span>
-          </div>
-          {hpDiff !== 0 && (
-            <div className="sp-row">
-              <span className="sp-label" style={{ color: '#8888a8' }}>HP上限</span>
-              <span className="sp-diff" style={{ color: hpDiff > 0 ? '#44ff88' : '#ff5555' }}>
-                {hpDiff > 0 ? `+${hpDiff}` : hpDiff}
-              </span>
+      {/* ── 中段・下段：PC と スマホで「配置だけ」出し分け ──
+          PC : 上段=装備＋ログ（参照・折りたたみ可）／下段=ステータス＋インベントリ（メイン作業域）。
+               ステータスとインベントリを隣接させ、装備品選択時の増減(+5等)を隣で見比べられる。
+          スマホ: 従来どおり 上段=ステータス＋装備／下段=ログ(非表示)＋インベントリ（非影響を厳守）。 */}
+      {isMobile ? (
+        <>
+          <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
+            <button
+              type="button"
+              className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
+              onClick={() => setStatsOpen(o => !o)}
+            >
+              <span className="se-title">ステータス / 装備</span>
+              {!statsOpen && gs.statPoints > 0 && (
+                <span className="se-pt-alert">⚡ 未付与ポイントあり</span>
+              )}
+              {!statsOpen && gs.bag.length > 0 && (
+                <span className="se-badge se-badge-bag">📦 {gs.bag.length}</span>
+              )}
+              <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
+            </button>
+            <div className="stats-equip-inner">
+              {statPanel}
+              {equipPanel}
             </div>
-          )}
-        </div>
-
-        {/* 右：装備欄（アイコン＋装備名） */}
-        <div className="equip-panel-compact">
-          <p className="equip-panel-label">装備</p>
-          {SLOTS.map(slot => {
-            const item = gs.equipment[slot.key]
-            return (
-              <div key={slot.key} className={`epc-row ${item ? 'epc-has' : 'epc-empty'}`}>
-                <span className="epc-icon">{slot.icon}</span>
-                <span className="epc-name">
-                  {item ? item.name : '─'}
-                  {!!item?.refineLevel && <span className="icr-refine"> +{item.refineLevel}</span>}
-                  {item?.locked && ' 🔒'}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-
-        </div>{/* /.stats-equip-inner */}
-      </div>
-
-      {/* ── 下段：バトルログ（左2/3）＋アイテム（右1/3） ── */}
-      <div className="log-items-row">
-
-        {/* バトルログ */}
-        <div className="log-panel">
-          <p className="section-title-sm">ログ</p>
-          <div className="log-list" ref={logRef}>
-            {gs.messages.length === 0
-              ? <div className="log-entry" style={{ color: '#666688' }}>─ ログなし ─</div>
-              : [...gs.messages].reverse().map((msg, i) => (
-                  <div key={i} className="log-entry" style={{ color: getLogColor(msg) }}>{msg}</div>
-                ))
-            }
           </div>
-        </div>
-
-        {/* アイテム欄：アコーディオン（アイテム／装備／魔法の書） */}
-        <div className="items-panel">
-
-          <p className="section-title-sm ip-inventory-title">インベントリ</p>
-
-          <div className="ip-tabs ip-tabs-indent">
-            {ACCORDION_TABS.map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                className={`ip-tab ${openTab === key ? 'ip-tab-open' : ''}`}
-                onClick={() => setOpenTab(t => t === key ? null : key)}
-              >
-                <span className="ip-tab-label">{label}</span>
-                <span className="ip-tab-toggle">{openTab === key ? '－' : '＋'}</span>
-              </button>
-            ))}
+          <div className="log-items-row">
+            {logPanel}
+            {inventoryPanel}
           </div>
-
-          <div className="ip-accordion-body">
-            {openTab === 'item' && (
-              <div className="ip-scroll">
-                {Object.entries(healGroups).map(([name, items]) => {
-                  const isSelected = selId === items[0].id
-                  const showDetail = isSelected && healDetail === name
-                  const info = getHealInfo(items[0])
-                  return (
-                    <div key={name}>
-                      <div className={`icr icr-heal ${isSelected ? 'icr-sel' : ''}`}
-                        onClick={() => selectItem(items[0].id)}>
-                        <span>{info.icon}</span>
-                        <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
-                      </div>
-                      {isSelected && (
-                        <>
-                          <div className="icr-act-row">
-                            <button className="icr-act"
-                              onClick={() => { window.useHeal?.(items[0].id); setSelId(null); setHealDetail(null) }}>
-                              使う
-                            </button>
-                            <button className="icr-act icr-act-detail"
-                              onClick={() => setHealDetail(s => s === name ? null : name)}>
-                              詳細
-                            </button>
-                            <button className="icr-act icr-act-cancel"
-                              onClick={() => { setSelId(null); setHealDetail(null) }}>
-                              キャンセル
-                            </button>
-                          </div>
-                          {showDetail && (
-                            <div className="spell-detail-panel">
-                              <div className="spell-detail-title">{info.icon} {name}</div>
-                              <div className="spell-detail-desc">{info.desc}</div>
-                              <div className="spell-detail-effect">{info.effect}</div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-                {gs.heals.length === 0 && <p className="icr-empty">なし</p>}
-              </div>
-            )}
-
-            {openTab === 'equip' && (
-              <div className="ip-scroll">
-                {gs.bag.map(item => (
-                  <div key={item.id}>
-                    <div className={`icr icr-bag ${selId === item.id ? 'icr-sel' : ''}`}
-                      onClick={() => selectItem(item.id)}>
-                      <span>📦</span>
-                      <span className="icr-name">
-                        {item.name}
-                        {!!item.refineLevel && <span className="icr-refine"> +{item.refineLevel}</span>}
-                      </span>
-                      {item.locked && <span className="icr-lock">🔒</span>}
-                    </div>
-                    {selId === item.id && (
-                      <div className="icr-act-row">
-                        <button className="icr-act" onClick={() => { window.equipFromBag?.(item.id); setSelId(null) }}>装備</button>
-                        {item.type === 'equip' && (
-                          <button
-                            className="icr-act icr-act-lock"
-                            title={item.locked ? 'ロックを解除' : 'ロックする（精錬の生贄・破棄から保護）'}
-                            onClick={() => { window.toggleLockItem?.(item.id) }}
-                          >
-                            {item.locked ? '🔓' : '🔒'}
-                          </button>
-                        )}
-                        <button
-                          className="icr-act icr-act-discard"
-                          disabled={!!item.locked}
-                          title={item.locked ? 'ロック中は捨てられません' : undefined}
-                          onClick={() => { window.discardFromBag?.(item.id); setSelId(null) }}
-                        >すてる</button>
-                        <button className="icr-act icr-act-cancel" onClick={() => setSelId(null)}>キャンセル</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {gs.bag.length === 0 && <p className="icr-empty">なし</p>}
-              </div>
-            )}
-
-            {openTab === 'spell' && (
-              <div className="ip-scroll">
-                {Object.entries(spellGroups).map(([name, items]) => {
-                  const info = SPELL_INFO[name]
-                  const isSelected = selId === items[0].id
-                  const showDetail = isSelected && spellDetail === name
-                  return (
-                    <div key={name}>
-                      <div className={`icr icr-spell-book ${isSelected ? 'icr-sel' : ''}`}
-                        onClick={() => selectItem(items[0].id)}>
-                        <span>📖</span>
-                        <span className="icr-name">{name}{items.length > 1 ? `×${items.length}` : ''}</span>
-                      </div>
-                      {isSelected && (
-                        <>
-                          <div className="icr-act-row">
-                            <button className="icr-act icr-act-spell"
-                              onClick={() => { window.useSpell?.(items[0].id); setSelId(null); setSpellDetail(null) }}>
-                              使う
-                            </button>
-                            <button className="icr-act icr-act-detail"
-                              onClick={() => setSpellDetail(s => s === name ? null : name)}>
-                              詳細
-                            </button>
-                          </div>
-                          {showDetail && info && (
-                            <div className="spell-detail-panel">
-                              <div className="spell-detail-title">{info.icon} {name}</div>
-                              <div className="spell-detail-desc">{info.desc}</div>
-                              <div className="spell-detail-effect">{info.effect}</div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-                {gs.spells.length === 0 && <p className="icr-empty">なし</p>}
-              </div>
-            )}
-
-            {!openTab && <p className="icr-empty">タップして表示</p>}
+        </>
+      ) : (
+        <>
+          {/* 上段：装備＋ログ（参照）。折りたたむと下段のメイン作業域が広がる */}
+          <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
+            <button
+              type="button"
+              className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
+              onClick={() => setStatsOpen(o => !o)}
+            >
+              <span className="se-title">装備 / ログ</span>
+              <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
+            </button>
+            <div className="stats-equip-inner stats-equip-inner-ref">
+              {equipPanel}
+              {logPanel}
+            </div>
           </div>
-
-        </div>
-
-      </div>
+          {/* 下段：ステータス＋インベントリ（メイン作業域・広い） */}
+          <div className="log-items-row">
+            {statPanel}
+            {inventoryPanel}
+          </div>
+        </>
+      )}
 
     </div>
   )

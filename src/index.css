@@ -635,6 +635,15 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   .items-panel {
     flex: 1 1 100%;
   }
+
+  /* ── スマホ非影響の担保 ──
+     PC専用のスロット折りたたみと画面サイズ設定は、スマホでは完全に無効化する。
+     スロットは常時表示（折りたたみ状態を無視）、トグル・倍率UIは非表示。 */
+  /* !important 必須：これらの基本定義はソース上この@mediaより後方にあり、
+     同一詳細度では後方が勝つため、!important でスマホ側を確実に優先させる。 */
+  .slot-toggle-btn { display: none !important; }
+  .slot-collapsed  { display: flex !important; }
+  .ui-scale-row    { display: none !important; }
 }
 
 /* ── UIパネル ── */
@@ -964,6 +973,17 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 /* 折りたたみ時は inner を非表示 */
 .stats-equip-row.se-collapsed .stats-equip-inner { display: none; }
 
+/* ── PC: 上段=参照行（装備＋ログ）。ログは高さを固定してスクロールさせる ──
+   （このクラスはPCのみ付与。スマホは .stats-equip-inner のままで従来動作） */
+.stats-equip-inner-ref .equip-panel-compact { border-right: 1px solid #1e1e38; }
+.stats-equip-inner-ref .log-panel {
+  height: 150px;          /* 装備7スロットとほぼ同じ高さに揃える */
+  flex: 0 0 50%;
+  border-right: none;
+}
+/* 下段（メイン）に来たステータスは左半分・区切り線つき（従来の見た目を踏襲） */
+.log-items-row > .stat-panel { border-right: 1px solid #1e1e38; }
+
 /* スマホ：タップしやすいようpadding追加（font-sizeはPC共通18px） */
 @media (max-width: 767px) {
   .stats-equip-toggle { padding: 9px 12px; }
@@ -1243,15 +1263,17 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 
 .icr-act {
   display: block; width: 100%; margin-top: 1px;
-  padding: 3px 0; font-size: 12px; font-weight: 700;
+  padding: 3px 2px; font-size: 12px; font-weight: 700;
   background: #102030; color: #88ccff;
   border: 1px solid #2244aa; border-radius: 3px; cursor: pointer;
+  white-space: nowrap;   /* 「キャンセル」等がボタン内で改行して2行化するのを防ぐ */
 }
 
 .icr-act:hover { background: #1a3050; color: #ffffff; }
 
 .icr-act-row {
   display: flex;
+  flex-wrap: wrap;   /* 狭くて収まらない場合は文字を割らずボタン単位で折り返す */
   gap: 4px;
   margin-top: 1px;
 }
@@ -1259,8 +1281,9 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 .icr-act-row .icr-act {
   display: block;
   width: auto;
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  /* 文字幅より縮めない＝「キャンセル」等が見切れず、収まらなければ行ごと折り返す */
+  min-width: fit-content;
   margin-top: 0;
 }
 
@@ -1305,6 +1328,53 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 .icr-act-cancel:hover { background: #2a2a2a; color: #ffffff; }
 
 .icr-empty { font-size: 10px; color: #444466; text-align: center; margin-top: 6px; }
+
+/* ── スロット折りたたみトグル（PC。畳むとログ/インベントリが広がる）── */
+.slot-toggle-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 10px;
+  background: rgba(20, 18, 40, 0.85);
+  border: none;
+  border-top: 1px solid #1e1e38;
+  border-bottom: 1px solid #1e1e38;
+  color: #b6b0e0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.slot-toggle-btn:hover { background: rgba(38, 34, 70, 0.9); color: #ffffff; }
+.slot-toggle-arrow { font-size: 10px; opacity: 0.8; }
+
+.slot-wrap { flex-shrink: 0; display: flex; flex-direction: column; }
+.slot-collapsed { display: none; }   /* 畳んだ状態：筐体を隠して下段へ縦スペースを譲る */
+
+/* ── 画面サイズ（PC UI倍率）プリセット。サウンドメニュー内 ── */
+.ui-scale-btns { display: flex; gap: 4px; flex: 1; }
+.ui-scale-btn {
+  flex: 1;
+  padding: 3px 0;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.ui-scale-btn:hover { background: rgba(50, 50, 70, 0.7); color: #fff; }
+.ui-scale-active {
+  background: #3a3a80;
+  color: #fff;
+  border-color: #7a7ae8;
+  box-shadow: inset 0 0 6px rgba(120, 120, 232, 0.5);
+}
 
 /* ── スロット筐体（新デザイン slot-cabinet-v2.png: ヘッダー→液晶→リール→操作バー） ── */
 .slot-cabinet {

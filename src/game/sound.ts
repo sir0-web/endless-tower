@@ -81,6 +81,7 @@ const SE_VOLUME: Record<string, number> = {
   stairs:  1.1,
   potion:  1.1,
   equip:   1.1,
+  fall:    1.0,
 }
 
 export function isMuted(): boolean { return _muted }
@@ -197,7 +198,7 @@ export function stopBGM(): void {
 }
 
 // ── SE（Web Audio API：大量の重なり再生でも要素枯渇しない） ──
-const SE_NAMES = ['attack', 'damage', 'levelup', 'stairs', 'potion', 'equip']
+const SE_NAMES = ['attack', 'damage', 'levelup', 'stairs', 'potion', 'equip', 'fall']
 
 let audioCtx: AudioContext | null = null
 const seBuffers: Record<string, AudioBuffer> = {}
@@ -338,3 +339,4 @@ export function playLevelUp(): void { se('levelup') }
 export function playStairs():  void { se('stairs')  }
 export function playPotion():  void { se('potion')  }
 export function playEquip():   void { se('equip')   }
+export function playFall():    void { se('fall')    }

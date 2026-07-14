@@ -1,4 +1,4 @@
-import type { Player, Item, Enemy, TileType } from '../types'
+import type { Player, Item, Enemy, TileType, NpcKind } from '../types'
 import { EQUIP_ITEMS } from './items'
 
 const SAVE_KEY = 'endless-tower-save'
@@ -18,6 +18,8 @@ export interface SaveData {
   floorType: 'normal' | 'lucky' | 'chaos'
   driedSprings: string[]
   miasmaFloor?: boolean   // 旧セーブ互換のため任意
+  rescuedNpcs?: NpcKind[]   // あるかなひろば救済済み住人（旧セーブ互換のため任意）
+  signboardUnread?: boolean   // さがし人看板の未読フラグ（旧セーブ互換のため任意）
   savedAt: number
 }
 

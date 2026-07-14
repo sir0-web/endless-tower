@@ -10,6 +10,7 @@ import { VirtualJoystick } from './components/VirtualJoystick'
 import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal, MerchantModal } from './components/EventFacilityModals'
+import { JunkModal, ToolShopModal, JailUnlockModal, SearchListModal } from './components/RescueModals'
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { BowAttackButton } from './components/BowAttackButton'
 import { GameToast } from './components/GameToast'
@@ -42,10 +43,20 @@ function isMobileViewport() {
   return window.innerWidth < 768
 }
 
+// ── PC用UI倍率（設定メニューから調整。古いPC/小画面で全体が収まらない対策）──
+// 画面にフィットする基準スケールへさらに掛ける係数。0.6〜1.0で「縮めて全部収める」用途。
+// スマホは transform を使わない（wrapperが width/height:100%）ため無関係＝影響なし。
+const UI_SCALE_KEY = 'ebt_ui_scale'
+function readUiScale(): number {
+  const v = Number(localStorage.getItem(UI_SCALE_KEY))
+  return v >= 0.6 && v <= 1.0 ? v : 1
+}
+
 function App() {
   const canvasAreaRef = useRef<HTMLDivElement>(null)
   const gameRef       = useRef<Phaser.Game | null>(null)
   const [appScale, setAppScale] = useState(calcScale)
+  const [uiScale, setUiScale]   = useState(readUiScale)
   const [isMobile, setIsMobile] = useState(isMobileViewport)
   // キャンバス全幅化フラグ（スマホ）。ステータスバー/メッセージ枠が不要な非プレイ画面
   // （タイトル・ゲームオーバー・ランキング）でキャンバスを画面いっぱいに拡大する。初期はタイトルなので true。
@@ -203,7 +214,17 @@ function App() {
   useEffect(() => {
     if (!gameRef.current) return
     requestAnimationFrame(() => { gameRef.current?.scale.refresh() })
-  }, [appScale])
+  }, [appScale, uiScale])
+
+  // 設定メニューからのUI倍率変更を反映（PCのみ有効。永続化はSoundMenu側で実施済み）
+  useEffect(() => {
+    const onScale = (e: Event) => {
+      const v = (e as CustomEvent<number>).detail
+      if (typeof v === 'number' && v >= 0.6 && v <= 1.0) setUiScale(v)
+    }
+    window.addEventListener('et-ui-scale-change', onScale)
+    return () => window.removeEventListener('et-ui-scale-change', onScale)
+  }, [])
 
   // 非プレイ画面ではキャンバス枠を全幅化する（スマホ）。各 Phaser シーンの create からの通知で切り替える。
   useEffect(() => {
@@ -251,7 +272,7 @@ function App() {
     : {
         width:  BASE_W,
         height: BASE_H,
-        transform: `scale(${appScale})`,
+        transform: `scale(${appScale * uiScale})`,
         transformOrigin: 'top left',
         overflow: 'hidden',
         position: 'absolute' as const,
@@ -297,6 +318,10 @@ function App() {
         <ShadowEquipModal />
         <SpellbookModal />
         <MerchantModal />
+        <JunkModal />
+        <ToolShopModal />
+        <JailUnlockModal />
+        <SearchListModal />
         <NewsModal />
         <AnnouncementGateModal />
         <GameToast />

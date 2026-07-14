@@ -37,6 +37,20 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
   const onBgm = (v: number) => { setBgm(v); setBgmVolumePct(v) }
   const onSe  = (v: number) => { setSe(v);  setSeVolumePct(v) }
 
+  // ── 画面サイズ（PC UI倍率）。localStorageへ保存しApp.tsxへ通知。スマホはCSSで非表示＝無効 ──
+  const readScale = () => { const v = Number(localStorage.getItem('ebt_ui_scale')); return v >= 0.6 && v <= 1.0 ? v : 1 }
+  const [uiScale, setUiScale] = useState(readScale)
+  const applyScale = (v: number) => {
+    setUiScale(v)
+    localStorage.setItem('ebt_ui_scale', String(v))
+    window.dispatchEvent(new CustomEvent('et-ui-scale-change', { detail: v }))
+  }
+  const SCALE_PRESETS: { v: number; label: string }[] = [
+    { v: 1.0,  label: '標準' },
+    { v: 0.85, label: '小' },
+    { v: 0.7,  label: '特小' },
+  ]
+
   return (
     <div
       className="sound-menu-wrap"
@@ -89,6 +103,22 @@ export function SoundMenu({ btnClassName }: { btnClassName: string }) {
               className="sound-menu-slider"
             />
             <span className="sound-menu-val">{sePct}</span>
+          </div>
+          {/* 画面サイズ（PCのみ。CSS @media でスマホでは非表示＝挙動にも影響なし） */}
+          <div className="sound-menu-row ui-scale-row">
+            <span className="sound-menu-lbl">画面</span>
+            <div className="ui-scale-btns">
+              {SCALE_PRESETS.map(p => (
+                <button
+                  key={p.v}
+                  className={`ui-scale-btn ${Math.abs(uiScale - p.v) < 0.001 ? 'ui-scale-active' : ''}`}
+                  onClick={() => applyScale(p.v)}
+                  onTouchStart={e => e.stopPropagation()}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
