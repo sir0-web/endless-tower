@@ -2878,6 +2878,10 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.carveJail(kind)                           // パターン3（牢屋）
     }
+    // 配置に失敗（空きマスなし等）した場合は何も起きていないので告知しない
+    if (this.floorRescue || this.pendingClearRescue || this.jailCell) {
+      this.addMessage('どこからか助けを呼ぶ声が聞こえる・・・')
+    }
   }
 
   private randomFloorTile(pred?: (x: number, y: number) => boolean): import('../types').Position | null {
@@ -2934,6 +2938,7 @@ export class GameScene extends Phaser.Scene {
     this.state.signboardUnread = true
     this.updateSignboardMark()
     this.updateWindowGameState()
+    fireWorldNotification('world', '【ワールド】', `${getDisplayName()}さんが${c.person}を助け出しました！`)
   }
 
   /** 看板の上に浮かせる「！」マークの表示/非表示を更新する（未読時のみ表示） */
