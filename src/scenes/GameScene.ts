@@ -2783,6 +2783,13 @@ export class GameScene extends Phaser.Scene {
     const playerPos = getPlayerStartPosition(map)
     this.state.map = map
     this.state.player.position = { ...playerPos }
+    this.state.enemies = []   // 前フロアの残存データで救済NPCの空きマス判定を汚さないよう先にクリア（下でこのフロアの敵を設定し直す）
+
+    // あるかなひろばの住人 救済抽選（このフロアで助けられるか）。
+    // 牢屋(パターン3)はmapを直接書き換える（floor→wall/jail）ため、ボス/敵/アイテムの配置マス集計や
+    // createTileSpritesより前に確定させる必要がある。後で回すと書き換え後の壁マスに敵やアイテムが
+    // 置かれてしまう（＝二度と回収できない）上、見た目にも反映されず当たり判定だけの壁になる。
+    this.rollFloorRescue()
 
     let floorType = this.determineFloorType(this.state.player.luk, floor)
     let bosses = spawnBosses(floor, this.state.areaBossFloors)
@@ -2826,12 +2833,6 @@ export class GameScene extends Phaser.Scene {
     this.state.floorType = floorType
     // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。視界3マス減。lucky/chaos/イベントとは排他で競合しない
     this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10
-
-    // あるかなひろばの住人 救済抽選（このフロアで助けられるか）。
-    // 牢屋(パターン3)はmapを直接書き換える（floor→wall/jail）ため、必ずcreateTileSprites前に確定させる。
-    // 後で回すと書き換え後のタイルにスプライトが反映されず、見た目は床のまま当たり判定だけ壁になる。
-    this.rollFloorRescue()
-
     this.buildFloorVariants(map)
     this.createTileSprites(map)
     if (this.skipNextStairsSound) this.skipNextStairsSound = false
