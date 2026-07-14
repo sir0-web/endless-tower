@@ -2826,6 +2826,12 @@ export class GameScene extends Phaser.Scene {
     this.state.floorType = floorType
     // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。視界3マス減。lucky/chaos/イベントとは排他で競合しない
     this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10
+
+    // あるかなひろばの住人 救済抽選（このフロアで助けられるか）。
+    // 牢屋(パターン3)はmapを直接書き換える（floor→wall/jail）ため、必ずcreateTileSprites前に確定させる。
+    // 後で回すと書き換え後のタイルにスプライトが反映されず、見た目は床のまま当たり判定だけ壁になる。
+    this.rollFloorRescue()
+
     this.buildFloorVariants(map)
     this.createTileSprites(map)
     if (this.skipNextStairsSound) this.skipNextStairsSound = false
@@ -2847,9 +2853,6 @@ export class GameScene extends Phaser.Scene {
 
     // ドッペルゲンガー：踏破済み（周回済み）フロアは farming 対策で対象外にする
     if (!this.floorIsCleared) void this.checkDoppelgangerSpawn()
-
-    // ── あるかなひろばの住人 救済抽選（このフロアで助けられるか）──
-    this.rollFloorRescue()
   }
 
   // ── 住人救済システム ──
