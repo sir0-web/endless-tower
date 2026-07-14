@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat, Enemy, Player } from '../types'
 import { weaponKindOf } from '../types'
-import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
+import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, dedupeItemPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
 import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playFall, playBGM, setHeartbeat } from '../game/sound'
@@ -2830,6 +2830,7 @@ export class GameScene extends Phaser.Scene {
       : floorType === 'chaos'
       ? spawnItems(map, { countMult: 6, floor })
       : spawnItems(map, { countMult: 3, floor })
+    dedupeItemPositions(this.state.items, map, playerPos)   // 壁化したマスに乗っていたら空き床へ退避（回収不能化の防止）
     this.state.floorType = floorType
     // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。視界3マス減。lucky/chaos/イベントとは排他で競合しない
     this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10

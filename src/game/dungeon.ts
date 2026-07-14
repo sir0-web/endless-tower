@@ -142,6 +142,44 @@ export function dedupeEnemyPositions(
   }
 }
 
+/**
+ * 「floor」タイル以外（壁化した牢屋マス等）に乗ってしまったアイテムを空いている床タイルへ退避する。
+ * スポーン順を守っていれば本来発生しないはずだが、将来の改修で順序が崩れても
+ * 「二度と回収できないアイテム」を確実に防ぐための最終防波堤。
+ */
+export function dedupeItemPositions(
+  items: { position: Position }[],
+  map: TileType[][],
+  playerPos: Position,
+): void {
+  const occupied = new Set<string>([`${playerPos.x},${playerPos.y}`])
+  for (const it of items) {
+    if (map[it.position.y]?.[it.position.x] === 'floor') occupied.add(`${it.position.x},${it.position.y}`)
+  }
+
+  const freeTiles: Position[] = []
+  for (let y = 0; y < map.length; y++) {
+    for (let x = 0; x < map[y].length; x++) {
+      if (map[y][x] === 'floor' && !occupied.has(`${x},${y}`)) freeTiles.push({ x, y })
+    }
+  }
+  for (let i = freeTiles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [freeTiles[i], freeTiles[j]] = [freeTiles[j], freeTiles[i]]
+  }
+
+  let fi = 0
+  for (const it of items) {
+    if (map[it.position.y]?.[it.position.x] === 'floor') continue   // 正常位置はそのまま
+    if (fi < freeTiles.length) {
+      const t = freeTiles[fi++]
+      it.position = { x: t.x, y: t.y }
+      occupied.add(`${t.x},${t.y}`)
+    }
+    // 空きが尽きた極端なケースはそのまま（アイテム数に上限があるため実質発生しない）
+  }
+}
+
 export function getPlayerStartPosition(map: TileType[][]): Position {
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
