@@ -151,18 +151,25 @@ function formatAnnouncementDateJst(iso: string): string {
 function announcementsHtml(announcements: Announcement[]): string {
   if (announcements.length === 0) return ''
   const items = announcements.map((a, i) => `
-      <details class="news-item"${i === 0 ? ' open' : ''}>
-        <summary>
-          <span class="news-date">${formatAnnouncementDateJst(a.published_at)}</span>
-          <span class="news-title">${esc(a.title)}</span>
-        </summary>
-        <div class="news-body">${a.body_html}</div>
-      </details>`).join('')
+      <button type="button" class="news-item" onclick="openNews(${i})">
+        <span class="news-date">${formatAnnouncementDateJst(a.published_at)}</span>
+        <span class="news-title">${esc(a.title)}</span>
+      </button>`).join('')
+  const templates = announcements.map((a, i) => `
+      <template id="news-tpl-${i}" data-title="${esc(a.title)}">${a.body_html}</template>`).join('')
   return `
     <section class="news">
       <h2>お知らせ</h2>
       ${items}
-    </section>`
+    </section>
+    ${templates}
+    <div id="news-modal" class="news-modal" onclick="if(event.target===this) closeNews()">
+      <div class="news-modal-card">
+        <button type="button" class="news-modal-close" onclick="closeNews()" aria-label="閉じる">×</button>
+        <h3 id="news-modal-title"></h3>
+        <div id="news-modal-body" class="news-modal-body"></div>
+      </div>
+    </div>`
 }
 
 function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | null, msg: MaintenanceMsg, announcements: Announcement[]): string {
@@ -219,24 +226,38 @@ function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | nul
     font-size: 13px; letter-spacing: 0.1em; color: #8e8ec8; margin: 0 0 10px; padding: 0 4px;
   }
   .news-item {
+    display: flex; align-items: baseline; gap: 10px; width: 100%;
     background: rgba(18, 18, 38, 0.72);
     border: 1px solid rgba(150, 150, 255, 0.20);
     border-radius: 10px;
     margin-bottom: 8px;
-    overflow: hidden;
+    padding: 12px 14px;
+    font-family: inherit; text-align: left; cursor: pointer;
   }
-  .news-item summary {
-    list-style: none; cursor: pointer; padding: 12px 14px;
-    display: flex; align-items: baseline; gap: 10px;
-  }
-  .news-item summary::-webkit-details-marker { display: none; }
+  .news-item:hover { border-color: rgba(150, 150, 255, 0.42); }
   .news-date { font-size: 11px; color: #8a8ab0; flex-shrink: 0; }
   .news-title { font-size: 13px; color: #dcdcf8; font-weight: 600; }
-  .news-body {
-    padding: 0 14px 14px; font-size: 12px; color: #b9b9dd; line-height: 1.8;
-    border-top: 1px solid rgba(150, 150, 255, 0.14); padding-top: 10px;
+  .news-modal {
+    display: none; position: fixed; inset: 0; z-index: 10;
+    background: rgba(6, 6, 15, 0.72);
+    align-items: center; justify-content: center; padding: 20px;
   }
-  .news-body img { max-width: 100%; border-radius: 6px; }
+  .news-modal.open { display: flex; }
+  .news-modal-card {
+    position: relative; width: 100%; max-width: 440px; max-height: 80vh; overflow-y: auto;
+    background: #14142c;
+    border: 1px solid rgba(150, 150, 255, 0.28);
+    border-radius: 14px;
+    padding: 28px 20px 20px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  }
+  .news-modal-close {
+    position: absolute; top: 10px; right: 12px;
+    background: none; border: none; color: #b9b9dd; font-size: 22px; line-height: 1; cursor: pointer; padding: 6px;
+  }
+  #news-modal-title { font-size: 15px; color: #dcdcf8; margin: 0 0 14px; padding-right: 20px; }
+  .news-modal-body { font-size: 13px; color: #b9b9dd; line-height: 1.8; text-align: left; }
+  .news-modal-body img { max-width: 100%; border-radius: 6px; }
   @media (max-width: 380px) {
     .card { padding: 30px 18px 24px; }
     h1 { font-size: 20px; }
@@ -277,6 +298,17 @@ function maintenanceHtml(now: number, _windows: Window[], upcoming: Window | nul
     }
     tick();
     setInterval(tick, 1000);
+
+    function openNews(i){
+      var tpl = document.getElementById('news-tpl-' + i);
+      if (!tpl) return;
+      document.getElementById('news-modal-title').textContent = tpl.getAttribute('data-title') || '';
+      document.getElementById('news-modal-body').innerHTML = tpl.innerHTML;
+      document.getElementById('news-modal').classList.add('open');
+    }
+    function closeNews(){
+      document.getElementById('news-modal').classList.remove('open');
+    }
   </script>
 </body>
 </html>`
