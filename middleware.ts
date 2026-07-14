@@ -66,7 +66,7 @@ async function fetchAnnouncements(): Promise<Announcement[]> {
 
   try {
     const res = await fetch(
-      `${url}/rest/v1/ebt_announcements?is_published=eq.true&select=title,body_html,published_at&order=published_at.desc&limit=10`,
+      `${url}/rest/v1/ebt_announcements?is_published=eq.true&select=title,body_html,published_at&order=published_at.desc&limit=3`,
       {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
         signal: AbortSignal.timeout(2500),
