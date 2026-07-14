@@ -411,11 +411,11 @@ export class GameScene extends Phaser.Scene {
 
     // ── あるかなひろば（町）プロップ。未配置でも読み込み失敗＝描画スキップで安全 ──
     for (const p of ['grass', 'path', 'tree', 'well', 'lamp', 'fence', 'pond', 'flowers',
-      'stonepath', 'hedge', 'topiary', 'bench', 'signboard', 'fountain', 'cave', 'rockwall']) {
+      'stonepath', 'hedge', 'topiary', 'bench', 'signboard', 'fountain', 'cave', 'rockwall', 'jail-door']) {
       const file = p === 'grass' ? 'ground_grass' : p === 'path' ? 'ground_path'
         : p === 'stonepath' ? 'path_stone' : p === 'hedge' ? 'hedge_h'
         : p === 'cave' ? 'deco_cave_entrance_big' : p === 'rockwall' ? 'deco_rockwall'
-        : 'deco_' + p
+        : 'deco_' + p.replace('-', '_')
       this.load.image(`town-${p}`, `/assets/town/props/${file}.webp`)
     }
     // 建物は参考画像から抜いた高品質ランドマーク版(ref_building_*)を優先。無ければ旧簡易版にフォールバック。
@@ -4850,20 +4850,28 @@ export class GameScene extends Phaser.Scene {
           ? this.themedTileKey('spring-dry', 'tile-spring-dry')
           : this.themedTileKey('spring', 'tile-spring')
         else if (tile === 'pitfall') key = this.themedTileKey('pitfall', 'tile-pitfall')
+        else if (tile === 'jail')    key = 'town-jail-door'
         else return null
 
         if (this.failedTextures.has(key) || !this.textures.exists(key)) return null
 
         const img = this.add.image(x * rts + rts / 2, y * rts + rts / 2, key)
-          .setDisplaySize(rts + 6, rts + 6)
           .setDepth(-1)
           .setVisible(false)
+        if (key === 'town-jail-door') {
+          // 縦長のドア絵をタイルの縦横比を保ったまま高さ基準でフィットさせる（正方形強制で潰さない）
+          const natW = img.width || 1, natH = img.height || 1
+          const s = (rts + 6) / natH
+          img.setDisplaySize(natW * s, natH * s)
+        } else {
+          img.setDisplaySize(rts + 6, rts + 6)
+        }
         // 町の草地・石畳・洞窟口は帯ティントを掛けない（元の色をそのまま活かす）
         if (this.isEventFloor && (key === 'town-grass' || key === 'town-stonepath' || key === 'town-cave')) return img
         // v2テーマタイルは絵自体に色があるため帯ティントを白方向へ65%弱めて質感を残す
         const v2 = key.startsWith('t2-')
         if      (tile === 'floor') img.setTint(v2 ? softenTint(floorTint, 0.65) : floorTint)
-        else if (tile === 'wall')  img.setTint(v2 ? softenTint(wallTint, 0.65) : wallTint)
+        else if (tile === 'wall' || tile === 'jail') img.setTint(wallTint)
         return img
       })
     )
