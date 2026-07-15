@@ -991,10 +991,7 @@ export class GameScene extends Phaser.Scene {
     // 町（あるかなひろば）の墓標：体当たりで墓標一覧（全プレイヤー共有）を開く
     if (this.isEventFloor && this.graveyardPos && this.graveyardPos.x === nx && this.graveyardPos.y === ny) {
       if (event.repeat) return
-      window.dispatchEvent(new Event('graveyard-open'))
-      if (this.graveyardLatestId !== null) setLastSeenGraveyardId(this.graveyardLatestId)
-      this.graveyardUnread = false
-      this.updateGraveyardMark()
+      this.openGraveyard()
       return
     }
 
@@ -3004,6 +3001,18 @@ export class GameScene extends Phaser.Scene {
       fontSize: `${Math.round(this.rts * 0.42)}px`,
     }).setOrigin(0.5).setDepth(5)
     this.plazaDecor.push(emoji)
+
+    // 体当たり移動が使えないスマホ操作でも開けるよう、直接タップ/クリックでも開けるようにする
+    emoji.setInteractive({ useHandCursor: true })
+    emoji.on('pointerdown', () => this.openGraveyard())
+  }
+
+  /** 墓標一覧モーダルを開く（体当たり／直接タップの両方から呼ばれる共通処理） */
+  private openGraveyard() {
+    window.dispatchEvent(new Event('graveyard-open'))
+    if (this.graveyardLatestId !== null) setLastSeenGraveyardId(this.graveyardLatestId)
+    this.graveyardUnread = false
+    this.updateGraveyardMark()
   }
 
   /** 墓標上に浮かせる「！」マークの表示/非表示を更新する（未読時のみ表示） */
