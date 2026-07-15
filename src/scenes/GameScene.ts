@@ -3026,6 +3026,7 @@ export class GameScene extends Phaser.Scene {
       const kind = this.jailCell!.kind
       const { doorPos } = this.jailCell!
       this.state.map[doorPos.y][doorPos.x] = 'floor'   // 柵を撤去して通行可能に
+      this.assignFloorVariant(doorPos.x, doorPos.y)    // 柵位置は生成時未割当のため、床の見た目も明示的に割り当てる
       if (this.jailNpcSprite) { this.jailNpcSprite.destroy(); this.jailNpcSprite = null }
       this.jailCell = null
       this.rescueNpc(kind, 'モンスターに囚われていた冒険者を助けた。')
@@ -4823,6 +4824,22 @@ export class GameScene extends Phaser.Scene {
   private themedTileKey(kind: 'pitfall' | 'mud' | 'trap' | 'spring' | 'spring-dry', legacy: string): string {
     const v2 = `t2-${kind}-${dungeonTheme(this.state?.player?.floor ?? 1)}`
     return this.textureOk(v2) ? v2 : legacy
+  }
+
+  /**
+   * 牢屋の柵(jail)撤去など、床でなかったマスが後から床へ変わるケース用。
+   * buildFloorVariants は生成時に一括で床バリエーションを割り当てるため、
+   * その後floor化した個別マスは空文字のままテクスチャ不明→フォールバック単色描画になってしまう。
+   * ここで該当マスにだけ同じ選定ロジックで床キーを割り当て、通常の床と同じ見た目にする。
+   */
+  private assignFloorVariant(x: number, y: number) {
+    const theme = dungeonTheme(this.state?.player?.floor ?? 1)
+    const keys = [1, 2, 3].map(n => {
+      const v2 = `t2-floor-${theme}-${n}`
+      return this.textureOk(v2) ? v2 : `tile-floor${n}`
+    })
+    if (!this.floorVariantMap[y]) this.floorVariantMap[y] = []
+    this.floorVariantMap[y][x] = keys[Math.floor(Math.random() * keys.length)]
   }
 
   private buildFloorVariants(map: import('../types').TileType[][]) {
