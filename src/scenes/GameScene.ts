@@ -2824,15 +2824,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.state.enemies = [...normalEnemies, ...bosses]
-    dedupeEnemyPositions(this.state.enemies, map, playerPos)   // 敵が重なって始まらないように
+    dedupeEnemyPositions(this.state.enemies, map, playerPos, spawnExclude)   // 敵が重なって始まらないように
     this.state.items = this.floorIsCleared
       ? []   // 踏破済みフロアはアイテムドロップなし（周回ファーム対策）
       : floorType === 'lucky'
-      ? spawnItems(map, { countMult: 6, equipRate: 0.30, floor })
+      ? spawnItems(map, { countMult: 6, equipRate: 0.30, floor, excludePositions: spawnExclude })
       : floorType === 'chaos'
-      ? spawnItems(map, { countMult: 6, floor })
-      : spawnItems(map, { countMult: 3, floor })
-    dedupeItemPositions(this.state.items, map, playerPos)   // 壁化したマスに乗っていたら空き床へ退避（回収不能化の防止）
+      ? spawnItems(map, { countMult: 6, floor, excludePositions: spawnExclude })
+      : spawnItems(map, { countMult: 3, floor, excludePositions: spawnExclude })
+    dedupeItemPositions(this.state.items, map, playerPos, spawnExclude)   // 壁化したマスに乗っていたら空き床へ退避（回収不能化の防止）
     this.state.floorType = floorType
     // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。視界3マス減。lucky/chaos/イベントとは排他で競合しない
     this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10
@@ -3666,11 +3666,13 @@ export class GameScene extends Phaser.Scene {
       return
     }
     const { map, player } = this.state
+    const jailExclude = this.getJailNpcPos()
     const inView:   { x: number; y: number }[] = []
     const fallback: { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
         if (map[y][x] !== 'floor') continue
+        if (jailExclude.some(p => p.x === x && p.y === y)) continue
         const dx = x - player.position.x
         const dy = y - player.position.y
         const distSq = dx * dx + dy * dy
@@ -3686,7 +3688,7 @@ export class GameScene extends Phaser.Scene {
       : makeNamedNormalEnemy(name, player.floor)
     enemy.position = { ...pos }
     this.state.enemies.push(enemy)
-    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    dedupeEnemyPositions(this.state.enemies, map, player.position, jailExclude)
     this.addMessage(`⚡ ${enemy.name} が出現した！`)
     this.showPickupNotif(`⚡ ${enemy.name} 出現！`)
     this.renderMap()
@@ -3720,12 +3722,14 @@ export class GameScene extends Phaser.Scene {
 
   private spawnSkulporinOnFloor(): void {
     const { map, player } = this.state
+    const jailExclude = this.getJailNpcPos()
     // プレイヤーのすぐ近く（2〜4マス）に出現させて見つけやすくする
     const near: { x: number; y: number }[] = []
     const far:  { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
         if (map[y][x] !== 'floor') continue
+        if (jailExclude.some(p => p.x === x && p.y === y)) continue
         const dist = Math.abs(x - player.position.x) + Math.abs(y - player.position.y)
         if (dist >= 2 && dist <= 4) near.push({ x, y })
         else if (dist >= 1) far.push({ x, y })
@@ -3750,7 +3754,7 @@ export class GameScene extends Phaser.Scene {
       slowedTurns: 0,
       isSkulporin: true,
     })
-    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    dedupeEnemyPositions(this.state.enemies, map, player.position, jailExclude)
 
     this.addMessage('【すかるぽりんが出現した！】逃げる前に倒そう！')
     this.renderMap()
@@ -3928,10 +3932,13 @@ export class GameScene extends Phaser.Scene {
 
   private spawnDoppelganger(record: DoppelgangerRecord): void {
     const { map, player } = this.state
+    const jailExclude = this.getJailNpcPos()
     const floors: { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
-        if (map[y][x] === 'floor') floors.push({ x, y })
+        if (map[y][x] !== 'floor') continue
+        if (jailExclude.some(p => p.x === x && p.y === y)) continue
+        floors.push({ x, y })
       }
     }
     if (floors.length === 0) return
@@ -3970,7 +3977,7 @@ export class GameScene extends Phaser.Scene {
       ),
     }
     this.state.enemies.push(enemy)
-    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    dedupeEnemyPositions(this.state.enemies, map, player.position, jailExclude)
     this.addMessage(`【ドッペルゲンガーが出現した！】「${record.player_name}」の魂が眠っていたようだ…`)
     this.renderMap()
     // populateFloor完了後の非同期出現のため、ボスBGMへの切り替えをここで再評価する
