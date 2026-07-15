@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../game/supabase'
+import { supabase, getPlayerId } from '../game/supabase'
 
 const MAX_SIZE = 5 * 1024 * 1024
 const CATS = ['要望', '不具合報告', '質問', 'その他'] as const
@@ -60,16 +60,33 @@ export function ReportModal() {
       category: cat,
       content: content.trim(),
       player_name: name.trim() || null,
+      player_id: getPlayerId(),
       image_url: imageUrl,
       status: 'new',
     })
 
     if (error) {
-      setResult({ ok: false, msg: `エラー: ${error.message}` })
-    } else {
+      // reportsにplayer_id列が未追加の環境向けフォールバック（報告自体は止めない）
+      const { error: retryError } = await supabase.from('reports').insert({
+        category: cat,
+        content: content.trim(),
+        player_name: name.trim() || null,
+        image_url: imageUrl,
+        status: 'new',
+      })
+      if (retryError) {
+        setResult({ ok: false, msg: `エラー: ${retryError.message}` })
+        setSending(false)
+        return
+      }
+      console.warn('報告: player_id列未追加のため基本項目のみで送信しました', error.message)
       setResult({ ok: true, msg: 'ご報告ありがとうございます！' })
       reset()
+      setSending(false)
+      return
     }
+    setResult({ ok: true, msg: 'ご報告ありがとうございます！' })
+    reset()
     setSending(false)
   }
 
