@@ -2988,7 +2988,7 @@ export class GameScene extends Phaser.Scene {
 
       const img = this.add.image(x, baseY, 'town-goddess-statue').setOrigin(0.5, 1).setDepth(5)
       const natW = img.width || 1, natH = img.height || 1
-      const k = (this.rts * 0.9) / natH
+      const k = (this.rts * 1.17) / natH
       img.setDisplaySize(natW * k, natH * k)
       this.plazaDecor.push(img)
 
@@ -3279,9 +3279,9 @@ export class GameScene extends Phaser.Scene {
     place('town-tree',      rx + 14, ry + rh - 3, 1.8, 6)
     place('town-topiary',   rx + 6,  ry + 2,      1.1, 4)
     place('town-topiary',   rx + 10, ry + 2,      1.1, 4)
-    place('town-signboard', rx + 6,  ry + 3,      0.72, 4)
+    place('town-signboard', rx + 7,  ry + 3,      1.08, 4)
     // 体当たりで捜し人一覧を開く（当たり判定はplace()内で登録済み。テクスチャ未読込時はplace()が無視するため位置も設定しない）
-    this.signboardPos = this.textureOk('town-signboard') ? { x: rx + 6, y: ry + 3 } : null
+    this.signboardPos = this.textureOk('town-signboard') ? { x: rx + 7, y: ry + 3 } : null
     // 看板の未読「！」：初回・新しい救出があるまで表示。上下にふわふわ揺らす
     if (this.signboardPos) {
       const { x: markX, y: markY } = this.tileToWorld(this.signboardPos.x, this.signboardPos.y)
