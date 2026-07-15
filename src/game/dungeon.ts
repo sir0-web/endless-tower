@@ -1,4 +1,4 @@
-import type { TileType, Position } from '../types'
+import type { TileType, Position, Enemy } from '../types'
 
 export const TILE_SIZE = 48
 export const MAP_WIDTH = 30
@@ -522,11 +522,13 @@ export function makeMinionEnemy(floor: number) {
   }
 }
 
-export function spawnEnemies(map: TileType[][], count: number, floor: number) {
+export function spawnEnemies(map: TileType[][], count: number, floor: number, excludePositions: Position[] = []) {
   const floors: Position[] = []
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
-      if (map[y][x] === 'floor') floors.push({ x, y })
+      if (map[y][x] !== 'floor') continue
+      if (excludePositions.some(p => p.x === x && p.y === y)) continue   // 牢屋NPCマス等、見た目floorだが湧かせたくない座標
+      floors.push({ x, y })
     }
   }
 
@@ -534,7 +536,8 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
   const available = ENEMY_TABLE.filter(e =>
     e.minFloor <= floor && (floor > DEEP_FLOOR || e.maxFloor >= floor)
   )
-  const enemies = []
+  const enemies: Enemy[] = []
+  if (floors.length === 0) return enemies   // 湧ける床が無い（全除外等）場合は何も湧かさない
 
   // 1〜3Fは全ステータスを60%に抑えて初心者が序盤を乗り越えやすくする
   const f1Mult = floor <= 3 ? 0.6 : 1.0
@@ -565,12 +568,13 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
 }
 
 /** 枝テロ: フロアの約70%をモンスターで埋める。プレイヤー周囲2マスは安全地帯 */
-export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playerPos: Position) {
+export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playerPos: Position, excludePositions: Position[] = []) {
   const SAFE_RADIUS = 2
   const candidates: Position[] = []
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
       if (map[y][x] !== 'floor') continue
+      if (excludePositions.some(p => p.x === x && p.y === y)) continue   // 牢屋NPCマス等、見た目floorだが湧かせたくない座標
       const dx = x - playerPos.x
       const dy = y - playerPos.y
       if (Math.abs(dx) <= SAFE_RADIUS && Math.abs(dy) <= SAFE_RADIUS) continue
