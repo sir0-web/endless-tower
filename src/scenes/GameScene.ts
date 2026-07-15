@@ -77,6 +77,21 @@ function softenTint(color: number, amount: number): number {
   return (mix((color >> 16) & 0xff) << 16) | (mix((color >> 8) & 0xff) << 8) | mix(color & 0xff)
 }
 
+// ── あるかなひろば：さがし人解放の進み具合で「廃れた街→リッチな街」へ段階的に彩る ──
+// 0体解放＝褪せた廃墟色、7体全解放＝原色フル。5段階のティントで解放ごとの変化にメリハリを付ける
+// （線形補間だと最初と最後の差が地味になるため、区切りを刻んだ階段状の変化にしている）。
+const PLAZA_TINT_TIERS = [0x7d6b4a, 0xa8925f, 0xcdb98a, 0xeee0c0, 0xffffff]
+function plazaTierIndex(rescuedCount: number): number {
+  if (rescuedCount <= 0) return 0
+  if (rescuedCount <= 2) return 1
+  if (rescuedCount <= 4) return 2
+  if (rescuedCount <= 6) return 3
+  return 4
+}
+function plazaProgressTint(rescuedCount: number): number {
+  return PLAZA_TINT_TIERS[plazaTierIndex(rescuedCount)]
+}
+
 /** 階に応じた瘴気オーバーレイの色とアルファ（薄め。暗くしすぎない）。1-10Fは無し */
 function floorMiasma(floor: number): { color: number; alpha: number } {
   const tier = Math.max(0, Math.floor((floor - 1) / 10))
@@ -3237,7 +3252,11 @@ export class GameScene extends Phaser.Scene {
     this.signboardMark = null
     this.graveyardMark?.destroy()
     this.graveyardMark = null
-    const place = (key: string, tx: number, ty: number, scale: number, depth: number) => {
+    // さがし人の解放数に応じた「廃れた街→リッチな街」演出：
+    // 解放0＝広場はほぼ何もない褪せた廃墟、解放が進むごとに緑化・装飾が増え、全解放で満開の庭園になる。
+    const stage = rescued.length
+    const tint = plazaProgressTint(stage)
+    const place = (key: string, tx: number, ty: number, scale: number, depth: number, applyTint = false) => {
       if (!this.textureOk(key)) return
       const { x, y } = this.tileToWorld(tx, ty)
       const img = this.add.image(x, y, key).setOrigin(0.5, 0.85).setDepth(depth)
@@ -3246,6 +3265,7 @@ export class GameScene extends Phaser.Scene {
       const k = (scale * this.rts) / nat
       const dispW = natW * k, dispH = natH * k
       img.setDisplaySize(dispW, dispH)
+      if (applyTint) img.setTint(tint)
       this.plazaDecor.push(img)
       // 当たり判定は見た目の footprint 全体をブロックする（木の枝先だけ通れてしまう等を防ぐ）。
       // origin(0.5, 0.85) なので画像の大部分は ty より上に伸びる。横は tx を中心に、
@@ -3272,13 +3292,16 @@ export class GameScene extends Phaser.Scene {
         .setDepth(2)
       this.plazaDecor.push(caveImg)
     }
-    // 常設デコ：広場の四隅の木、洞窟口を挟むトピアリー、入口の看板、噴水そばのベンチ
-    place('town-tree',      rx + 1,  ry + 2,      1.8, 4)
-    place('town-tree',      rx + 14, ry + 2,      1.8, 4)
-    place('town-tree',      rx + 1,  ry + rh - 3, 1.8, 6)
-    place('town-tree',      rx + 14, ry + rh - 3, 1.8, 6)
-    place('town-topiary',   rx + 6,  ry + 2,      1.1, 4)
-    place('town-topiary',   rx + 10, ry + 2,      1.1, 4)
+    // 木・トピアリーは1体以上救済で生え始める（誰もいない廃墟には緑がない）
+    if (stage >= 1) {
+      place('town-tree',    rx + 1,  ry + 2,      1.8, 4, true)
+      place('town-tree',    rx + 14, ry + 2,      1.8, 4, true)
+      place('town-tree',    rx + 1,  ry + rh - 3, 1.8, 6, true)
+      place('town-tree',    rx + 14, ry + rh - 3, 1.8, 6, true)
+      place('town-topiary', rx + 6,  ry + 2,      1.1, 4, true)
+      place('town-topiary', rx + 10, ry + 2,      1.1, 4, true)
+    }
+    // 看板は救済状況を確認するための機能物なので、廃墟状態でも常設・ティントなし
     place('town-signboard', rx + 7,  ry + 3,      1.08, 4)
     // 体当たりで捜し人一覧を開く（当たり判定はplace()内で登録済み。テクスチャ未読込時はplace()が無視するため位置も設定しない）
     this.signboardPos = this.textureOk('town-signboard') ? { x: rx + 7, y: ry + 3 } : null
@@ -3318,15 +3341,33 @@ export class GameScene extends Phaser.Scene {
         this.updateGraveyardMark()
       })
     }
-    place('town-fountain',  15,      14,          2.4, 3)
-    place('town-bench',     13,      15,          1.1, 3)
-    place('town-flowers',   rx + 5,  ry + 6,      0.9, 3)
-    place('town-flowers',   rx + 12, ry + 6,      0.9, 3)
-    // 生垣：各NPC列の手前にワンポイントで（境界線は張らず、控えめなアクセントに留める）
-    place('town-hedge', rx + 2,      12, 1.0, 3)
-    place('town-hedge', rx + 13,     12, 1.0, 3)
-    place('town-hedge', rx + 2,      18, 1.0, 3)
-    place('town-hedge', rx + 13,     18, 1.0, 3)
+    // 噴水は広場の象徴として常設（ティントで「濁って涸れた噴水」→「澄んだ水」へ変化させる）
+    place('town-fountain',  15,      14,          2.4, 3, true)
+    // ベンチ・花壇は3体以上救済で設置（人が戻り始め、手入れが行き届き始めた頃合い）
+    if (stage >= 3) {
+      place('town-bench',   13,      15,          1.1, 3, true)
+      place('town-flowers', rx + 5,  ry + 6,      0.9, 3, true)
+      place('town-flowers', rx + 12, ry + 6,      0.9, 3, true)
+      // 生垣：各NPC列の手前にワンポイントで（境界線は張らず、控えめなアクセントに留める）
+      place('town-hedge', rx + 2,  12, 1.0, 3, true)
+      place('town-hedge', rx + 13, 12, 1.0, 3, true)
+      place('town-hedge', rx + 2,  18, 1.0, 3, true)
+      place('town-hedge', rx + 13, 18, 1.0, 3, true)
+    }
+    // 井戸・街灯・池・石垣：5体以上救済で庭園アクセントとして追加（広場がにぎわい豊かになってきた段階）
+    // 座標はNPCプロット(x=10/15/20)・十字通路(x=15列, y=10/15/20行)・既存デコを避けた空き地を選んでいる
+    if (stage >= 5) {
+      place('town-well',     12, 11, 1.3, 3, true)
+      place('town-lamp',     18, 11, 1.1, 4, true)
+      place('town-pond',     12, 17, 1.4, 3, true)
+      place('town-rockwall', 18, 17, 1.2, 3, true)
+    }
+    // 全員解放（7体）：満開の庭園として花壇・街灯・トピアリーを追加し、原色フルで最も華やかな見た目に仕上げる
+    if (stage >= 7) {
+      place('town-flowers', 13, 19, 0.9, 3, true)
+      place('town-topiary', 17, 19, 1.1, 4, true)
+      place('town-lamp',    17, 13, 1.1, 4, true)
+    }
     // 救済NPCごとの建物：NPCの2マス上に大きめのランドマークとして配置（NPCは建物の前に立つ構図）
     // 採掘師は店を構えないNPC（回復の泉のとなりで機能する）で、専用の建物素材が
     // 素朴な岩塊しかなく「謎の巨大岩」に見えてしまうため、建物は置かない。
@@ -5006,8 +5047,13 @@ export class GameScene extends Phaser.Scene {
         } else {
           img.setDisplaySize(rts + 6, rts + 6)
         }
-        // 町の草地・石畳・洞窟口は帯ティントを掛けない（元の色をそのまま活かす）
-        if (this.isEventFloor && (key === 'town-grass' || key === 'town-stonepath' || key === 'town-cave')) return img
+        // 町の草地・石畳は、さがし人の解放数に応じたティントを掛ける（0体＝褪せた廃墟色→全解放＝原色）。
+        // 洞窟口は導線の視認性を優先し帯ティントを掛けない。
+        if (this.isEventFloor && (key === 'town-grass' || key === 'town-stonepath')) {
+          img.setTint(plazaProgressTint(this.state?.rescuedNpcs?.length ?? 0))
+          return img
+        }
+        if (this.isEventFloor && key === 'town-cave') return img
         // v2テーマタイルは絵自体に色があるため帯ティントを白方向へ65%弱めて質感を残す
         const v2 = key.startsWith('t2-')
         if      (tile === 'floor') img.setTint(v2 ? softenTint(floorTint, 0.65) : floorTint)
