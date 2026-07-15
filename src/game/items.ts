@@ -151,15 +151,18 @@ export function maybeApplyEquipPrefix(item: Item): Item {
 
 export function spawnItems(
   map: TileType[][],
-  options: { countMult?: number; equipRate?: number; floor?: number } = {}
+  options: { countMult?: number; equipRate?: number; floor?: number; excludePositions?: { x: number; y: number }[] } = {}
 ): Item[] {
-  const { countMult = 1, equipRate = 0.2, floor = 99 } = options
+  const { countMult = 1, equipRate = 0.2, floor = 99, excludePositions = [] } = options
   const floors: { x: number; y: number }[] = []
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
-      if (map[y][x] === 'floor') floors.push({ x, y })
+      if (map[y][x] !== 'floor') continue
+      if (excludePositions.some(p => p.x === x && p.y === y)) continue   // 牢屋NPCマス等、見た目floorだが湧かせたくない座標
+      floors.push({ x, y })
     }
   }
+  if (floors.length === 0) return []   // 湧ける床が無い（全除外等）場合は何も湧かさない
 
   // 現在フロアで出現可能な装備プール（深層ほど上位装備が混ざる）
   const equipPool = EQUIP_ITEMS.filter(e => (e.minFloor ?? 1) <= floor)

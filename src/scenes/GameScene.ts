@@ -15,6 +15,7 @@ import { getMonsterTextureOverrides } from '../game/overrides'
 import { ENEMY_TEXTURE_MAP, getEnemyTextureKeysForFloorRange } from '../game/enemyTextures'
 import { safePrompt } from '../game/phaserRecovery'
 import { fetchDoppelgangerCandidate, type DoppelgangerRecord } from '../game/doppelganger'
+import { fetchLatestGraveyardId, getLastSeenGraveyardId, setLastSeenGraveyardId } from '../game/graveyard'
 
 const VISION_RADIUS    = 5   // エンティティ可視半径
 const VISION_FOG_INNER = 2   // 霧グラデーション開始距離
@@ -250,6 +251,7 @@ export class GameScene extends Phaser.Scene {
   private awaitingEquipModal = false
   private pendingItem: import('../types').Item | null = null
   private isGameOver   = false   // gameOver()の多重発火防止（同一ターン内で複数回HP<=0判定が走るため）
+  private lastDeathCause = '不明な要因'   // ゲームオーバー画面用：直近のダメージ要因（各ダメージ処理箇所でセット）
   private isAnimating  = false   // 落とし穴スピンなどの演出中フラグ（入力ブロック用）
   private animatingTimer: ReturnType<typeof setTimeout> | null = null  // isAnimating安全タイムアウト
   private onVisibilityChange = () => {
@@ -289,6 +291,10 @@ export class GameScene extends Phaser.Scene {
   private plazaPath = new Set<string>()      // 町の石畳パス（十字通路）"x,y"。createTileSpritesの見た目切替に使う
   private signboardPos: import('../types').Position | null = null   // 広場の掲示板の位置。体当たりで捜し人一覧を開く
   private signboardMark: Phaser.GameObjects.Text | null = null   // 看板上に浮かせる未読「！」マーク
+  private graveyardPos: import('../types').Position | null = null   // 広場の墓標の位置。体当たりで墓標一覧を開く
+  private graveyardMark: Phaser.GameObjects.Text | null = null   // 墓標上に浮かせる未読「！」マーク
+  private graveyardLatestId: number | null = null   // 直近フェッチした最新墓標id（既読化に使う）
+  private graveyardUnread = false   // 全プレイヤー共有データのため、セーブ対象のstateではなくシーン内フラグで管理
   private skipNextStairsSound = false   // 落とし穴転落直後のpopulateFloorで汎用階段音を重ねないためのフラグ
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private loadedEnemyKeys = new Set<string>()  // 先読み済みの敵テクスチャキー（通信量削減の遅延ロード用）
@@ -982,6 +988,13 @@ export class GameScene extends Phaser.Scene {
       return
     }
 
+    // 町（あるかなひろば）の墓標：体当たりで墓標一覧（全プレイヤー共有）を開く
+    if (this.isEventFloor && this.graveyardPos && this.graveyardPos.x === nx && this.graveyardPos.y === ny) {
+      if (event.repeat) return
+      this.openGraveyard()
+      return
+    }
+
     // 町（あるかなひろば）の装飾・建物タイルは通行不可（木/池/街灯/花/建物）
     if (this.isEventFloor && this.plazaBlocked.has(`${nx},${ny}`)) return
 
@@ -1287,7 +1300,7 @@ export class GameScene extends Phaser.Scene {
       player.poisonTurns = 5
       this.addMessage('ベノムダストを踏んだ！毒状態に！')
       window.showEventMessage?.(`毒の沼にハマってしまった\n残り§${player.poisonTurns}§ターン`, '#aa44ff')
-      if (player.hp <= 0) this.gameOver()
+      if (player.hp <= 0) { this.lastDeathCause = '毒の沼（ベノムダスト）'; this.gameOver() }
     }
     if (tile === 'mud') {
       player.mudTurns = 10
@@ -2100,7 +2113,7 @@ export class GameScene extends Phaser.Scene {
           this.cameras.main.shake(280, 0.018)
           this.cameras.main.flash(170, 150, 0, 0)
           this.addMessage(`${enemy.name}の大技が炸裂！${dmg}ダメージ！`)
-          if (player.hp <= 0) { this.gameOver(); return }
+          if (player.hp <= 0) { this.lastDeathCause = `${enemy.name}の大技`; this.gameOver(); return }
         } else {
           // 空振り：回避成功の快感を演出で返す
           if (eg && eg.visible) {
@@ -2145,7 +2158,7 @@ export class GameScene extends Phaser.Scene {
           enemy.fuseCount--
           if (enemy.fuseCount <= 0) {
             this.explodeBomber(enemy)
-            if (player.hp <= 0) { this.gameOver(); return }
+            if (player.hp <= 0) { this.lastDeathCause = `${enemy.name}の自爆`; this.gameOver(); return }
             continue
           }
         }
@@ -2184,7 +2197,7 @@ export class GameScene extends Phaser.Scene {
             this.popDamageNumber(player.position.x, player.position.y, dmg, { toPlayer: true })
             this.flashPlayer()
             this.addMessage(`${enemy.name}は苦し紛れの攻撃！${dmg}ダメージ！`)
-            if (player.hp <= 0) { this.gameOver(); return }
+            if (player.hp <= 0) { this.lastDeathCause = `${enemy.name}`; this.gameOver(); return }
           }
         }
         continue   // 弱虫は自分からは近寄らない
@@ -2211,7 +2224,7 @@ export class GameScene extends Phaser.Scene {
           this.flashPlayer()
           this.cameras.main.shake(180, 0.010)
           this.addMessage(`すかるぽりんから${dmg}ダメージ！`)
-          if (player.hp <= 0) { this.gameOver(); return }
+          if (player.hp <= 0) { this.lastDeathCause = 'すかるぽりん'; this.gameOver(); return }
           continue
         }
 
@@ -2281,7 +2294,7 @@ export class GameScene extends Phaser.Scene {
         this.addMessage(anyCrit
           ? `${enemy.name}からクリティカル！${hitLabel}${totalDmg}ダメージ！`
           : `${enemy.name}から${hitLabel}${totalDmg}ダメージ！`)
-        if (player.hp <= 0) { this.gameOver(); return }
+        if (player.hp <= 0) { this.lastDeathCause = anyCrit ? `${enemy.name}のクリティカル` : `${enemy.name}`; this.gameOver(); return }
 
       } else if (manhDist < 10) {
         // 空いている包囲ポジションを最も近いものから探す
@@ -2703,7 +2716,7 @@ export class GameScene extends Phaser.Scene {
       player.stamina = 0
       player.hp = Math.max(0, player.hp - 2)
       this.addMessage('スタミナ切れ！HPが減っていく！')
-      if (player.hp <= 0) this.gameOver()
+      if (player.hp <= 0) { this.lastDeathCause = 'スタミナ切れ'; this.gameOver() }
     } else if (player.stamina <= 20) {
       this.addMessage('スタミナが少なくなってきた…')
     }
@@ -2722,7 +2735,7 @@ export class GameScene extends Phaser.Scene {
       player.poisoned = false
       this.addMessage('毒が治った！')
     }
-    if (player.hp <= 0) this.gameOver()
+    if (player.hp <= 0) { this.lastDeathCause = '毒'; this.gameOver() }
   }
 
   private nextFloor() {
@@ -2772,6 +2785,9 @@ export class GameScene extends Phaser.Scene {
     this.signboardPos = null
     this.signboardMark?.destroy()
     this.signboardMark = null
+    this.graveyardPos = null
+    this.graveyardMark?.destroy()
+    this.graveyardMark = null
     this.floorRescue = null
     this.jailCell = null
     this.pendingClearRescue = null
@@ -2805,9 +2821,11 @@ export class GameScene extends Phaser.Scene {
     const base     = 7
     const lukBonus = Math.min(Math.floor(this.state.player.luk * 0.08), 20)
     const count    = Math.min(base + Math.floor(Math.random() * (base + lukBonus)), 36)
+    // 牢屋(パターン3)のNPCマスは見た目上floorのままなので、明示的に湧き候補から除外する
+    const spawnExclude: import('../types').Position[] = this.getJailNpcPos()
     const normalEnemies = floorType === 'chaos'
-      ? spawnMonsterHouseEnemies(map, floor, playerPos)
-      : spawnEnemies(map, count, floor)
+      ? spawnMonsterHouseEnemies(map, floor, playerPos, spawnExclude)
+      : spawnEnemies(map, count, floor, spawnExclude)
     if (floorType === 'chaos') bosses = [...bosses, makeChaosBoss(floor)]
 
     const floors: { x: number; y: number }[] = []
@@ -2822,15 +2840,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.state.enemies = [...normalEnemies, ...bosses]
-    dedupeEnemyPositions(this.state.enemies, map, playerPos)   // 敵が重なって始まらないように
+    dedupeEnemyPositions(this.state.enemies, map, playerPos, spawnExclude)   // 敵が重なって始まらないように
     this.state.items = this.floorIsCleared
       ? []   // 踏破済みフロアはアイテムドロップなし（周回ファーム対策）
       : floorType === 'lucky'
-      ? spawnItems(map, { countMult: 6, equipRate: 0.30, floor })
+      ? spawnItems(map, { countMult: 6, equipRate: 0.30, floor, excludePositions: spawnExclude })
       : floorType === 'chaos'
-      ? spawnItems(map, { countMult: 6, floor })
-      : spawnItems(map, { countMult: 3, floor })
-    dedupeItemPositions(this.state.items, map, playerPos)   // 壁化したマスに乗っていたら空き床へ退避（回収不能化の防止）
+      ? spawnItems(map, { countMult: 6, floor, excludePositions: spawnExclude })
+      : spawnItems(map, { countMult: 3, floor, excludePositions: spawnExclude })
+    dedupeItemPositions(this.state.items, map, playerPos, spawnExclude)   // 壁化したマスに乗っていたら空き床へ退避（回収不能化の防止）
     this.state.floorType = floorType
     // 瘴気フロア（デバフ）：normalフロアのみ1割で発生。視界3マス減。lucky/chaos/イベントとは排他で競合しない
     this.state.miasmaFloor = floorType === 'normal' && Math.random() < 0.10
@@ -2906,6 +2924,13 @@ export class GameScene extends Phaser.Scene {
     this.floorRescue = { kind, position: pos }
   }
 
+  /** 牢屋NPCの座標を配列で返す（未生成なら空配列）。敵/アイテムの湧き候補除外に使う。 */
+  private getJailNpcPos(): import('../types').Position[] {
+    const cell = this.jailCell
+    if (cell === null) return []
+    return [cell.npcPos]
+  }
+
   /** パターン3：8方を岩で囲み1方だけ柵(jail)のある牢屋を生成し、中に未救済NPCを配置。 */
   private carveJail(kind: import('../types').NpcKind) {
     const { map } = this.state
@@ -2946,6 +2971,53 @@ export class GameScene extends Phaser.Scene {
   /** 看板の上に浮かせる「！」マークの表示/非表示を更新する（未読時のみ表示） */
   private updateSignboardMark() {
     this.signboardMark?.setVisible(this.isEventFloor && !!this.signboardPos && this.state.signboardUnread)
+  }
+
+  /** 墓標本体を描画する（画像アセット不要。丸みのある石版＋十字＋絵文字をGraphicsで描画）。
+   *  当たり判定はplace()を使わず、移動ハンドラ側でgraveyardPosを直接判定する（看板と同じ方式）。 */
+  private drawGraveTombstone(pos: import('../types').Position) {
+    const { x, y } = this.tileToWorld(pos.x, pos.y)
+    const w = this.rts * 0.62
+    const h = this.rts * 0.82
+    const baseY = y + this.rts * 0.12   // 足元を少し下げて地面に馴染ませる
+
+    const g = this.add.graphics().setDepth(4)
+    // 影
+    g.fillStyle(0x000000, 0.25)
+    g.fillEllipse(x, baseY + h * 0.42, w * 0.9, h * 0.22)
+    // 石版本体（上部を丸めたアーチ型）
+    g.fillStyle(0x555568, 1)
+    g.fillRoundedRect(x - w / 2, baseY - h, w, h, { tl: w / 2, tr: w / 2, bl: 4, br: 4 })
+    g.lineStyle(Math.max(1, this.rts * 0.02), 0x2f2f3a, 1)
+    g.strokeRoundedRect(x - w / 2, baseY - h, w, h, { tl: w / 2, tr: w / 2, bl: 4, br: 4 })
+    // 十字の刻み
+    g.lineStyle(Math.max(1, this.rts * 0.035), 0x2f2f3a, 0.8)
+    g.lineBetween(x, baseY - h * 0.82, x, baseY - h * 0.5)
+    g.lineBetween(x - w * 0.16, baseY - h * 0.68, x + w * 0.16, baseY - h * 0.68)
+    this.plazaDecor.push(g)
+
+    // 絵文字アクセント
+    const emoji = this.add.text(x, baseY - h * 0.32, '🪦', {
+      fontSize: `${Math.round(this.rts * 0.42)}px`,
+    }).setOrigin(0.5).setDepth(5)
+    this.plazaDecor.push(emoji)
+
+    // 体当たり移動が使えないスマホ操作でも開けるよう、直接タップ/クリックでも開けるようにする
+    emoji.setInteractive({ useHandCursor: true })
+    emoji.on('pointerdown', () => this.openGraveyard())
+  }
+
+  /** 墓標一覧モーダルを開く（体当たり／直接タップの両方から呼ばれる共通処理） */
+  private openGraveyard() {
+    window.dispatchEvent(new Event('graveyard-open'))
+    if (this.graveyardLatestId !== null) setLastSeenGraveyardId(this.graveyardLatestId)
+    this.graveyardUnread = false
+    this.updateGraveyardMark()
+  }
+
+  /** 墓標上に浮かせる「！」マークの表示/非表示を更新する（未読時のみ表示） */
+  private updateGraveyardMark() {
+    this.graveyardMark?.setVisible(this.isEventFloor && !!this.graveyardPos && this.graveyardUnread)
   }
 
   private coinCount(): number { return this.state.heals.filter(h => h.coin).length }
@@ -3017,6 +3089,7 @@ export class GameScene extends Phaser.Scene {
       const kind = this.jailCell!.kind
       const { doorPos } = this.jailCell!
       this.state.map[doorPos.y][doorPos.x] = 'floor'   // 柵を撤去して通行可能に
+      this.assignFloorVariant(doorPos.x, doorPos.y)    // 柵位置は生成時未割当のため、床の見た目も明示的に割り当てる
       if (this.jailNpcSprite) { this.jailNpcSprite.destroy(); this.jailNpcSprite = null }
       this.jailCell = null
       this.rescueNpc(kind, 'モンスターに囚われていた冒険者を助けた。')
@@ -3144,6 +3217,8 @@ export class GameScene extends Phaser.Scene {
     this.plazaBlocked = new Set<string>()
     this.signboardMark?.destroy()
     this.signboardMark = null
+    this.graveyardMark?.destroy()
+    this.graveyardMark = null
     const place = (key: string, tx: number, ty: number, scale: number, depth: number) => {
       if (!this.textureOk(key)) return
       const { x, y } = this.tileToWorld(tx, ty)
@@ -3202,6 +3277,28 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: mark, y: markY - this.rts * 1.35, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
       this.signboardMark = mark
       this.updateSignboardMark()
+    }
+    // 墓標（画像アセット不要。Graphics+絵文字で描画）。看板の3マス右隣＝十字路の右上。
+    this.graveyardPos = { x: rx + 9, y: ry + 3 }
+    this.drawGraveTombstone(this.graveyardPos)
+    {
+      const { x: gMarkX, y: gMarkY } = this.tileToWorld(this.graveyardPos.x, this.graveyardPos.y)
+      const gMark = this.add.text(gMarkX, gMarkY - this.rts * 1.1, '！', {
+        fontSize: `${Math.round(this.rts * 0.6)}px`,
+        color: '#ff4444',
+        fontStyle: 'bold',
+        stroke: '#ffffff',
+        strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(6).setVisible(false)
+      this.tweens.add({ targets: gMark, y: gMarkY - this.rts * 1.35, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+      this.graveyardMark = gMark
+      // 全プレイヤー共有データのため、最新idを取得して前回既読分（localStorage）と比較する
+      void fetchLatestGraveyardId().then(latestId => {
+        if (latestId === null) return
+        this.graveyardLatestId = latestId
+        this.graveyardUnread = latestId !== getLastSeenGraveyardId()
+        this.updateGraveyardMark()
+      })
     }
     place('town-fountain',  15,      14,          2.4, 3)
     place('town-bench',     13,      15,          1.1, 3)
@@ -3657,11 +3754,13 @@ export class GameScene extends Phaser.Scene {
       return
     }
     const { map, player } = this.state
+    const jailExclude = this.getJailNpcPos()
     const inView:   { x: number; y: number }[] = []
     const fallback: { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
         if (map[y][x] !== 'floor') continue
+        if (jailExclude.some(p => p.x === x && p.y === y)) continue
         const dx = x - player.position.x
         const dy = y - player.position.y
         const distSq = dx * dx + dy * dy
@@ -3677,7 +3776,7 @@ export class GameScene extends Phaser.Scene {
       : makeNamedNormalEnemy(name, player.floor)
     enemy.position = { ...pos }
     this.state.enemies.push(enemy)
-    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    dedupeEnemyPositions(this.state.enemies, map, player.position, jailExclude)
     this.addMessage(`⚡ ${enemy.name} が出現した！`)
     this.showPickupNotif(`⚡ ${enemy.name} 出現！`)
     this.renderMap()
@@ -3711,12 +3810,14 @@ export class GameScene extends Phaser.Scene {
 
   private spawnSkulporinOnFloor(): void {
     const { map, player } = this.state
+    const jailExclude = this.getJailNpcPos()
     // プレイヤーのすぐ近く（2〜4マス）に出現させて見つけやすくする
     const near: { x: number; y: number }[] = []
     const far:  { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
         if (map[y][x] !== 'floor') continue
+        if (jailExclude.some(p => p.x === x && p.y === y)) continue
         const dist = Math.abs(x - player.position.x) + Math.abs(y - player.position.y)
         if (dist >= 2 && dist <= 4) near.push({ x, y })
         else if (dist >= 1) far.push({ x, y })
@@ -3741,7 +3842,7 @@ export class GameScene extends Phaser.Scene {
       slowedTurns: 0,
       isSkulporin: true,
     })
-    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    dedupeEnemyPositions(this.state.enemies, map, player.position, jailExclude)
 
     this.addMessage('【すかるぽりんが出現した！】逃げる前に倒そう！')
     this.renderMap()
@@ -3919,10 +4020,13 @@ export class GameScene extends Phaser.Scene {
 
   private spawnDoppelganger(record: DoppelgangerRecord): void {
     const { map, player } = this.state
+    const jailExclude = this.getJailNpcPos()
     const floors: { x: number; y: number }[] = []
     for (let y = 0; y < map.length; y++) {
       for (let x = 0; x < map[y].length; x++) {
-        if (map[y][x] === 'floor') floors.push({ x, y })
+        if (map[y][x] !== 'floor') continue
+        if (jailExclude.some(p => p.x === x && p.y === y)) continue
+        floors.push({ x, y })
       }
     }
     if (floors.length === 0) return
@@ -3961,7 +4065,7 @@ export class GameScene extends Phaser.Scene {
       ),
     }
     this.state.enemies.push(enemy)
-    dedupeEnemyPositions(this.state.enemies, map, player.position)
+    dedupeEnemyPositions(this.state.enemies, map, player.position, jailExclude)
     this.addMessage(`【ドッペルゲンガーが出現した！】「${record.player_name}」の魂が眠っていたようだ…`)
     this.renderMap()
     // populateFloor完了後の非同期出現のため、ボスBGMへの切り替えをここで再評価する
@@ -4034,7 +4138,7 @@ export class GameScene extends Phaser.Scene {
     // ジョイスティックのタッチ横取りや「いいね」判定が生き残らないように）
     window.isGameSceneActive = false
     window.dispatchEvent(new Event('game-scene-changed'))
-    logEvent('death', { floor: this.state.player.floor, level: this.state.player.level })
+    logEvent('death', { floor: this.state.player.floor, level: this.state.player.level, enemy_name: this.lastDeathCause })
     clearSave()              // ローカル中断データをゲームオーバーで強制消滅
     void deleteOwnCloudSave() // クラウドセーブも削除（復活＝セーブスカミング防止・permadeath維持）
     this.input.keyboard!.off('keydown', this.handleInput, this)
@@ -4055,6 +4159,7 @@ export class GameScene extends Phaser.Scene {
         refineTotal,
         jackpotWins,
         doppelSnapshot,
+        deathCause: this.lastDeathCause,
       })
     })
   }
@@ -4807,6 +4912,22 @@ export class GameScene extends Phaser.Scene {
   private themedTileKey(kind: 'pitfall' | 'mud' | 'trap' | 'spring' | 'spring-dry', legacy: string): string {
     const v2 = `t2-${kind}-${dungeonTheme(this.state?.player?.floor ?? 1)}`
     return this.textureOk(v2) ? v2 : legacy
+  }
+
+  /**
+   * 牢屋の柵(jail)撤去など、床でなかったマスが後から床へ変わるケース用。
+   * buildFloorVariants は生成時に一括で床バリエーションを割り当てるため、
+   * その後floor化した個別マスは空文字のままテクスチャ不明→フォールバック単色描画になってしまう。
+   * ここで該当マスにだけ同じ選定ロジックで床キーを割り当て、通常の床と同じ見た目にする。
+   */
+  private assignFloorVariant(x: number, y: number) {
+    const theme = dungeonTheme(this.state?.player?.floor ?? 1)
+    const keys = [1, 2, 3].map(n => {
+      const v2 = `t2-floor-${theme}-${n}`
+      return this.textureOk(v2) ? v2 : `tile-floor${n}`
+    })
+    if (!this.floorVariantMap[y]) this.floorVariantMap[y] = []
+    this.floorVariantMap[y][x] = keys[Math.floor(Math.random() * keys.length)]
   }
 
   private buildFloorVariants(map: import('../types').TileType[][]) {

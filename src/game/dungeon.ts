@@ -1,4 +1,4 @@
-import type { TileType, Position } from '../types'
+import type { TileType, Position, Enemy } from '../types'
 
 export const TILE_SIZE = 48
 export const MAP_WIDTH = 30
@@ -99,18 +99,20 @@ export function dedupeEnemyPositions(
   enemies: { position: Position }[],
   map: TileType[][],
   playerPos: Position,
+  excludePositions: Position[] = [],
 ): void {
   const isWalk = (x: number, y: number): boolean => {
     const t = map[y]?.[x]
     return t === 'floor' || t === 'trap' || t === 'mud' || t === 'spring' || t === 'pitfall'
   }
+  const isExcluded = (x: number, y: number): boolean => excludePositions.some(p => p.x === x && p.y === y)
   const occupied = new Set<string>([`${playerPos.x},${playerPos.y}`])
 
-  // 空き床タイル（プレイヤー位置を除く）をシャッフルして用意
+  // 空き床タイル（プレイヤー位置・除外座標を除く）をシャッフルして用意
   const freeTiles: Position[] = []
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
-      if (map[y][x] === 'floor' && !(x === playerPos.x && y === playerPos.y)) freeTiles.push({ x, y })
+      if (map[y][x] === 'floor' && !(x === playerPos.x && y === playerPos.y) && !isExcluded(x, y)) freeTiles.push({ x, y })
     }
   }
   for (let i = freeTiles.length - 1; i > 0; i--) {
@@ -122,7 +124,7 @@ export function dedupeEnemyPositions(
   let fi = 0
   for (const e of enemies) {
     const key = `${e.position.x},${e.position.y}`
-    if (!occupied.has(key) && isWalk(e.position.x, e.position.y)) {
+    if (!occupied.has(key) && !isExcluded(e.position.x, e.position.y) && isWalk(e.position.x, e.position.y)) {
       occupied.add(key)
       continue
     }
@@ -151,16 +153,18 @@ export function dedupeItemPositions(
   items: { position: Position }[],
   map: TileType[][],
   playerPos: Position,
+  excludePositions: Position[] = [],
 ): void {
+  const isExcluded = (x: number, y: number): boolean => excludePositions.some(p => p.x === x && p.y === y)
   const occupied = new Set<string>([`${playerPos.x},${playerPos.y}`])
   for (const it of items) {
-    if (map[it.position.y]?.[it.position.x] === 'floor') occupied.add(`${it.position.x},${it.position.y}`)
+    if (map[it.position.y]?.[it.position.x] === 'floor' && !isExcluded(it.position.x, it.position.y)) occupied.add(`${it.position.x},${it.position.y}`)
   }
 
   const freeTiles: Position[] = []
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
-      if (map[y][x] === 'floor' && !occupied.has(`${x},${y}`)) freeTiles.push({ x, y })
+      if (map[y][x] === 'floor' && !occupied.has(`${x},${y}`) && !isExcluded(x, y)) freeTiles.push({ x, y })
     }
   }
   for (let i = freeTiles.length - 1; i > 0; i--) {
@@ -170,7 +174,7 @@ export function dedupeItemPositions(
 
   let fi = 0
   for (const it of items) {
-    if (map[it.position.y]?.[it.position.x] === 'floor') continue   // 正常位置はそのまま
+    if (map[it.position.y]?.[it.position.x] === 'floor' && !isExcluded(it.position.x, it.position.y)) continue   // 正常位置はそのまま
     if (fi < freeTiles.length) {
       const t = freeTiles[fi++]
       it.position = { x: t.x, y: t.y }
@@ -522,11 +526,13 @@ export function makeMinionEnemy(floor: number) {
   }
 }
 
-export function spawnEnemies(map: TileType[][], count: number, floor: number) {
+export function spawnEnemies(map: TileType[][], count: number, floor: number, excludePositions: Position[] = []) {
   const floors: Position[] = []
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
-      if (map[y][x] === 'floor') floors.push({ x, y })
+      if (map[y][x] !== 'floor') continue
+      if (excludePositions.some(p => p.x === x && p.y === y)) continue   // 牢屋NPCマス等、見た目floorだが湧かせたくない座標
+      floors.push({ x, y })
     }
   }
 
@@ -534,7 +540,8 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
   const available = ENEMY_TABLE.filter(e =>
     e.minFloor <= floor && (floor > DEEP_FLOOR || e.maxFloor >= floor)
   )
-  const enemies = []
+  const enemies: Enemy[] = []
+  if (floors.length === 0) return enemies   // 湧ける床が無い（全除外等）場合は何も湧かさない
 
   // 1〜3Fは全ステータスを60%に抑えて初心者が序盤を乗り越えやすくする
   const f1Mult = floor <= 3 ? 0.6 : 1.0
@@ -565,12 +572,13 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number) {
 }
 
 /** 枝テロ: フロアの約70%をモンスターで埋める。プレイヤー周囲2マスは安全地帯 */
-export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playerPos: Position) {
+export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playerPos: Position, excludePositions: Position[] = []) {
   const SAFE_RADIUS = 2
   const candidates: Position[] = []
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
       if (map[y][x] !== 'floor') continue
+      if (excludePositions.some(p => p.x === x && p.y === y)) continue   // 牢屋NPCマス等、見た目floorだが湧かせたくない座標
       const dx = x - playerPos.x
       const dy = y - playerPos.y
       if (Math.abs(dx) <= SAFE_RADIUS && Math.abs(dy) <= SAFE_RADIUS) continue

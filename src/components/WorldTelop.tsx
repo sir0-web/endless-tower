@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { acquireFeed, releaseFeed, onNewNotif, type WorldNotif } from '../game/worldFeed'
 import { getPlayerId } from '../game/supabase'
 import { getDisplayName } from '../game/playerName'
@@ -130,10 +129,14 @@ export function WorldTelop() {
   const c = COLORS[current.type] ?? COLORS.world
   const likeable = isLikeable(current)
 
-  return createPortal(
+  return (
     // 親は常に pointer-events:none（タップは「いいね」ボタンだけが受ける。CSS側で auto 指定済み）。
     // 以前は likeable 時に親全体を auto にしていたため、消去タイマーが失われた際に
     // 見えない帯が画面上部のタップを恒久的に奪うことがあった。
+    // ※以前はcreatePortalでdocument.body直下に描画していたが、それだとPCのUI倍率
+    //   （App.tsxのtransform: scale）の影響を受けず実ピクセル位置に固定されたままになり、
+    //   縮小率が下がるほどHPバー（.pc-status-top）へ物理的に重なる不具合があった。
+    //   App.tsx側でtransform適用済みの箱の中に置くよう変更し、常に一緒に縮小・移動させる。
     <div
       className="world-telop"
       style={{
@@ -161,7 +164,6 @@ export function WorldTelop() {
         </button>
       )}
       <div className="world-telop-rule" style={{ background: c.border }} />
-    </div>,
-    document.body,
+    </div>
   )
 }

@@ -54,8 +54,8 @@ type DbTab = 'monster' | 'equip' | 'item' | 'spell'
 interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
 
 interface MaintenanceWindow { from: number; to: number | null }
-interface RankingEntry { id: number; player_name: string; floor: number; level: number; created_at: string }
-interface WorldNotif { id: number; type: string; title: string; message: string; player_name: string; created_at: string }
+interface RankingEntry { id: number; player_name: string; player_id?: string | null; floor: number; level: number; created_at: string }
+interface WorldNotif { id: number; type: string; title: string; message: string; player_name: string; player_id?: string | null; created_at: string }
 interface EditingRanking { id: number; player_name: string; floor: number; level: number }
 
 // active_sessions.state に保存されるプレイヤー状態スナップショット（心拍で同期）
@@ -75,7 +75,7 @@ interface PlayerSession {
 
 interface Report {
   id: number; category: string; content: string
-  player_name: string | null; image_url: string | null
+  player_name: string | null; player_id: string | null; image_url: string | null
   status: 'new' | 'read' | 'done'; created_at: string
 }
 
@@ -1596,6 +1596,9 @@ export function AdminPanel() {
                       <div key={sess.player_id} style={{ ...S.card, marginBottom: 10 }}>
                         <div style={S.cardTitle}>
                           {sess.player_name}
+                          <span style={{ marginLeft: 8, fontSize: 11, color: '#888', fontFamily: 'monospace' }}>player_id: {sess.player_id}</span>
+                          <button onClick={() => { setDmManualId(sess.player_id); setDmTargetId(''); setTab('dm') }}
+                            style={{ ...S.btnSm, marginLeft: 6, padding: '1px 6px', fontSize: 10 }}>DM</button>
                           <span style={{ marginLeft: 8, fontSize: 11, color: '#888' }}>最終同期: {fmtJstDate(sess.updated_at)}</span>
                         </div>
                         {!st ? <p style={S.muted}>状態スナップショットなし（floor {sess.floor}F）</p> : (
@@ -1670,7 +1673,7 @@ export function AdminPanel() {
 
                   <table style={S.table}>
                     <thead><tr>
-                      <th style={S.th}>ID</th><th style={S.th}>プレイヤー名</th>
+                      <th style={S.th}>ID</th><th style={S.th}>プレイヤー名</th><th style={S.th}>player_id</th>
                       <th style={S.th}>最深</th><th style={S.th}>Lv</th>
                       <th style={S.th}>日時 (JST)</th><th style={S.th}></th>
                     </tr></thead>
@@ -1679,6 +1682,15 @@ export function AdminPanel() {
                         <tr key={r.id} style={uEditingRanking?.id === r.id ? { background: 'rgba(79,70,229,0.08)' } : {}}>
                           <td style={{ ...S.td, color: '#666' }}>{r.id}</td>
                           <td style={S.td}>{r.player_name}</td>
+                          <td style={{ ...S.td, fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
+                            {r.player_id
+                              ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  {r.player_id}
+                                  <button onClick={() => { setDmManualId(r.player_id!); setDmTargetId(''); setTab('dm') }}
+                                    style={{ ...S.btnSm, padding: '1px 6px', fontSize: 10 }}>DM</button>
+                                </span>
+                              : <span style={{ color: '#555' }}>─</span>}
+                          </td>
                           <td style={S.td}>{r.floor}F</td>
                           <td style={S.td}>Lv{r.level}</td>
                           <td style={S.td}>{fmtJstDate(r.created_at)}</td>
@@ -1690,7 +1702,7 @@ export function AdminPanel() {
                           </td>
                         </tr>
                       ))}
-                      {uRankings.length === 0 && <tr><td colSpan={6} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                      {uRankings.length === 0 && <tr><td colSpan={7} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -1702,7 +1714,7 @@ export function AdminPanel() {
                     <thead><tr>
                       <th style={S.th}>ID</th><th style={S.th}>日時 (JST)</th>
                       <th style={S.th}>タイプ</th><th style={S.th}>タイトル</th>
-                      <th style={S.th}>本文</th><th style={S.th}></th>
+                      <th style={S.th}>本文</th><th style={S.th}>player_id</th><th style={S.th}></th>
                     </tr></thead>
                     <tbody>
                       {uNotifs.map(n => (
@@ -1712,10 +1724,19 @@ export function AdminPanel() {
                           <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11 }}>{n.type}</span></td>
                           <td style={S.td}>{n.title}</td>
                           <td style={{ ...S.td, maxWidth: 180 }}><div style={S.cellScroll}>{n.message}</div></td>
+                          <td style={{ ...S.td, fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
+                            {n.player_id
+                              ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  {n.player_id}
+                                  <button onClick={() => { setDmManualId(n.player_id!); setDmTargetId(''); setTab('dm') }}
+                                    style={{ ...S.btnSm, padding: '1px 6px', fontSize: 10 }}>DM</button>
+                                </span>
+                              : <span style={{ color: '#555' }}>─</span>}
+                          </td>
                           <td style={S.td}><button onClick={() => deleteUNotif(n.id)} style={S.btnDanger}>削除</button></td>
                         </tr>
                       ))}
-                      {uNotifs.length === 0 && <tr><td colSpan={6} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                      {uNotifs.length === 0 && <tr><td colSpan={7} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -1764,6 +1785,13 @@ export function AdminPanel() {
                     <span style={{ padding: '2px 8px', background: 'rgba(79,70,229,0.25)', borderRadius: 4, fontSize: 12, marginRight: 8 }}>{repDetail.category}</span>
                     {repDetail.player_name ?? '（匿名）'}
                     <span style={{ marginLeft: 8, fontSize: 11, color: '#666' }}>ID:{repDetail.id} — {fmtJstDate(repDetail.created_at)}</span>
+                    {repDetail.player_id && (
+                      <span style={{ marginLeft: 8, fontSize: 11, color: '#666' }}>
+                        player_id: {repDetail.player_id}
+                        <button onClick={() => { setDmManualId(repDetail.player_id!); setDmTargetId(''); setTab('dm') }}
+                          style={{ ...S.btnSm, marginLeft: 6, padding: '1px 6px', fontSize: 10 }}>DM</button>
+                      </span>
+                    )}
                   </span>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <select
@@ -1803,7 +1831,7 @@ export function AdminPanel() {
                   </th>
                   <th style={S.th}>ID</th><th style={S.th}>日時 (JST)</th>
                   <th style={S.th}>カテゴリ</th><th style={S.th}>内容（抜粋）</th>
-                  <th style={S.th}>名前</th><th style={S.th}>画像</th>
+                  <th style={S.th}>名前</th><th style={S.th}>player_id</th><th style={S.th}>画像</th>
                   <th style={S.th}>ステータス</th><th style={S.th}></th>
                 </tr></thead>
                 <tbody>
@@ -1820,6 +1848,15 @@ export function AdminPanel() {
                       <td style={S.td}><span style={{ padding: '2px 6px', background: 'rgba(79,70,229,0.2)', borderRadius: 4, fontSize: 11, whiteSpace: 'nowrap' }}>{r.category}</span></td>
                       <td style={{ ...S.td, maxWidth: 220 }}><div style={S.cellScroll}>{r.content}</div></td>
                       <td style={S.td}>{r.player_name ?? <span style={{ color: '#555' }}>─</span>}</td>
+                      <td style={{ ...S.td, fontSize: 11, color: '#888', fontFamily: 'monospace' }}>
+                        {r.player_id
+                          ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {r.player_id}
+                              <button onClick={e => { e.stopPropagation(); setDmManualId(r.player_id!); setDmTargetId(''); setTab('dm') }}
+                                style={{ ...S.btnSm, padding: '1px 6px', fontSize: 10 }}>DM</button>
+                            </span>
+                          : <span style={{ color: '#555' }}>─</span>}
+                      </td>
                       <td style={S.td}>{r.image_url ? <span style={{ color: '#60a5fa' }}>📎</span> : <span style={{ color: '#555' }}>─</span>}</td>
                       <td style={S.td}>
                         <span style={{ padding: '2px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: `${REP_STATUS_COLOR[r.status]}22`, color: REP_STATUS_COLOR[r.status], border: `1px solid ${REP_STATUS_COLOR[r.status]}55` }}>
@@ -1831,7 +1868,7 @@ export function AdminPanel() {
                       </td>
                     </tr>
                   ))}
-                  {reports.length === 0 && <tr><td colSpan={9} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                  {reports.length === 0 && <tr><td colSpan={10} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
                 </tbody>
               </table>
             )}
