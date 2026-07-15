@@ -140,12 +140,15 @@ export class GameOverScene extends Phaser.Scene {
       })
     })
 
-    // ── グループ2: ボタン2つ ──
-    const submitY  = H * 0.655
-    const retryY   = H * 0.775
+    // ── グループ2: ボタン3つ（登録／墓標／戻る） ──
     const g2Top    = H * 0.605
     const g2Bot    = H * 0.825
     const g2H      = g2Bot - g2Top
+    const submitY    = g2Top + g2H * (1 / 6)
+    const graveyardY = g2Top + g2H * (3 / 6)
+    const retryY     = g2Top + g2H * (5 / 6)
+    const div1Y      = g2Top + g2H * (2 / 6)
+    const div2Y      = g2Top + g2H * (4 / 6)
 
     // グループ2外枠
     const group2Bg = this.add.graphics()
@@ -155,14 +158,14 @@ export class GameOverScene extends Phaser.Scene {
     group2Bg.strokeRect(cx - groupW / 2, g2Top, groupW, g2H)
 
     // ボタン間の区切り線
-    const divY = (submitY + retryY) / 2
     group2Bg.lineStyle(1, 0x444444, 1)
-    group2Bg.lineBetween(cx - groupW / 2 + 12, divY, cx + groupW / 2 - 12, divY)
+    group2Bg.lineBetween(cx - groupW / 2 + 12, div1Y, cx + groupW / 2 - 12, div1Y)
+    group2Bg.lineBetween(cx - groupW / 2 + 12, div2Y, cx + groupW / 2 - 12, div2Y)
 
     // 登録してランキングをみる（ホバー背景）
     const submitHover = this.add.graphics()
     const submitBtn = this.add.text(cx, submitY, '登録してランキングをみる', {
-      fontSize: fs(30), color: '#00ff88', fontStyle: 'bold',
+      fontSize: fs(24), color: '#00ff88', fontStyle: 'bold',
     }).setOrigin(0.5)
 
     submitBtn.setInteractive({ useHandCursor: true })
@@ -177,17 +180,35 @@ export class GameOverScene extends Phaser.Scene {
     submitBtn.on('pointerover', () => {
       submitBtn.setColor('#ffffff')
       submitHover.fillStyle(0x006644, 0.5)
-      submitHover.fillRect(cx - groupW / 2, g2Top, groupW, divY - g2Top)
+      submitHover.fillRect(cx - groupW / 2, g2Top, groupW, div1Y - g2Top)
     })
     submitBtn.on('pointerout', () => {
       submitBtn.setColor('#00ff88')
       submitHover.clear()
     })
 
+    // 墓標を見る（ホバー背景）
+    const graveyardHover = this.add.graphics()
+    const graveyardBtn = this.add.text(cx, graveyardY, '🪦 墓標を見る', {
+      fontSize: fs(24), color: '#c8b8a0', fontStyle: 'bold',
+    }).setOrigin(0.5)
+
+    graveyardBtn.setInteractive({ useHandCursor: true })
+    graveyardBtn.on('pointerdown', () => { window.dispatchEvent(new Event('graveyard-open')) })
+    graveyardBtn.on('pointerover', () => {
+      graveyardBtn.setColor('#ffe0b0')
+      graveyardHover.fillStyle(0x3a3020, 0.5)
+      graveyardHover.fillRect(cx - groupW / 2, div1Y, groupW, div2Y - div1Y)
+    })
+    graveyardBtn.on('pointerout', () => {
+      graveyardBtn.setColor('#c8b8a0')
+      graveyardHover.clear()
+    })
+
     // 登録せずにTOPへ戻る（ホバー背景）
     const retryHover = this.add.graphics()
     const retryBtn = this.add.text(cx, retryY, '登録せずにTOPへ戻る', {
-      fontSize: fs(30), color: '#aaaaaa', fontStyle: 'bold',
+      fontSize: fs(24), color: '#aaaaaa', fontStyle: 'bold',
     }).setOrigin(0.5)
 
     retryBtn.setInteractive({ useHandCursor: true })
@@ -195,7 +216,7 @@ export class GameOverScene extends Phaser.Scene {
     retryBtn.on('pointerover', () => {
       retryBtn.setColor('#ffffff')
       retryHover.fillStyle(0x333333, 0.5)
-      retryHover.fillRect(cx - groupW / 2, divY, groupW, g2Bot - divY)
+      retryHover.fillRect(cx - groupW / 2, div2Y, groupW, g2Bot - div2Y)
     })
     retryBtn.on('pointerout', () => {
       retryBtn.setColor('#aaaaaa')
@@ -224,22 +245,6 @@ export class GameOverScene extends Phaser.Scene {
       // 10F未満などドッペル対象外の死は、同意確認を挟まず「浄化」として墓標に記録する
       void submitGraveyardEntry(getDisplayName(), this.floor, this.deathCause, 'purified')
     }
-
-    // 墓標を見るボタン（押すと町の墓標と同じモーダルが開く）
-    this.drawGraveyardButton(H, cx, fs)
-  }
-
-  /** 墓標を見るボタン。押すと町の墓標オブジェクトと同じ graveyard-open イベントを発火し、
-   *  共通の GraveyardModal（RescueModals.tsx）を開く。GameOverScene 側は表を自前で持たない。 */
-  private drawGraveyardButton(H: number, cx: number, fs: (n: number) => string) {
-    const y = H * 0.865
-    const btn = this.add.text(cx, y, '🪦 墓標を見る', {
-      fontSize: fs(18), color: '#c8b8a0', fontStyle: 'bold',
-    }).setOrigin(0.5)
-    btn.setInteractive({ useHandCursor: true })
-    btn.on('pointerdown', () => { window.dispatchEvent(new Event('graveyard-open')) })
-    btn.on('pointerover', () => btn.setColor('#ffe0b0'))
-    btn.on('pointerout',  () => btn.setColor('#c8b8a0'))
   }
 
   /** 名前入力テキストを playerName に合わせて更新 */
