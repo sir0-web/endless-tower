@@ -2805,9 +2805,11 @@ export class GameScene extends Phaser.Scene {
     const base     = 7
     const lukBonus = Math.min(Math.floor(this.state.player.luk * 0.08), 20)
     const count    = Math.min(base + Math.floor(Math.random() * (base + lukBonus)), 36)
+    // 牢屋(パターン3)のNPCマスは見た目上floorのままなので、明示的に湧き候補から除外する
+    const spawnExclude: import('../types').Position[] = this.getJailNpcPos()
     const normalEnemies = floorType === 'chaos'
-      ? spawnMonsterHouseEnemies(map, floor, playerPos)
-      : spawnEnemies(map, count, floor)
+      ? spawnMonsterHouseEnemies(map, floor, playerPos, spawnExclude)
+      : spawnEnemies(map, count, floor, spawnExclude)
     if (floorType === 'chaos') bosses = [...bosses, makeChaosBoss(floor)]
 
     const floors: { x: number; y: number }[] = []
@@ -2904,6 +2906,13 @@ export class GameScene extends Phaser.Scene {
     const pos = this.randomFloorTile()
     if (!pos) return
     this.floorRescue = { kind, position: pos }
+  }
+
+  /** 牢屋NPCの座標を配列で返す（未生成なら空配列）。敵/アイテムの湧き候補除外に使う。 */
+  private getJailNpcPos(): import('../types').Position[] {
+    const cell = this.jailCell
+    if (cell === null) return []
+    return [cell.npcPos]
   }
 
   /** パターン3：8方を岩で囲み1方だけ柵(jail)のある牢屋を生成し、中に未救済NPCを配置。 */
