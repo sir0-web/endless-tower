@@ -326,8 +326,8 @@ function App() {
         <AnnouncementGateModal />
         <GameToast />
       </div>
+      <WorldTelop />
     </div>
-    <WorldTelop />
     <WorldLog />
     <MailBox />
     <HowToPlay />
