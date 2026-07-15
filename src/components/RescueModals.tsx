@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { fetchGraveyard, fetchTotalDeathCount, type GraveyardEntry } from '../game/graveyard'
 
 function useFacilityOpen(kind: 'junk' | 'toolshop', onForceClose?: () => void) {
   const [open, setOpen] = useState(false)
@@ -346,6 +348,89 @@ export function SearchListModal() {
             </div>
           ))}
         </div>
+        <div className="facility-btns">
+          <button className="facility-close-btn" onClick={close}>とじる</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── 墓標：全プレイヤー共有の死亡記録一覧（あるかなひろばの墓標オブジェクトへの体当たりで開く） ──
+const GY_COLS = '46px 1fr 40px 1.5fr 52px'   // 日付｜生前名｜階層｜死因｜魂（横スクロール無しでこの比率に固定）
+
+function fmtGyDate(iso: string): string {
+  const d = new Date(iso)
+  const yy = String(d.getFullYear()).slice(2)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yy}/${mm}/${dd}`
+}
+
+const gyCellStyle: CSSProperties = {
+  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center',
+}
+
+export function GraveyardModal() {
+  const [rows, setRows] = useState<GraveyardEntry[] | null>(null)
+  const [total, setTotal] = useState<number | null>(null)
+
+  useEffect(() => {
+    const onOpen = () => {
+      setRows([])   // 読み込み中も即座に開いた状態にする（空配列で「読み込み中」表示へ）
+      void Promise.all([fetchGraveyard(20), fetchTotalDeathCount()]).then(([gy, cnt]) => {
+        setRows(gy)
+        setTotal(cnt)
+      })
+    }
+    const onSceneChanged = () => setRows(null)
+    window.addEventListener('graveyard-open', onOpen)
+    window.addEventListener('game-scene-changed', onSceneChanged)
+    return () => {
+      window.removeEventListener('graveyard-open', onOpen)
+      window.removeEventListener('game-scene-changed', onSceneChanged)
+    }
+  }, [])
+
+  if (rows === null) return null
+  const close = () => setRows(null)
+
+  return (
+    <div className="facility-overlay">
+      <div className="facility-modal">
+        <p className="facility-title">🪦 墓標</p>
+        <p className="facility-sub">
+          {total !== null ? `☠ 全世界死亡総数：${total.toLocaleString()}` : '読み込み中…'}
+        </p>
+        {rows.length === 0 && total !== null && (
+          <p className="facility-empty">まだ記録がありません</p>
+        )}
+        {rows.length > 0 && (
+          <div className="facility-list" style={{ gap: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: GY_COLS, gap: 4, padding: '2px 6px', fontSize: 11, color: '#888899' }}>
+              <span style={gyCellStyle}>日付</span>
+              <span style={gyCellStyle}>生前名</span>
+              <span style={gyCellStyle}>階層</span>
+              <span style={gyCellStyle}>死因</span>
+              <span style={gyCellStyle}>魂</span>
+            </div>
+            {rows.map(g => (
+              <div key={g.id} style={{
+                display: 'grid', gridTemplateColumns: GY_COLS, gap: 4,
+                background: '#1c1c3c', border: '1px solid #34345c', borderRadius: 6,
+                padding: '6px 6px', marginTop: 4, fontSize: 12, color: '#e0e0f0',
+              }}>
+                <span style={{ ...gyCellStyle, fontSize: 10, color: '#9aa4b5' }}>{fmtGyDate(g.created_at)}</span>
+                <span style={gyCellStyle} title={g.player_name}>{g.player_name}</span>
+                <span style={gyCellStyle}>B{g.floor}F</span>
+                <span style={{ ...gyCellStyle, color: '#c8c8d8' }} title={g.death_cause}>{g.death_cause}</span>
+                <span style={{ ...gyCellStyle, color: g.soul === 'doppelganger' ? '#c88fff' : '#8fd0ff' }}>
+                  {g.soul === 'doppelganger' ? '👻分身' : '🕊️浄化'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="facility-btns">
           <button className="facility-close-btn" onClick={close}>とじる</button>
         </div>
