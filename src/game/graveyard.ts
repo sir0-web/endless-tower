@@ -54,3 +54,27 @@ export async function fetchTotalDeathCount(): Promise<number | null> {
   }
   return count ?? 0
 }
+
+// ── 未読判定（あるかなひろばの墓標の「！」マーク用）──
+// 全プレイヤー共有データなので、signboardUnreadのようなセーブデータではなく
+// ブラウザ単位のlocalStorageで「最後に見た墓標id」を管理する。
+const LAST_SEEN_KEY = 'et_graveyard_last_seen_id'
+
+export function getLastSeenGraveyardId(): number {
+  return Number(localStorage.getItem(LAST_SEEN_KEY) ?? '0')
+}
+
+export function setLastSeenGraveyardId(id: number): void {
+  localStorage.setItem(LAST_SEEN_KEY, String(id))
+}
+
+// 未読判定専用の軽量取得（最新1件のidのみ）
+export async function fetchLatestGraveyardId(): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('ebt_graveyard')
+    .select('id')
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error || !data || data.length === 0) return null
+  return data[0].id
+}
