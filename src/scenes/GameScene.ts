@@ -417,7 +417,7 @@ export class GameScene extends Phaser.Scene {
 
     // ── あるかなひろば（町）プロップ。未配置でも読み込み失敗＝描画スキップで安全 ──
     for (const p of ['grass', 'path', 'tree', 'well', 'lamp', 'fence', 'pond', 'flowers',
-      'stonepath', 'hedge', 'topiary', 'bench', 'signboard', 'fountain', 'cave', 'rockwall', 'jail-door']) {
+      'stonepath', 'hedge', 'topiary', 'bench', 'signboard', 'fountain', 'cave', 'rockwall', 'jail-door', 'goddess-statue']) {
       const file = p === 'grass' ? 'ground_grass' : p === 'path' ? 'ground_path'
         : p === 'stonepath' ? 'path_stone' : p === 'hedge' ? 'hedge_h'
         : p === 'cave' ? 'deco_cave_entrance_big' : p === 'rockwall' ? 'deco_rockwall'
@@ -2977,10 +2977,28 @@ export class GameScene extends Phaser.Scene {
    *  当たり判定はplace()を使わず、移動ハンドラ側でgraveyardPosを直接判定する（看板と同じ方式）。 */
   private drawGraveTombstone(pos: import('../types').Position) {
     const { x, y } = this.tileToWorld(pos.x, pos.y)
-    const w = this.rts * 0.62
-    const h = this.rts * 0.82
     const baseY = y + this.rts * 0.12   // 足元を少し下げて地面に馴染ませる
 
+    // 女神像の画像（街3素材）。読み込み済みならこちらを優先し、未読込時のみ旧Graphics+絵文字描画へ
+    if (this.textureOk('town-goddess-statue')) {
+      const shadow = this.add.graphics().setDepth(4)
+      shadow.fillStyle(0x000000, 0.25)
+      shadow.fillEllipse(x, baseY + this.rts * 0.08, this.rts * 0.5, this.rts * 0.16)
+      this.plazaDecor.push(shadow)
+
+      const img = this.add.image(x, baseY, 'town-goddess-statue').setOrigin(0.5, 1).setDepth(5)
+      const natW = img.width || 1, natH = img.height || 1
+      const k = (this.rts * 0.9) / natH
+      img.setDisplaySize(natW * k, natH * k)
+      this.plazaDecor.push(img)
+
+      img.setInteractive({ useHandCursor: true })
+      img.on('pointerdown', () => this.openGraveyard())
+      return
+    }
+
+    const w = this.rts * 0.62
+    const h = this.rts * 0.82
     const g = this.add.graphics().setDepth(4)
     // 影
     g.fillStyle(0x000000, 0.25)
