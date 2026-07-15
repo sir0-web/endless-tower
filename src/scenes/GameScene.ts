@@ -4367,6 +4367,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateBGM() {
+    if (this.isEventFloor) { playBGM('town'); return }   // あるかなひろば専用BGM
     const hasBoss = this.state.enemies.some(e => e.isBoss || e.isDoppelganger)
     playBGM(hasBoss ? 'boss' : 'dungeon')
   }
