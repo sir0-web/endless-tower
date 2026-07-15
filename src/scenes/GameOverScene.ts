@@ -6,7 +6,7 @@ import { playBGM } from '../game/sound'
 import { getDisplayName, setDisplayName } from '../game/playerName'
 import { safePrompt, fadeOutToScene } from '../game/phaserRecovery'
 import { registerDeadCharacter } from '../game/doppelganger'
-import { submitGraveyardEntry, fetchGraveyard, fetchTotalDeathCount, type GraveyardEntry } from '../game/graveyard'
+import { submitGraveyardEntry } from '../game/graveyard'
 
 export class GameOverScene extends Phaser.Scene {
   private floor: number = 1
@@ -19,8 +19,6 @@ export class GameOverScene extends Phaser.Scene {
   private leaving: boolean = false   // シーン遷移開始済みフラグ（二重遷移防止）
   private doppelSnapshot: Player | null = null   // ドッペルゲンガー登録用の死亡時ステータス・装備スナップショット
   private deathCause: string = '不明な要因'
-  private graveyard: GraveyardEntry[] = []
-  private totalDeaths: number | null = null
 
   private readonly PLACEHOLDER = 'ここをタップして名前を入力'
 
@@ -227,75 +225,21 @@ export class GameOverScene extends Phaser.Scene {
       void submitGraveyardEntry(getDisplayName(), this.floor, this.deathCause, 'purified')
     }
 
-    // 墓標一覧・全世界死亡総数（他プレイヤー含む共有データ）を読み込んで描画
-    void Promise.all([fetchGraveyard(8), fetchTotalDeathCount()]).then(([rows, total]) => {
-      this.graveyard = rows
-      this.totalDeaths = total
-      this.drawGraveyard(W, H, cx, fs, fsPx)
-    })
+    // 墓標を見るボタン（押すと町の墓標と同じモーダルが開く）
+    this.drawGraveyardButton(H, cx, fs)
   }
 
-  /** 墓標（全プレイヤー共有の死亡記録）を画面下部に横スクロール無しの表として描画 */
-  private drawGraveyard(W: number, H: number, cx: number, fs: (n: number) => string, fsPx: (n: number) => number) {
-    const viewLeft  = W * 0.03
-    const viewRight = W * 0.97
-    const viewW     = viewRight - viewLeft
-
-    // 列の中心 X（viewW に対する割合）。死因は他より広めに取る。
-    const cDate  = viewLeft + viewW * 0.075
-    const cName  = viewLeft + viewW * 0.235
-    const cFloor = viewLeft + viewW * 0.395
-    const cCause = viewLeft + viewW * 0.66
-    const cSoul  = viewLeft + viewW * 0.925
-
-    const totalY  = H * 0.833
-    const titleY  = H * 0.850
-    const headerY = H * 0.870
-    const lineY   = H * 0.882
-    const rowTop  = H * 0.894
-    const rowGap  = H * 0.0152
-    const maxRows = 6
-
-    if (this.totalDeaths !== null) {
-      this.add.text(cx, totalY, `☠ 全世界死亡総数：${this.totalDeaths.toLocaleString()}`, {
-        fontSize: fs(13), color: '#e0a0a0', fontStyle: 'bold',
-      }).setOrigin(0.5)
-    }
-
-    this.add.text(cx, titleY, '🪦 墓標', { fontSize: fs(15), color: '#c8b8a0', fontStyle: 'bold' }).setOrigin(0.5)
-
-    if (this.graveyard.length === 0) return   // 未取得／記録なしの間は表だけ省略（タイトルのみ表示）
-
-    const headerStyle = { fontSize: fs(10), color: '#6a7080' }
-    this.add.text(cDate,  headerY, '日付',   headerStyle).setOrigin(0.5)
-    this.add.text(cName,  headerY, '生前名', headerStyle).setOrigin(0.5)
-    this.add.text(cFloor, headerY, '階層',   headerStyle).setOrigin(0.5)
-    this.add.text(cCause, headerY, '死因',   headerStyle).setOrigin(0.5)
-    this.add.text(cSoul,  headerY, '魂',     headerStyle).setOrigin(0.5)
-
-    const line = this.add.graphics()
-    line.lineStyle(Math.max(1, fsPx(1)), 0x33404f)
-    line.lineBetween(viewLeft, lineY, viewRight, lineY)
-
-    const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
-    const fmtDate = (iso: string) => {
-      const d = new Date(iso)
-      const yy = String(d.getFullYear()).slice(2)
-      const mm = String(d.getMonth() + 1).padStart(2, '0')
-      const dd = String(d.getDate()).padStart(2, '0')
-      return `${yy}/${mm}/${dd}`
-    }
-
-    this.graveyard.slice(0, maxRows).forEach((g, i) => {
-      const y = rowTop + rowGap * i
-      const rowStyle = { fontSize: fs(11), color: '#9aa4b5' }
-      this.add.text(cDate,  y, fmtDate(g.created_at), rowStyle).setOrigin(0.5)
-      this.add.text(cName,  y, trunc(g.player_name, 8), { ...rowStyle, color: '#dbe3ee' }).setOrigin(0.5)
-      this.add.text(cFloor, y, `B${g.floor}F`, rowStyle).setOrigin(0.5)
-      this.add.text(cCause, y, trunc(g.death_cause, 14), rowStyle).setOrigin(0.5)
-      this.add.text(cSoul,  y, g.soul === 'doppelganger' ? '👻分身' : '🕊️浄化',
-        { fontSize: fs(10), color: g.soul === 'doppelganger' ? '#c88fff' : '#8fd0ff' }).setOrigin(0.5)
-    })
+  /** 墓標を見るボタン。押すと町の墓標オブジェクトと同じ graveyard-open イベントを発火し、
+   *  共通の GraveyardModal（RescueModals.tsx）を開く。GameOverScene 側は表を自前で持たない。 */
+  private drawGraveyardButton(H: number, cx: number, fs: (n: number) => string) {
+    const y = H * 0.865
+    const btn = this.add.text(cx, y, '🪦 墓標を見る', {
+      fontSize: fs(18), color: '#c8b8a0', fontStyle: 'bold',
+    }).setOrigin(0.5)
+    btn.setInteractive({ useHandCursor: true })
+    btn.on('pointerdown', () => { window.dispatchEvent(new Event('graveyard-open')) })
+    btn.on('pointerover', () => btn.setColor('#ffe0b0'))
+    btn.on('pointerout',  () => btn.setColor('#c8b8a0'))
   }
 
   /** 名前入力テキストを playerName に合わせて更新 */
