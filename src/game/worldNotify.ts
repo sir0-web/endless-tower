@@ -17,6 +17,8 @@ export function fireWorldNotification(
   message: string,
   dedupKey?: string,
 ): void {
+  // ローカル開発中（npm run dev）はテストプレイが本番のワールド通知欄を荒らさないよう送信しない
+  if (import.meta.env.DEV) return
   if (dedupKey) {
     if (sent.has(dedupKey)) return
     sent.add(dedupKey)

@@ -82,6 +82,7 @@ const SE_VOLUME: Record<string, number> = {
   potion:  1.1,
   equip:   1.1,
   fall:    1.0,
+  mate:    1.1,
 }
 
 export function isMuted(): boolean { return _muted }
@@ -198,7 +199,7 @@ export function stopBGM(): void {
 }
 
 // ── SE（Web Audio API：大量の重なり再生でも要素枯渇しない） ──
-const SE_NAMES = ['attack', 'damage', 'levelup', 'stairs', 'potion', 'equip', 'fall']
+const SE_NAMES = ['attack', 'damage', 'levelup', 'stairs', 'potion', 'equip', 'fall', 'mate']
 
 let audioCtx: AudioContext | null = null
 const seBuffers: Record<string, AudioBuffer> = {}
@@ -242,14 +243,16 @@ export function resumeAudio(): void {
   if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {})
 }
 
-function se(name: string, volMul = 1, rateMul = 1): void {
-  if (_muted) return
+// onEnded: 再生完了時に呼ぶコールバック（救出演出の「鳴り終わるまで操作不能」用）。
+// ミュート/デコード未完了など実際に鳴らせない場合は、待ちぼうけを防ぐため即座に呼ぶ。
+function se(name: string, volMul = 1, rateMul = 1, onEnded?: () => void): void {
+  if (_muted) { onEnded?.(); return }
   const ctx = getCtx()
-  if (!ctx) return
+  if (!ctx) { onEnded?.(); return }
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
 
   const buf = seBuffers[name]
-  if (!buf) { void loadSeBuffer(name); return }  // 未デコードなら今回はスキップ（次回から鳴る）
+  if (!buf) { void loadSeBuffer(name); onEnded?.(); return }  // 未デコードなら今回はスキップ（次回から鳴る）
 
   const src  = ctx.createBufferSource()
   src.buffer = buf
@@ -258,7 +261,7 @@ function se(name: string, volMul = 1, rateMul = 1): void {
   gain.gain.value = Math.max(0, Math.min(2.4, (SE_VOLUME[name] ?? 0.5) * volMul * currentSeMul()))
   src.connect(gain).connect(ctx.destination)
   src.start()
-  src.onended = () => { src.disconnect(); gain.disconnect() }
+  src.onended = () => { src.disconnect(); gain.disconnect(); onEnded?.() }
 }
 
 // ユーザー操作のたびにAudioContextを起こし、SEを事前ロードしておく。
@@ -340,3 +343,5 @@ export function playStairs():  void { se('stairs')  }
 export function playPotion():  void { se('potion')  }
 export function playEquip():   void { se('equip')   }
 export function playFall():    void { se('fall')    }
+// さがし人の救出完了演出用。鳴り終わりで onEnded を呼び、演出モーダルの操作可能化に使う。
+export function playMate(onEnded?: () => void): void { se('mate', 1, 1, onEnded) }

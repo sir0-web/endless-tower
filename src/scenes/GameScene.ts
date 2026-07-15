@@ -4,7 +4,7 @@ import { weaponKindOf } from '../types'
 import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, dedupeItemPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
-import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playFall, playBGM, setHeartbeat } from '../game/sound'
+import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playFall, playMate, playBGM, setHeartbeat } from '../game/sound'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { cloudSaveGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { logEvent, getPlayerId } from '../game/supabase'
@@ -263,6 +263,7 @@ export class GameScene extends Phaser.Scene {
   private isPaused = false
   private isStatAllocOpen = false
   private isEquipModalOpen = false
+  private isRescueNoticeOpen = false   // さがし人：発生告知/救出完了モーダル表示中は操作を止める
   private awaitingEquipModal = false
   private pendingItem: import('../types').Item | null = null
   private isGameOver   = false   // gameOver()の多重発火防止（同一ターン内で複数回HP<=0判定が走るため）
@@ -381,6 +382,7 @@ export class GameScene extends Phaser.Scene {
     this.isPaused           = false
     this.isStatAllocOpen    = false
     this.isEquipModalOpen   = false
+    this.isRescueNoticeOpen = false
     this.awaitingEquipModal = false
     this.pendingItem        = null
     this.playerDir          = 'down'
@@ -603,6 +605,7 @@ export class GameScene extends Phaser.Scene {
     window.getJailUnlockState   = ()                  => this.getJailUnlockState()
     window.tryJailUnlock        = (method, sacId)     => this.tryJailUnlock(method, sacId)
     window.getRescueList        = ()                  => this.getRescueList()
+    window.closeRescueNotice    = ()                  => { this.isRescueNoticeOpen = false }
 
     // ADMINパネルからの即時チェック用（強制出現後に即反映）
     window.triggerSkulporinCheck = () => { void this.sendSkulporinHeartbeat() }
@@ -649,9 +652,33 @@ export class GameScene extends Phaser.Scene {
         fireWorldNotification('event', '[緊急]すかるぽりんが出現しました！', 'どこかのフロアに「すかるぽりん」が出現したようです！冒険者の皆さんは至急討伐に向かってください！')
         console.log('[DEV] すかるぽりんを強制スポーンしました')
       }
+      window.forceRescue = (pattern?: 1 | 2 | 3) => {
+        const pool = this.unrescuedNpcs()
+        if (pool.length === 0) { console.warn('[DEV] 救済可能なNPCがいません（全員救済済み）'); return }
+        const kind = pool[Math.floor(Math.random() * pool.length)]
+        const p = pattern ?? (1 + Math.floor(Math.random() * 3)) as 1 | 2 | 3
+        this.floorRescue = null
+        this.pendingClearRescue = null
+        this.jailCell = null
+        let subMessage = ''
+        if (p === 1) { this.spawnWanderingRescue(kind); subMessage = 'どこかで迷子になっているようだ。' }
+        else if (p === 2) { this.pendingClearRescue = kind; subMessage = 'モンスターに捕まっているようだ。' }
+        else { this.carveJail(kind); subMessage = 'どこかで囚われているようだ。' }
+        if (!(this.floorRescue || this.pendingClearRescue || this.jailCell)) {
+          console.warn('[DEV] 配置に失敗しました（空きマスなし等）。もう一度試してください')
+          return
+        }
+        this.isRescueNoticeOpen = true
+        window.dispatchEvent(new CustomEvent('rescue-notice-open', {
+          detail: `どこからか助けを呼ぶ声が聞こえる・・・\n${subMessage}`,
+        }))
+        this.renderMap()
+        console.log(`[DEV] パターン${p}でさがし人イベントを強制発生:`, kind)
+      }
       console.log('[DEV] warpFloor(階数) で好きな階にワープできます。例: warpFloor(10)')
       console.log('[DEV] giveEquip("装備名") でバッグに装備を追加。引数なしでランダム。')
       console.log('[DEV] debugSkulporin() ですかるぽりんを強制スポーン。')
+      console.log('[DEV] forceRescue(1|2|3) でさがし人イベントを強制発生。1=徘徊 2=全滅解放 3=牢屋。引数なしでランダム。')
       console.log('[DEV] 装備一覧:', EQUIP_ITEMS.map(e => e.name).join(', '))
     }
 
@@ -859,7 +886,7 @@ export class GameScene extends Phaser.Scene {
   // タッチ（モバイル）は仮想ジョイスティック維持のため無視する。
   private handlePointerMove(pointer: Phaser.Input.Pointer) {
     if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
-    if (this.isPaused || this.inventoryOpen) return
+    if (this.isPaused || this.inventoryOpen || this.isRescueNoticeOpen) return
 
     const { player } = this.state
     const tx = Math.floor(pointer.worldX / this.rts)
@@ -904,6 +931,7 @@ export class GameScene extends Phaser.Scene {
   private handleInput(event: KeyboardEvent) {
     this.lastActionAt = Date.now()
     if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
+    if (this.isRescueNoticeOpen) return
     if (event.key === 'Escape') {
       if (this.inventoryOpen) {
         this.toggleInventory()
@@ -1038,7 +1066,7 @@ export class GameScene extends Phaser.Scene {
       const kind = this.floorRescue.kind
       this.floorRescue = null
       if (this.rescueSprite) { this.rescueSprite.destroy(); this.rescueSprite = null }
-      this.rescueNpc(kind, '迷子になっていた冒険者を助けた。')
+      this.rescueNpc(kind)
       this.renderMap()
       this.updateWindowGameState()
       return
@@ -1831,7 +1859,7 @@ export class GameScene extends Phaser.Scene {
     if (this.pendingClearRescue && this.state.enemies.length === 0) {
       const kind = this.pendingClearRescue
       this.pendingClearRescue = null
-      this.rescueNpc(kind, 'モンスターにつかまっていた冒険者を助けた。')
+      this.rescueNpc(kind)
       this.renderMap()
     }
   }
@@ -2906,16 +2934,24 @@ export class GameScene extends Phaser.Scene {
     if (Math.random() >= 0.30) return                // 70%は何も起きない
     const kind = pool[Math.floor(Math.random() * pool.length)]
     const r = Math.random()
+    let subMessage = ''
     if (r < 0.30) {
       this.spawnWanderingRescue(kind)                // パターン1
+      subMessage = 'どこかで迷子になっているようだ。'
     } else if (r < 0.60) {
       this.pendingClearRescue = kind                 // パターン2（全敵撃破で発生）
+      subMessage = 'モンスターに捕まっているようだ。'
     } else {
       this.carveJail(kind)                           // パターン3（牢屋）
+      subMessage = 'どこかで囚われているようだ。'
     }
-    // 配置に失敗（空きマスなし等）した場合は何も起きていないので告知しない
+    // 配置に失敗（空きマスなし等）した場合は何も起きていないので告知しない。
+    // メッセージウィンドウだと気づかれにくいため、OKで消せるモーダルで明示的に知らせる。
     if (this.floorRescue || this.pendingClearRescue || this.jailCell) {
-      this.addMessage('どこからか助けを呼ぶ声が聞こえる・・・')
+      this.isRescueNoticeOpen = true
+      window.dispatchEvent(new CustomEvent('rescue-notice-open', {
+        detail: `どこからか助けを呼ぶ声が聞こえる・・・\n${subMessage}`,
+      }))
     }
   }
 
@@ -2969,13 +3005,19 @@ export class GameScene extends Phaser.Scene {
     this.jailCell = { kind, doorPos: { x: cx, y: cy + 1 }, npcPos: { x: cx, y: cy } }
   }
 
-  /** NPCを救済（rescuedNpcsへ追加）。message は救出パターンごとの文言。 */
-  private rescueNpc(kind: import('../types').NpcKind, message: string) {
+  /** NPCを救済（rescuedNpcsへ追加）。パターンによらず共通の演出モーダル＋SEで知らせる。 */
+  private rescueNpc(kind: import('../types').NpcKind) {
     if (this.state.rescuedNpcs.includes(kind)) return
     this.state.rescuedNpcs.push(kind)
     const c = NPC_CATALOG[kind]
-    this.addMessage(`${message} あるかなひろばの住人が増えた！（${c.name}）`)
-    window.showEventMessage?.(`${c.person}を助けた！住人が増えた`, '#ffd766')
+    // モーダル表示中は操作不能にし、SEが鳴り終わるまで余韻を持たせる
+    this.isRescueNoticeOpen = true
+    window.dispatchEvent(new CustomEvent('rescue-done-open', {
+      detail: `${c.person}を救出し、ひろばの住人に迎え入れた！`,
+    }))
+    playMate()
+    // 操作ロックはSEの再生完了を待たず、固定4秒で解除する（余韻を持たせる演出時間）
+    window.setTimeout(() => window.dispatchEvent(new Event('rescue-done-sound-ended')), 4000)
     // 救出＝さがし人一覧の更新なので、看板の「！」を再表示する
     this.state.signboardUnread = true
     this.updateSignboardMark()
@@ -3125,7 +3167,7 @@ export class GameScene extends Phaser.Scene {
       this.assignFloorVariant(doorPos.x, doorPos.y)    // 柵位置は生成時未割当のため、床の見た目も明示的に割り当てる
       if (this.jailNpcSprite) { this.jailNpcSprite.destroy(); this.jailNpcSprite = null }
       this.jailCell = null
-      this.rescueNpc(kind, 'モンスターに囚われていた冒険者を助けた。')
+      this.rescueNpc(kind)
       // タイルスプライトを再構築（柵→床の反映）
       this.createTileSprites(this.state.map)
       this.renderMap()
@@ -3174,9 +3216,8 @@ export class GameScene extends Phaser.Scene {
     this.isEventFloor = true
     this.floorIsCleared = false   // ベースキャンプはペナルティ対象外
     const map = this.generateEventFloorMap()
-    // さがし人一覧の看板(rx+4, ry+3)の正面（1マス南）からスタートする
-    const { rx, ry } = GameScene.PLAZA_RECT
-    const playerPos = { x: rx + 4, y: ry + 4 }
+    // 噴水(15,14)の真下（1マス南）からスタートする
+    const playerPos = { x: 15, y: 15 }
 
     const rescued = ALL_NPC_KINDS.filter(k => this.state.rescuedNpcs.includes(k))
 

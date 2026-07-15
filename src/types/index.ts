@@ -237,6 +237,7 @@ declare global {
     saveGame?: () => void
     warpFloor?: (floor: number) => void
     giveEquip?: (name?: string) => void
+    forceRescue?: (pattern?: 1 | 2 | 3) => void
     debugSkulporin?: () => void
     // ── グローバルUI ──
     showHowToPlay?: () => void
@@ -278,5 +279,7 @@ declare global {
     tryJailUnlock?: (method: 'equip' | 'coin' | 'point', sacrificeId?: string) => { ok: boolean; message: string; broke?: boolean } | null
     // 広場の掲示板：捜し人（住人救済）一覧
     getRescueList?: () => { person: string; role: string; rescued: boolean }[]
+    // さがし人：発生告知・救出完了の演出モーダルを閉じる（OK操作で操作ロック解除）
+    closeRescueNotice?: () => void
   }
 }

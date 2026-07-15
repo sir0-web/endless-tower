@@ -10,7 +10,7 @@ import { VirtualJoystick } from './components/VirtualJoystick'
 import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal, MerchantModal } from './components/EventFacilityModals'
-import { JunkModal, ToolShopModal, JailUnlockModal, SearchListModal, GraveyardModal } from './components/RescueModals'
+import { JunkModal, ToolShopModal, JailUnlockModal, SearchListModal, GraveyardModal, RescueNoticeModal, RescueDoneModal } from './components/RescueModals'
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { BowAttackButton } from './components/BowAttackButton'
 import { GameToast } from './components/GameToast'
@@ -323,6 +323,8 @@ function App() {
         <JailUnlockModal />
         <SearchListModal />
         <GraveyardModal />
+        <RescueNoticeModal />
+        <RescueDoneModal />
         <NewsModal />
         <AnnouncementGateModal />
         <GameToast />

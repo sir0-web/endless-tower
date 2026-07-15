@@ -170,6 +170,82 @@ export function ToolShopModal() {
   )
 }
 
+// ── さがし人：発生告知（OKで消える気づきやすいモーダル） ──
+export function RescueNoticeModal() {
+  const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onOpen = (e: Event) => setMessage((e as CustomEvent<string>).detail)
+    const onSceneChanged = () => setMessage(null)
+    window.addEventListener('rescue-notice-open', onOpen)
+    window.addEventListener('game-scene-changed', onSceneChanged)
+    return () => {
+      window.removeEventListener('rescue-notice-open', onOpen)
+      window.removeEventListener('game-scene-changed', onSceneChanged)
+    }
+  }, [])
+
+  if (!message) return null
+  const close = () => {
+    setMessage(null)
+    window.closeRescueNotice?.()
+  }
+
+  return (
+    <div className="facility-overlay">
+      <div className="facility-modal">
+        <p className="facility-title">？！</p>
+        <p className="facility-desc" style={{ whiteSpace: 'pre-line' }}>{message}</p>
+        <div className="facility-btns">
+          <button className="facility-go-btn" onClick={close}>OK</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── さがし人：救出完了（mate.mp3が鳴り終わるまでOKを押せない） ──
+export function RescueDoneModal() {
+  const [message, setMessage] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      setMessage((e as CustomEvent<string>).detail)
+      setReady(false)
+    }
+    const onSoundEnded = () => setReady(true)
+    const onSceneChanged = () => { setMessage(null); setReady(false) }
+    window.addEventListener('rescue-done-open', onOpen)
+    window.addEventListener('rescue-done-sound-ended', onSoundEnded)
+    window.addEventListener('game-scene-changed', onSceneChanged)
+    return () => {
+      window.removeEventListener('rescue-done-open', onOpen)
+      window.removeEventListener('rescue-done-sound-ended', onSoundEnded)
+      window.removeEventListener('game-scene-changed', onSceneChanged)
+    }
+  }, [])
+
+  if (!message) return null
+  const close = () => {
+    setMessage(null)
+    setReady(false)
+    window.closeRescueNotice?.()
+  }
+
+  return (
+    <div className="facility-overlay">
+      <div className="facility-modal">
+        <p className="facility-title">🎉救出成功🎉</p>
+        <p className="facility-desc">{message}</p>
+        <div className="facility-btns">
+          <button className="facility-go-btn" disabled={!ready} onClick={close}>OK</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── 牢屋の柵を開錠 ──
 type JailState = { npcName: string; bagEquips: { id: string; name: string }[]; coins: number; statPoints: number }
 
