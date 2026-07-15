@@ -40,13 +40,13 @@ async function submitRankingNow(
   refineTotal = 0,
   jackpotWins = 0,
 ): Promise<string | null> {
-  // 精錬値合計・ジャックポット当選回数を含めて登録。
+  // 精錬値合計・ジャックポット当選回数・player_idを含めて登録。
   const { error } = await supabase
     .from('ebt_rankings')
-    .insert({ player_name: playerName, floor, level, refine_total: refineTotal, jackpot_wins: jackpotWins })
+    .insert({ player_name: playerName, player_id: getPlayerId(), floor, level, refine_total: refineTotal, jackpot_wins: jackpotWins })
 
   if (error) {
-    // 新カラム（refine_total / jackpot_wins）未追加の環境ではここで失敗するため、
+    // 新カラム（refine_total / jackpot_wins / player_id）未追加の環境ではここで失敗するため、
     // 基本項目のみで再送してランキング登録自体は止めない（マイグレーション前の保険）。
     const { error: retryError } = await supabase
       .from('ebt_rankings')
