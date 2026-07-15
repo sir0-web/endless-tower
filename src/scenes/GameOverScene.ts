@@ -36,7 +36,7 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create() {
-    playBGM('gameover')
+    playBGM('ranking')
     // 防御: 万一プレイ中フラグが残っていても、この画面ではジョイスティック等を確実に無効化する
     window.isGameSceneActive = false
     // スマホ: キャンバスを全幅化して余白を無くし、文字を大きく見せる（非プレイ画面）
