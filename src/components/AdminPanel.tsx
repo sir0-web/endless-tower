@@ -70,7 +70,7 @@ const DEV_COMMANDS: { title: string; items: { code: string; desc: string }[] }[]
 ]
 
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'dm' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database' | 'doppel' | 'commands'
+type Tab = 'maintenance' | 'message' | 'dm' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database' | 'doppel' | 'commands' | 'arcade'
 type DbTab = 'monster' | 'equip' | 'item' | 'spell'
 
 interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
@@ -79,6 +79,20 @@ interface MaintenanceWindow { from: number; to: number | null }
 interface RankingEntry { id: number; player_name: string; player_id?: string | null; floor: number; level: number; created_at: string }
 interface WorldNotif { id: number; type: string; title: string; message: string; player_name: string; player_id?: string | null; created_at: string }
 interface EditingRanking { id: number; player_name: string; floor: number; level: number }
+
+// げーせんスコア（ebt_arcade_scores）：3ミニゲーム共通テーブル。game列で区別する。
+interface ArcadeScoreRow { id: number; game: string; player_name: string; player_id?: string | null; time_ms: number; created_at: string }
+interface EditingArcadeScore { id: number; player_name: string; time_ms: number }
+const ARCADE_GAMES: { id: string; name: string; lowerIsBetter: boolean; unit: string }[] = [
+  { id: 'dodge', name: '避けろ！ぽり男あたっく！', lowerIsBetter: false, unit: '秒' },
+  { id: 'tap',   name: '納品援助早いマン',         lowerIsBetter: true,  unit: 'ms' },
+  { id: 'mole',  name: '９山高速狩り',             lowerIsBetter: false, unit: '匹' },
+]
+function fmtArcadeScore(game: string, ms: number): string {
+  if (game === 'dodge') return (ms / 1000).toFixed(2) + '秒'
+  if (game === 'tap')   return Math.round(ms) + 'ms'
+  return Math.round(ms) + '匹'
+}
 
 // active_sessions.state に保存されるプレイヤー状態スナップショット（心拍で同期）
 interface PlayerStateSnapshot {
@@ -219,6 +233,15 @@ export function AdminPanel() {
   const [dopDetailId, setDopDetailId]     = useState<number | null>(null)
   const [rMsg, setRMsg]                   = useState('')
   const [editingRanking, setEditingRanking] = useState<EditingRanking | null>(null)
+
+  // ── げーせんランキング ──
+  const [arcadeGame, setArcadeGame]         = useState<string>('dodge')
+  const [arcadeRows, setArcadeRows]         = useState<ArcadeScoreRow[]>([])
+  const [arcadeLoading, setArcadeLoading]   = useState(false)
+  const [arcadeMsg, setArcadeMsg]           = useState('')
+  const [arcadeSearch, setArcadeSearch]     = useState('')
+  const [arcadeSelected, setArcadeSelected] = useState<Set<number>>(new Set())
+  const [editingArcade, setEditingArcade]   = useState<EditingArcadeScore | null>(null)
 
   // ── World Log ──
   const [wlogs, setWlogs]     = useState<WorldNotif[]>([])
@@ -415,6 +438,52 @@ export function AdminPanel() {
     setRMsg('更新しました ✓')
     setRankings(rs => rs.map(r => r.id === editingRanking.id ? { ...r, ...editingRanking } : r))
     setEditingRanking(null)
+  }
+
+  // ── げーせんランキング ──
+  const loadArcadeScores = useCallback(async (game: string, search = '') => {
+    setArcadeLoading(true); setArcadeMsg('')
+    const def = ARCADE_GAMES.find(g => g.id === game)
+    let q = db.from('ebt_arcade_scores').select('*').eq('game', game)
+      .order('time_ms', { ascending: def?.lowerIsBetter ?? false }).limit(200)
+    if (search) q = q.ilike('player_name', `%${search}%`)
+    const { data, error } = await q
+    if (error) setArcadeMsg(`読み込みエラー: ${error.message}`)
+    setArcadeRows((data ?? []) as ArcadeScoreRow[])
+    setArcadeSelected(new Set())
+    setArcadeLoading(false)
+  }, [db])
+
+  const deleteArcadeScore = async (id: number) => {
+    if (!confirm('このスコアを削除しますか？')) return
+    const { deleted, error } = await adminDelete('ebt_arcade_scores', [id])
+    if (error) { setArcadeMsg(`削除エラー: ${error}`); return }
+    if (!deleted) { setArcadeMsg('削除できませんでした'); return }
+    setArcadeMsg('削除しました ✓')
+    setArcadeRows(rs => rs.filter(r => r.id !== id))
+    setArcadeSelected(prev => { const s = new Set(prev); s.delete(id); return s })
+  }
+
+  const bulkDeleteArcadeScores = async () => {
+    if (arcadeSelected.size === 0) return
+    if (!confirm(`選択した${arcadeSelected.size}件のスコアを削除しますか？`)) return
+    const ids = [...arcadeSelected]
+    const { deleted, error } = await adminDelete('ebt_arcade_scores', ids)
+    if (error) { setArcadeMsg(`削除エラー: ${error}`); return }
+    setArcadeMsg(`${deleted ?? 0}件削除しました ✓`)
+    setArcadeRows(rs => rs.filter(r => !arcadeSelected.has(r.id)))
+    setArcadeSelected(new Set())
+  }
+
+  const saveEditArcade = async () => {
+    if (!editingArcade) return
+    const { error } = await db.from('ebt_arcade_scores')
+      .update({ player_name: editingArcade.player_name, time_ms: editingArcade.time_ms })
+      .eq('id', editingArcade.id)
+    if (error) { setArcadeMsg(`更新エラー: ${error.message}`); return }
+    setArcadeMsg('更新しました ✓')
+    setArcadeRows(rs => rs.map(r => r.id === editingArcade.id ? { ...r, ...editingArcade } : r))
+    setEditingArcade(null)
   }
 
   // ── World Log ──
@@ -980,7 +1049,8 @@ export function AdminPanel() {
     if (tab === 'database')    loadDbRows()
     if (tab === 'doppel')      loadDoppels()
     if (tab === 'dm')          { loadOnlinePlayers(); loadDmInbox() }
-  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews, loadDbRows, loadDmInbox, loadDoppels])
+    if (tab === 'arcade')      loadArcadeScores(arcadeGame)
+  }, [authed, tab, loadMaintenance, loadRankings, loadWorldLogs, loadReports, loadStats, loadOnlinePlayers, loadNews, loadDbRows, loadDmInbox, loadDoppels, loadArcadeScores, arcadeGame])
 
   const now = Date.now()
   const isOpen = windows.some(w => winActive(w, now))
@@ -1002,7 +1072,7 @@ export function AdminPanel() {
     maintenance: 'メンテナンス', message: 'メッセージ配信', dm: `DM${dmUnread > 0 ? `(${dmUnread})` : ''}`, event: 'イベント',
     ranking: 'ランキング', worldlog: 'ワールドログ',
     users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ', database: 'データベース', doppel: 'ドッペル',
-    commands: 'コマンド一覧',
+    commands: 'コマンド一覧', arcade: 'げーせん',
   }
 
   const REP_STATUS_COLOR: Record<string, string> = {
@@ -1421,6 +1491,91 @@ export function AdminPanel() {
                     </tr>
                   ))}
                   {rankings.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* ══ げーせんランキング ══ */}
+        {tab === 'arcade' && (
+          <div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+              {ARCADE_GAMES.map(g => (
+                <button key={g.id} onClick={() => setArcadeGame(g.id)}
+                  style={arcadeGame === g.id ? S.btnPrimary : S.btnSm}>{g.name}</button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input value={arcadeSearch} onChange={e => setArcadeSearch(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && loadArcadeScores(arcadeGame, arcadeSearch)}
+                placeholder="プレイヤー名で検索" style={{ ...S.input, flex: 1 }} />
+              <button onClick={() => loadArcadeScores(arcadeGame, arcadeSearch)} style={S.btnPrimary}>検索</button>
+              <button onClick={() => { setArcadeSearch(''); loadArcadeScores(arcadeGame, '') }} style={S.btnSm}>全件</button>
+              {arcadeSelected.size > 0 && (
+                <button onClick={bulkDeleteArcadeScores} style={S.btnDanger}>選択削除 ({arcadeSelected.size})</button>
+              )}
+            </div>
+
+            {arcadeMsg && <div style={{ color: arcadeMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 8 }}>{arcadeMsg}</div>}
+
+            {editingArcade && (
+              <div style={{ ...S.card, marginBottom: 12 }}>
+                <div style={S.cardTitle}>編集中 — ID: {editingArcade.id}</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div>
+                    <label style={S.label}>プレイヤー名</label>
+                    <input value={editingArcade.player_name}
+                      onChange={e => setEditingArcade(r => r && { ...r, player_name: e.target.value })}
+                      style={{ ...S.input, width: 180 }} />
+                  </div>
+                  <div>
+                    <label style={S.label}>スコア値（time_ms・生の値）</label>
+                    <input type="number" value={editingArcade.time_ms}
+                      onChange={e => setEditingArcade(r => r && { ...r, time_ms: parseInt(e.target.value) || 0 })}
+                      style={{ ...S.input, width: 120 }} />
+                  </div>
+                  <button onClick={saveEditArcade} style={S.btnPrimary}>保存</button>
+                  <button onClick={() => setEditingArcade(null)} style={S.btnSm}>キャンセル</button>
+                </div>
+              </div>
+            )}
+
+            {arcadeLoading ? <p style={S.muted}>読み込み中…</p> : (
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>
+                    <input type="checkbox"
+                      checked={arcadeRows.length > 0 && arcadeSelected.size === arcadeRows.length}
+                      onChange={e => setArcadeSelected(e.target.checked ? new Set(arcadeRows.map(r => r.id)) : new Set())} />
+                  </th>
+                  <th style={S.th}>#</th><th style={S.th}>ID</th>
+                  <th style={S.th}>プレイヤー名</th><th style={S.th}>player_id</th>
+                  <th style={S.th}>スコア</th><th style={S.th}>日時 (JST)</th>
+                  <th style={S.th}></th>
+                </tr></thead>
+                <tbody>
+                  {arcadeRows.map((r, i) => (
+                    <tr key={r.id} style={editingArcade?.id === r.id ? { background: 'rgba(79,70,229,0.08)' } : arcadeSelected.has(r.id) ? { background: 'rgba(239,68,68,0.07)' } : {}}>
+                      <td style={S.td}>
+                        <input type="checkbox" checked={arcadeSelected.has(r.id)}
+                          onChange={e => setArcadeSelected(prev => { const s = new Set(prev); e.target.checked ? s.add(r.id) : s.delete(r.id); return s })} />
+                      </td>
+                      <td style={S.td}>{i + 1}</td>
+                      <td style={{ ...S.td, color: '#666' }}>{r.id}</td>
+                      <td style={S.td}>{r.player_name}</td>
+                      <td style={{ ...S.td, fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{r.player_id ?? '—'}</td>
+                      <td style={S.td}>{fmtArcadeScore(r.game, r.time_ms)}</td>
+                      <td style={S.td}>{fmtJstDate(r.created_at)}</td>
+                      <td style={S.td}>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => setEditingArcade({ id: r.id, player_name: r.player_name, time_ms: r.time_ms })} style={S.btnSm}>編集</button>
+                          <button onClick={() => deleteArcadeScore(r.id)} style={S.btnDanger}>削除</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {arcadeRows.length === 0 && <tr><td colSpan={8} style={{ ...S.td, color: '#666', textAlign: 'center' }}>データなし</td></tr>}
                 </tbody>
               </table>
             )}
