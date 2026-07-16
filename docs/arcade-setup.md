@@ -34,6 +34,21 @@ create policy "public insert arcade scores"
   with check (true);
 ```
 
+## 追加マイグレーション：複数ミニゲーム対応（`game`列）
+
+反射神経タップ・モグラ叩きの追加に伴い、`ebt_arcade_scores` に `game` 列が必要になりました。
+**既にテーブルを作成済みの場合**は、Supabase SQL Editor で以下を追加実行してください（既存データは壊しません）：
+
+```sql
+alter table public.ebt_arcade_scores
+  add column if not exists game text not null default 'dodge';
+
+create index if not exists idx_ebt_arcade_scores_game_time
+  on public.ebt_arcade_scores (game, time_ms desc);
+```
+
+（初めてテーブルを作る場合は、上の「テーブル `ebt_arcade_scores`」のSQLに続けてこちらも実行すればOKです）
+
 ## 動作確認
 
 1. あるかなひろば到着 → 噴水の右にある「げーせん」筐体に体当たり（またはタップ）

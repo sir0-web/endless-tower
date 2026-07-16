@@ -4,6 +4,15 @@
   padding: 0;
 }
 
+/* 連打/タップ系ボタン全般：素早く連続タップすると文字/画像選択の青ハイライトや
+   モバイルのタップハイライト矩形が残って見た目を損なうため、全ボタンで無効化する。 */
+button {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 html, body {
   height: 100%;
   overflow: hidden;
@@ -2782,6 +2791,55 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   color: #6868a0;
 }
 
+/* 一括入力（「1000ずつ長押し」がつらい問題への対処）。既存の48px/40px/1fr/52pxグリッドの
+   空いていた1fr枠にそのまま収まるよう、追加の行や列は増やさない。 */
+.sa-bulk {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sa-bulk-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: 1px solid #4444aa;
+  background: #0c0c28;
+  color: #e0e0f0;
+  font-size: 13px;
+}
+
+.sa-bulk-input:disabled { opacity: 0.4; }
+
+.sa-bulk-input::-webkit-outer-spin-button,
+.sa-bulk-input::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.sa-bulk-btn {
+  flex-shrink: 0;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid #4444aa;
+  background: #1e1e50;
+  color: #aaaaff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sa-bulk-btn:hover:not(:disabled) {
+  background: #2e2e70;
+  color: #ffffff;
+}
+
+.sa-bulk-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .sa-btn {
   padding: 5px 0;
   border-radius: 6px;
@@ -3271,6 +3329,14 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 }
 
 /* ── げーせん ── */
+/* げーせんのゲーム選択リスト：1項目が2行分と背が高いため、汎用.facility-listの180px枠を使うと
+   3件中2件しか見えずスクロール必須になってしまう。項目数が固定で少ないので高さ制限自体を外し、
+   1ビューで全件見えるようにする（極端に低い画面では.facility-modal側のスクロールが最終防波堤）。*/
+.arcade-game-list {
+  max-height: none;
+  overflow-y: visible;
+}
+
 .arcade-canvas-wrap {
   display: flex;
   justify-content: center;
@@ -3305,6 +3371,146 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   padding: 4px 8px;
   background: #1c1c3c;
   border-radius: 5px;
+}
+
+.arcade-tap-area {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 320 / 300;
+  border-radius: 8px;
+  border: 1px solid #34345c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  background-color: #0c0c28;   /* letterbox：画像を切り取らずcontain表示するための余白色 */
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  transition: background-color 0.1s;
+  position: relative;
+  overflow: hidden;
+}
+
+.arcade-tap-message {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffe08a;
+  text-align: center;
+  white-space: pre-line;
+  margin-bottom: 8px;
+}
+
+.arcade-tap-hint {
+  font-size: 12px;
+  color: #9fa8ff;
+  text-align: center;
+  margin: -4px 0 8px;
+}
+
+/* GO画像の上に重ねる煽り文句。斜め・大きめの叫び文字で躍動感とタップ誘導の視認性を出す。
+   はみ出す分は .arcade-tap-area の overflow:hidden でクリップされるので枠は壊れない。 */
+.arcade-tap-go-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-size: 30px;
+  font-weight: 900;
+  font-style: italic;
+  color: #fff566;
+  -webkit-text-stroke: 3px #8a1500;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.85), 0 4px 6px rgba(0, 0, 0, 0.9);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation:
+    arcade-go-slam 0.4s cubic-bezier(0.2, 1.6, 0.4, 1) both,
+    arcade-go-pulse 0.5s ease-in-out 0.4s infinite alternate;
+}
+
+@keyframes arcade-go-slam {
+  0%   { transform: translate(-50%, -50%) rotate(-14deg) scale(0.4); opacity: 0; }
+  60%  { transform: translate(-50%, -50%) rotate(-12deg) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%, -50%) rotate(-12deg) scale(1); opacity: 1; }
+}
+
+@keyframes arcade-go-pulse {
+  from { transform: translate(-50%, -50%) rotate(-12deg) scale(1); }
+  to   { transform: translate(-50%, -50%) rotate(-12deg) scale(1.06); }
+}
+
+.arcade-mole-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.arcade-mole-hole {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #2a2440;
+  border: 2px solid #46406a;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: none;
+  transition: background 0.1s, transform 0.1s;
+}
+
+.arcade-mole-hole.active {
+  background: #4a3a1a;
+  border-color: #ffd766;
+  transform: scale(1.06);
+}
+
+/* テンキー操作の補助表示。マウス等の精密ポインタ環境（PC）だけに出す。
+   スマホ等の粗いタッチ入力（pointer: coarse）ではタップのみなので表示しない。 */
+.arcade-mole-key {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .arcade-mole-key {
+    display: block;
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #8888aa;
+    pointer-events: none;
+  }
+}
+
+.arcade-mole-img {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.arcade-mole-flash {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 30, 30, 0.45);
+  border-radius: 8px;
+  pointer-events: none;
+  animation: arcade-flash-fade 0.2s ease-out;
+}
+
+@keyframes arcade-flash-fade {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 @keyframes facility-result-pop {

@@ -47,8 +47,30 @@ const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY as string | undefined
 const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
+// 開発サーバー限定のブラウザコンソール用チートコマンド一覧（コマンド一覧タブ表示用）。
+// 実体はGameScene.tsのDEVブロック（import.meta.env.DEV）で window.* に生やしている。
+const DEV_COMMANDS: { title: string; items: { code: string; desc: string }[] }[] = [
+  { title: '🏘️ あるかなひろば', items: [
+    { code: 'forceRescue()',        desc: 'さがし人イベントをランダムなパターンで強制発生' },
+    { code: 'forceRescue(1)',       desc: 'パターン1（徘徊）で強制発生' },
+    { code: 'forceRescue(2)',       desc: 'パターン2（全滅解放）で強制発生' },
+    { code: 'forceRescue(3)',       desc: 'パターン3（牢屋）で強制発生' },
+    { code: 'rescueAllNpcs()',      desc: '住人を全員救済し、街を満開状態（全装飾・全建物）に再構築' },
+  ] },
+  { title: '🗺️ 移動・進行', items: [
+    { code: 'warpFloor(10)',        desc: '指定した階数へワープ' },
+  ] },
+  { title: '🎒 装備・アイテム', items: [
+    { code: 'giveEquip()',          desc: 'ランダムな装備をバッグに追加' },
+    { code: 'giveEquip("装備名")',   desc: '指定した名前の装備をバッグに追加' },
+  ] },
+  { title: '👾 敵', items: [
+    { code: 'debugSkulporin()',     desc: 'すかるぽりんを強制スポーン（ワールド通知も飛ぶ）' },
+  ] },
+]
+
 type EnvMode = 'production' | 'local'
-type Tab = 'maintenance' | 'message' | 'dm' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database' | 'doppel'
+type Tab = 'maintenance' | 'message' | 'dm' | 'event' | 'ranking' | 'worldlog' | 'users' | 'reports' | 'stats' | 'news' | 'database' | 'doppel' | 'commands'
 type DbTab = 'monster' | 'equip' | 'item' | 'spell'
 
 interface OnlinePlayer { player_id: string; player_name: string; floor: number; updated_at: string }
@@ -980,6 +1002,7 @@ export function AdminPanel() {
     maintenance: 'メンテナンス', message: 'メッセージ配信', dm: `DM${dmUnread > 0 ? `(${dmUnread})` : ''}`, event: 'イベント',
     ranking: 'ランキング', worldlog: 'ワールドログ',
     users: 'ユーザー管理', reports: '報告BOX', stats: '統計', news: 'お知らせ', database: 'データベース', doppel: 'ドッペル',
+    commands: 'コマンド一覧',
   }
 
   const REP_STATUS_COLOR: Record<string, string> = {
@@ -2036,6 +2059,29 @@ export function AdminPanel() {
                 ))}
               </div>
             </>}
+          </div>
+        )}
+
+        {/* ══ コマンド一覧（開発サーバー限定のブラウザコンソール用チートコマンド） ══ */}
+        {tab === 'commands' && (
+          <div>
+            <p style={{ ...S.muted, marginBottom: 16 }}>
+              以下は<b>開発サーバー（npm run dev）限定</b>のコマンドです。ブラウザのコンソールに貼り付けて実行してください（本番では動きません）。
+            </p>
+            {DEV_COMMANDS.map(group => (
+              <div key={group.title} style={S.section}>
+                <div style={S.sectionTitle}>{group.title}</div>
+                {group.items.map(cmd => (
+                  <div key={cmd.code} style={{ marginBottom: 10 }}>
+                    <code style={{
+                      display: 'inline-block', background: '#14142a', border: '1px solid #2a2a4a',
+                      borderRadius: 5, padding: '3px 8px', fontSize: 12.5, color: '#7CFC7C', fontFamily: 'monospace',
+                    }}>{cmd.code}</code>
+                    <div style={{ fontSize: 12, color: '#999', marginTop: 3 }}>{cmd.desc}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         )}
 

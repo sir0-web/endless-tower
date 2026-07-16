@@ -213,6 +213,7 @@ declare global {
   interface Window {
     gameState: WindowGameState
     allocateStat?: (stat: AllocStat) => void
+    allocateStatBulk?: (stat: AllocStat, amount: number) => void
     useSpell?: (itemId: string) => void
     useHeal?: (itemId: string) => void
     resolveEquip?: (equip: boolean) => void
@@ -238,6 +239,7 @@ declare global {
     warpFloor?: (floor: number) => void
     giveEquip?: (name?: string) => void
     forceRescue?: (pattern?: 1 | 2 | 3) => void
+    rescueAllNpcs?: () => void
     debugSkulporin?: () => void
     // ── グローバルUI ──
     showHowToPlay?: () => void

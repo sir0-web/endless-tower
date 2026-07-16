@@ -437,7 +437,7 @@ export class GameScene extends Phaser.Scene {
 
     // ── あるかなひろば（町）プロップ。未配置でも読み込み失敗＝描画スキップで安全 ──
     for (const p of ['grass', 'path', 'tree', 'well', 'lamp', 'fence', 'pond', 'flowers',
-      'stonepath', 'hedge', 'topiary', 'bench', 'signboard', 'fountain', 'cave', 'rockwall', 'jail-door', 'goddess-statue']) {
+      'stonepath', 'hedge', 'topiary', 'bench', 'signboard', 'fountain', 'cave', 'rockwall', 'jail-door', 'goddess-statue', 'arcade']) {
       const file = p === 'grass' ? 'ground_grass' : p === 'path' ? 'ground_path'
         : p === 'stonepath' ? 'path_stone' : p === 'hedge' ? 'hedge_h'
         : p === 'cave' ? 'deco_cave_entrance_big' : p === 'rockwall' ? 'deco_rockwall'
@@ -579,6 +579,7 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard!.on('keydown', this.handleInput, this)
     this.input.on('pointerdown', this.handlePointerMove, this)   // PC: クリックした方向へ1歩
     window.allocateStat = (stat: AllocStat) => this.doAllocateStat(stat)
+    window.allocateStatBulk = (stat: AllocStat, amount: number) => this.doAllocateStatBulk(stat, amount)
     window.useSpell    = (itemId: string) => this.useSpellById(itemId)
     window.useHeal     = (itemId: string) => this.useHealById(itemId)
     window.isGameSceneActive = true
@@ -679,9 +680,19 @@ export class GameScene extends Phaser.Scene {
         this.renderMap()
         console.log(`[DEV] パターン${p}でさがし人イベントを強制発生:`, kind)
       }
+      window.rescueAllNpcs = () => {
+        const missing = ALL_NPC_KINDS.filter(k => !this.state.rescuedNpcs.includes(k))
+        if (missing.length === 0) { console.warn('[DEV] 既に全員救済済みです'); return }
+        this.state.rescuedNpcs.push(...missing)
+        this.state.signboardUnread = true
+        if (this.isEventFloor) this.enterEventFloor()   // 街を全住人・満開デコで再構築
+        this.updateWindowGameState()
+        console.log('[DEV] 住人を全員救済しました:', missing)
+      }
       console.log('[DEV] warpFloor(階数) で好きな階にワープできます。例: warpFloor(10)')
       console.log('[DEV] giveEquip("装備名") でバッグに装備を追加。引数なしでランダム。')
       console.log('[DEV] debugSkulporin() ですかるぽりんを強制スポーン。')
+      console.log('[DEV] rescueAllNpcs() であるかなひろばの住人を全員救済（街を満開状態に）。')
       console.log('[DEV] forceRescue(1|2|3) でさがし人イベントを強制発生。1=徘徊 2=全滅解放 3=牢屋。引数なしでランダム。')
       console.log('[DEV] 装備一覧:', EQUIP_ITEMS.map(e => e.name).join(', '))
     }
@@ -1042,8 +1053,10 @@ export class GameScene extends Phaser.Scene {
       return
     }
 
-    // 町（あるかなひろば）のげーせん筐体：体当たりでミニゲームを開く
-    if (this.isEventFloor && this.arcadePos && this.arcadePos.x === nx && this.arcadePos.y === ny) {
+    // 町（あるかなひろば）のげーせん筐体：体当たりでミニゲームを開く。
+    // スプライトが縦に足元2マス分の高さで描かれるため、当たり判定も足元と1つ上の2マス分にする。
+    if (this.isEventFloor && this.arcadePos && this.arcadePos.x === nx
+      && (this.arcadePos.y === ny || this.arcadePos.y - 1 === ny)) {
       if (event.repeat) return
       this.openArcade()
       return
@@ -2078,6 +2091,17 @@ export class GameScene extends Phaser.Scene {
     this.updateWindowGameState()
   }
 
+  /** ステータスポイントをまとめて振り分ける（数字入力による一括割り振り用）。
+   *  1回のupdateWindowGameStateで済ませ、長押し連打を大量回数分エミュレートしない。 */
+  private doAllocateStatBulk(stat: AllocStat, amount: number) {
+    const { player } = this.state
+    const n = Math.max(0, Math.min(Math.floor(amount), player.statPoints))
+    if (n <= 0) return
+    player[stat] += n
+    player.statPoints -= n
+    this.updateWindowGameState()
+  }
+
   /**
    * ステータスポイントを付与する共通ヘルパー。未消費分(statPoints)に加え、
    * 生涯累計(totalStatPointsEarned)も同時に加算する。累計は消費しても減らず、
@@ -3107,11 +3131,29 @@ export class GameScene extends Phaser.Scene {
     this.graveyardMark?.setVisible(this.isEventFloor && !!this.graveyardPos && this.graveyardUnread)
   }
 
-  /** げーせん筐体本体を描画する（画像アセット不要。Graphics＋絵文字）。
+  /** げーせん筐体本体を描画する。画像(town-arcade)読み込み済みならそちらを優先し、
+   *  未読込時のみ旧Graphics+絵文字描画へフォールバックする（女神像と同じ方式）。
    *  当たり判定はplace()を使わず、移動ハンドラ側でarcadePosを直接判定する（看板/墓標と同じ方式）。 */
   private drawArcadeCabinet(pos: import('../types').Position) {
     const { x, y } = this.tileToWorld(pos.x, pos.y)
     const baseY = y + this.rts * 0.12
+
+    if (this.textureOk('town-arcade')) {
+      const shadow = this.add.graphics().setDepth(4)
+      shadow.fillStyle(0x000000, 0.25)
+      shadow.fillEllipse(x, baseY + this.rts * 0.08, this.rts * 0.5, this.rts * 0.16)
+      this.plazaDecor.push(shadow)
+
+      const img = this.add.image(x, baseY, 'town-arcade').setOrigin(0.5, 1).setDepth(5)
+      const natW = img.width || 1, natH = img.height || 1
+      const k = (this.rts * 1.3) / natH
+      img.setDisplaySize(natW * k, natH * k)
+      this.plazaDecor.push(img)
+
+      img.setInteractive({ useHandCursor: true })
+      img.on('pointerdown', () => this.openArcade())
+      return
+    }
 
     const w = this.rts * 0.66
     const h = this.rts * 0.88
@@ -3136,13 +3178,6 @@ export class GameScene extends Phaser.Scene {
       fontSize: `${Math.round(this.rts * 0.34)}px`,
     }).setOrigin(0.5).setDepth(5)
     this.plazaDecor.push(emoji)
-
-    const label = this.add.text(x, baseY - h * 0.14, 'げーせん', {
-      fontSize: `${Math.round(this.rts * 0.22)}px`,
-      color: '#ffe08a',
-      fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(5)
-    this.plazaDecor.push(label)
 
     // 体当たり移動が使えないスマホ操作でも開けるよう、直接タップ/クリックでも開けるようにする
     emoji.setInteractive({ useHandCursor: true })
@@ -3444,12 +3479,12 @@ export class GameScene extends Phaser.Scene {
     }
     // 噴水は広場の象徴として常設（ティントで「濁って涸れた噴水」→「澄んだ水」へ変化させる）
     place('town-fountain',  15,      14,          2.4, 3, true)
-    // げーせん筐体：救済状況によらず常設（機能物なので看板/墓標と同じ扱い）
-    this.arcadePos = { x: 18, y: 15 }
+    // げーせん筐体：救済状況によらず常設（機能物なので看板/墓標と同じ扱い）。
+    this.arcadePos = { x: 16, y: 16 }
     this.drawArcadeCabinet(this.arcadePos)
     // ベンチ・花壇は3体以上救済で設置（人が戻り始め、手入れが行き届き始めた頃合い）
     if (stage >= 3) {
-      place('town-bench',   13,      15,          1.1, 3, true)
+      place('town-bench',   13,      14,          1.1, 3, true)
       place('town-flowers', rx + 5,  ry + 6,      0.9, 3, true)
       place('town-flowers', rx + 12, ry + 6,      0.9, 3, true)
       // 生垣：各NPC列の手前にワンポイントで（境界線は張らず、控えめなアクセントに留める）
@@ -3458,13 +3493,13 @@ export class GameScene extends Phaser.Scene {
       place('town-hedge', rx + 2,  18, 1.0, 3, true)
       place('town-hedge', rx + 13, 18, 1.0, 3, true)
     }
-    // 井戸・街灯・池・石垣：5体以上救済で庭園アクセントとして追加（広場がにぎわい豊かになってきた段階）
+    // 井戸・街灯・池：5体以上救済で庭園アクセントとして追加（広場がにぎわい豊かになってきた段階）
     // 座標はNPCプロット(x=10/15/20)・十字通路(x=15列, y=10/15/20行)・既存デコを避けた空き地を選んでいる
+    // ※石垣(town-rockwall)は単体だと道から浮いた石の塊にしか見えず「謎の階段」と誤認されるため撤去した
     if (stage >= 5) {
       place('town-well',     12, 11, 1.3, 3, true)
       place('town-lamp',     18, 11, 1.1, 4, true)
       place('town-pond',     12, 17, 1.4, 3, true)
-      place('town-rockwall', 18, 17, 1.2, 3, true)
     }
     // 全員解放（7体）：満開の庭園として花壇・街灯・トピアリーを追加し、原色フルで最も華やかな見た目に仕上げる
     if (stage >= 7) {

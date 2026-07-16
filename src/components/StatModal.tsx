@@ -22,6 +22,8 @@ const INIT: LocalStats = { str: 1, agi: 1, dex: 1, int: 1, vit: 1, luk: 1, statP
 export function StatModal() {
   const [visible, setVisible] = useState(false)
   const [ls, setLs] = useState<LocalStats>(INIT)
+  // ステータスごとの一括入力欄（「1000ずつ長押し」がつらい問題への対処）。キー未入力time="" 扱い。
+  const [bulkInputs, setBulkInputs] = useState<Partial<Record<AllocStat, string>>>({})
 
   useEffect(() => {
     const onOpen = () => {
@@ -55,19 +57,49 @@ export function StatModal() {
           残りポイント：<span className="pts-num">{ls.statPoints}</span>
         </p>
         <div className="stat-alloc-list">
-          {STAT_DEFS.map(({ key, label }) => (
-            <div key={key} className="stat-alloc-row">
-              <span className="sa-label">{label}</span>
-              <span className="sa-val">{ls[key]}</span>
-              <HoldRepeatButton
-                className="sa-btn"
-                onPress={() => window.allocateStat?.(key)}
-                disabled={ls.statPoints <= 0}
-              >
-                +1
-              </HoldRepeatButton>
-            </div>
-          ))}
+          {STAT_DEFS.map(({ key, label }) => {
+            const applyBulk = () => {
+              const n = parseInt(bulkInputs[key] ?? '', 10)
+              if (!Number.isFinite(n) || n <= 0) return
+              window.allocateStatBulk?.(key, n)
+              setBulkInputs(prev => ({ ...prev, [key]: '' }))
+            }
+            return (
+              <div key={key} className="stat-alloc-row">
+                <span className="sa-label">{label}</span>
+                <span className="sa-val">{ls[key]}</span>
+                <div className="sa-bulk">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={ls.statPoints}
+                    placeholder="個数"
+                    className="sa-bulk-input"
+                    value={bulkInputs[key] ?? ''}
+                    disabled={ls.statPoints <= 0}
+                    onChange={e => setBulkInputs(prev => ({ ...prev, [key]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') applyBulk() }}
+                  />
+                  <button
+                    type="button"
+                    className="sa-bulk-btn"
+                    disabled={ls.statPoints <= 0 || !bulkInputs[key]}
+                    onClick={applyBulk}
+                  >
+                    追加
+                  </button>
+                </div>
+                <HoldRepeatButton
+                  className="sa-btn"
+                  onPress={() => window.allocateStat?.(key)}
+                  disabled={ls.statPoints <= 0}
+                >
+                  +1
+                </HoldRepeatButton>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
