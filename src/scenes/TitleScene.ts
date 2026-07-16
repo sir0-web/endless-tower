@@ -6,6 +6,7 @@ import { hasSave, clearSave, saveGame } from '../game/save'
 import { cloudLoadGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { getDisplayName, setDisplayName } from '../game/playerName'
 import { safePrompt, fadeOutToScene } from '../game/phaserRecovery'
+import { withV } from '../game/assetVersion'
 
 const PIXEL_FONT  = '"Press Start 2P", monospace'
 const KEY_STORAGE = 'keyMode'
@@ -20,8 +21,10 @@ export class TitleScene extends Phaser.Scene {
   constructor() { super({ key: 'TitleScene' }) }
 
   preload() {
-    this.load.image('title-bg', '/assets/title/title.webp')
-    this.load.image('btn-frame', '/assets/ui/button-frame.webp')
+    // 画像の中身だけ差し替えてもブラウザキャッシュが更新されない事故を防ぐため、
+    // ファイル内容ハッシュをURLに付ける（GameScene.loadImgと同じ狙い）。
+    this.load.image('title-bg', withV('/assets/title/title.webp'))
+    this.load.image('btn-frame', withV('/assets/ui/button-frame.webp'))
   }
 
   create() {

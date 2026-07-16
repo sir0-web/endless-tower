@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { submitArcadeScore, fetchArcadeRanking, type ArcadeScoreEntry, type ArcadeGameId } from '../game/arcadeScores'
 import { playAttack, playDamage } from '../game/sound'
+import { withV } from '../game/assetVersion'
 
 // ── げーせん：超カジュアルミニゲーム集 ──
 // 「ゲーム選択 → プレイ → 結果」の3フェーズ共通シェルの中に、各ミニゲームを差し込む構成。
@@ -183,7 +184,7 @@ const CANVAS_W = 320
 const CANVAS_H = 440
 const PLAYER_R = 9
 const BULLET_R = 11
-const POLI_OTOKO_SRC = '/assets/characters/enemies/pori.webp'   // ぽり男
+const POLI_OTOKO_SRC = withV('/assets/characters/enemies/pori.webp')   // ぽり男
 
 interface Bullet { x: number; y: number; vx: number; vy: number }
 
@@ -329,10 +330,10 @@ function DodgeGame({ onEnd, onAbort }: GameProps) {
 
 // ── ②納品援助早いマン：5回の合図に反応し、平均反応時間(ms)を競う ──
 const TAP_ROUNDS = 5
-const TAP_IMG_WAIT = '/assets/town/touch/arcade_tap_wait.webp'
-const TAP_IMG_GO   = '/assets/town/touch/arcade_tap_go.webp'
-const TAP_IMG_OK   = '/assets/town/touch/arcade_tap_ok.webp'
-const TAP_IMG_NG   = '/assets/town/touch/arcade_tap_ng.webp'
+const TAP_IMG_WAIT = withV('/assets/town/touch/arcade_tap_wait.webp')
+const TAP_IMG_GO   = withV('/assets/town/touch/arcade_tap_go.webp')
+const TAP_IMG_OK   = withV('/assets/town/touch/arcade_tap_ok.webp')
+const TAP_IMG_NG   = withV('/assets/town/touch/arcade_tap_ng.webp')
 
 function TapGame({ onEnd, onAbort }: GameProps) {
   const [state, setState] = useState<'wait' | 'go' | 'early' | 'success'>('wait')
@@ -448,10 +449,10 @@ const MONSTER_NAMES = [
   'nekuro', 'nightmare', 'oakhero', 'oaklord', 'osiris', 'otto', 'oul', 'paisuke', 'pekopeko',
   'sasukachi', 'smokey', 'sofi', 'soldierskeleton', 'stra', 'supoa', 'toad', 'wanderwolf', 'whisper',
   'yafa', 'yoyo', 'zonbi',
-].map(n => `/assets/characters/enemies/${n}.webp`)
+].map(n => withV(`/assets/characters/enemies/${n}.webp`))
 
 const PENALTY_NAMES = ['refine', 'shadow', 'spellbook', 'toolshop', 'miner', 'merchant']
-  .map(n => `/assets/characters/enemies/${n}.webp`)
+  .map(n => withV(`/assets/characters/enemies/${n}.webp`))
 
 interface MoleCell { img: string; penalty: boolean }
 
@@ -559,6 +560,9 @@ function MoleGame({ onEnd, onAbort }: GameProps) {
 
   return (
     <>
+      <p className="arcade-tap-hint" style={{ margin: '0 0 4px' }}>
+        モンスターをタップで倒そう！住人を攻撃するとマイナスになるから注意！
+      </p>
       <p className="facility-sub" style={{ textAlign: 'center' }}>
         残り {(remainMs / 1000).toFixed(1)}秒　撃破 {hits}匹
       </p>

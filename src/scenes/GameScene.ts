@@ -5,6 +5,7 @@ import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHous
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
 import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playFall, playMate, playBGM, setHeartbeat } from '../game/sound'
+import { withV } from '../game/assetVersion'
 import { saveGame, loadGame, clearSave, type SaveData } from '../game/save'
 import { cloudSaveGame, deleteOwnCloudSave } from '../game/cloudSave'
 import { logEvent, getPlayerId } from '../game/supabase'
@@ -414,26 +415,34 @@ export class GameScene extends Phaser.Scene {
     this.vignetteTarget     = 0
   }
 
+  /** this.load.image()のラッパー。public/配下の画像はファイル名を変えずに中身だけ差し替えることがあり、
+   *  Cache-Control: immutable な配信環境だとブラウザキャッシュが更新されず古い画像のまま固まる事故が起きる。
+   *  ファイル内容ハッシュ(withV)をURLに付け、変更したファイルだけキャッシュを更新させる
+   *  （無変更ファイルは同じURLのまま＝長期キャッシュの再訪問ゼロ通信を維持する）。 */
+  private loadImg(key: string, path: string) {
+    this.load.image(key, withV(path))
+  }
+
   preload() {
     // 旧タイルは表示に使う壁・階段のみ読み込む。床・罠・泥・泉・落とし穴・宝箱は
     // v2タイルへ完全移行済みのため旧画像（計約580KB）の並行ロードを廃止（通信量・発熱対策）。
     // 万一v2が読めない場合も、renderMapの単色矩形フォールバックでゲームは継続できる。
-    this.load.image('tile-wall',   '/assets/dungeon/wall/wall.webp')
-    this.load.image('tile-stairs', '/assets/dungeon/stairs/stairs.webp')
+    this.loadImg('tile-wall',   '/assets/dungeon/wall/wall.webp')
+    this.loadImg('tile-stairs', '/assets/dungeon/stairs/stairs.webp')
 
     // ── 新洞窟タイルセット（テーマ別 v2）──
     // 採用範囲：床・落とし穴・泥（砂利）・毒罠（紫池）・泉（緑池）・宝箱
     // （壁・階段はユーザー確認の結果、従来タイルを継続）
     // 読み込み失敗時は failedTextures 経由で上の旧タイルへ自動フォールバックする
     for (const th of DUNGEON_THEMES) {
-      for (const n of [1, 2, 3]) this.load.image(`t2-floor-${th}-${n}`, `/assets/dungeon/v2/floor_${th}_${n}.webp`)
-      this.load.image(`t2-pitfall-${th}`,    `/assets/dungeon/v2/pitfall_${th}.webp`)
-      this.load.image(`t2-mud-${th}`,        `/assets/dungeon/v2/mud_${th}.webp`)
-      this.load.image(`t2-trap-${th}`,       `/assets/dungeon/v2/trap_${th}.webp`)
-      this.load.image(`t2-spring-${th}`,     `/assets/dungeon/v2/spring_${th}.webp`)
-      this.load.image(`t2-spring-dry-${th}`, `/assets/dungeon/v2/spring_dry_${th}.webp`)
+      for (const n of [1, 2, 3]) this.loadImg(`t2-floor-${th}-${n}`, `/assets/dungeon/v2/floor_${th}_${n}.webp`)
+      this.loadImg(`t2-pitfall-${th}`,    `/assets/dungeon/v2/pitfall_${th}.webp`)
+      this.loadImg(`t2-mud-${th}`,        `/assets/dungeon/v2/mud_${th}.webp`)
+      this.loadImg(`t2-trap-${th}`,       `/assets/dungeon/v2/trap_${th}.webp`)
+      this.loadImg(`t2-spring-${th}`,     `/assets/dungeon/v2/spring_${th}.webp`)
+      this.loadImg(`t2-spring-dry-${th}`, `/assets/dungeon/v2/spring_dry_${th}.webp`)
     }
-    this.load.image('t2-box', '/assets/dungeon/v2/box.webp')   // 宝箱（アイテム表示）
+    this.loadImg('t2-box', '/assets/dungeon/v2/box.webp')   // 宝箱（アイテム表示）
 
     // ── あるかなひろば（町）プロップ。未配置でも読み込み失敗＝描画スキップで安全 ──
     for (const p of ['grass', 'path', 'tree', 'well', 'lamp', 'fence', 'pond', 'flowers',
@@ -442,22 +451,22 @@ export class GameScene extends Phaser.Scene {
         : p === 'stonepath' ? 'path_stone' : p === 'hedge' ? 'hedge_h'
         : p === 'cave' ? 'deco_cave_entrance_big' : p === 'rockwall' ? 'deco_rockwall'
         : 'deco_' + p.replace('-', '_')
-      this.load.image(`town-${p}`, `/assets/town/props/${file}.webp`)
+      this.loadImg(`town-${p}`, `/assets/town/props/${file}.webp`)
     }
     // 建物は参考画像から抜いた高品質ランドマーク版(ref_building_*)を優先。無ければ旧簡易版にフォールバック。
     for (const k of ALL_NPC_KINDS) {
-      this.load.image(`town-b-${k}`, `/assets/town/props/ref_building_${k}.webp`)
-      this.load.image(`town-bf-${k}`, `/assets/town/props/building_${k}.webp`)
+      this.loadImg(`town-b-${k}`, `/assets/town/props/ref_building_${k}.webp`)
+      this.loadImg(`town-bf-${k}`, `/assets/town/props/building_${k}.webp`)
     }
 
     // プレイヤー画像（スタティック・フォールバック用）
-    this.load.image('player', '/assets/characters/player.webp')
+    this.loadImg('player', '/assets/characters/player.webp')
 
     // プレイヤーアニメーションフレーム（12枚）
     for (let i = 1; i <= 4; i++) {
-      this.load.image(`attack_down_${i}`,  `/assets/characters/player/attack_down_${i}.webp`)
-      this.load.image(`attack_up_${i}`,    `/assets/characters/player/attack_up_${i}.webp`)
-      this.load.image(`attack_right_${i}`, `/assets/characters/player/attack_right_${i}.webp`)
+      this.loadImg(`attack_down_${i}`,  `/assets/characters/player/attack_down_${i}.webp`)
+      this.loadImg(`attack_up_${i}`,    `/assets/characters/player/attack_up_${i}.webp`)
+      this.loadImg(`attack_right_${i}`, `/assets/characters/player/attack_right_${i}.webp`)
     }
 
     // 弓職（アーチャー）フレーム（16枚・透過済みなのでmakeTransparent不要）。
@@ -465,10 +474,10 @@ export class GameScene extends Phaser.Scene {
     // 攻撃は斜め射ちの専用絵があるため、近接（上下で代用）と違い斜め2方向もロードする。
     for (let i = 1; i <= 2; i++) {
       for (const d of ['down', 'up', 'right']) {
-        this.load.image(`archer_walk_${d}_${i}`, `/assets/characters/player/archer/walk_${d}_${i}.webp`)
+        this.loadImg(`archer_walk_${d}_${i}`, `/assets/characters/player/archer/walk_${d}_${i}.webp`)
       }
       for (const d of ['down', 'up', 'right', 'up-right', 'down-right']) {
-        this.load.image(`archer_attack_${d}_${i}`, `/assets/characters/player/archer/attack_${d}_${i}.webp`)
+        this.loadImg(`archer_attack_${d}_${i}`, `/assets/characters/player/archer/attack_${d}_${i}.webp`)
       }
     }
 
@@ -486,7 +495,7 @@ export class GameScene extends Phaser.Scene {
       ['toolshop',   '/assets/characters/enemies/toolshop.webp'],
       ['scullporin', '/assets/characters/enemies/scullporin.webp'],
     ]
-    for (const [key, path] of alwaysLoadEnemyImages) this.load.image(key, path)
+    for (const [key, path] of alwaysLoadEnemyImages) this.loadImg(key, path)
     this.loadedEnemyKeys = new Set(alwaysLoadEnemyImages.map(([key]) => key))
 
     // 開始フロア周辺のモンスター画像を先読み（新規開始は1F、セーブ再開時はその階から）
@@ -494,7 +503,7 @@ export class GameScene extends Phaser.Scene {
     const floorLookaheadTo = startFloor + 39
     for (const key of getEnemyTextureKeysForFloorRange(1, floorLookaheadTo)) {
       if (this.loadedEnemyKeys.has(key)) continue
-      this.load.image(key, `/assets/characters/enemies/${key}.webp`)
+      this.loadImg(key, `/assets/characters/enemies/${key}.webp`)
       this.loadedEnemyKeys.add(key)
     }
     this.loadedEnemyFloorTo = floorLookaheadTo
@@ -504,7 +513,7 @@ export class GameScene extends Phaser.Scene {
     if (texOverrides.some(o => o.url)) {
       this.load.crossOrigin = 'anonymous'
       for (const o of texOverrides) {
-        if (o.url) this.load.image(`ovr_${o.ref}`, o.url)
+        if (o.url) this.loadImg(`ovr_${o.ref}`, o.url)
       }
     }
 
@@ -528,7 +537,7 @@ export class GameScene extends Phaser.Scene {
     if (newKeys.length === 0) return
     this.enemyTextureLoadInFlight = true
     for (const key of newKeys) {
-      this.load.image(key, `/assets/characters/enemies/${key}.webp`)
+      this.loadImg(key, `/assets/characters/enemies/${key}.webp`)
       this.loadedEnemyKeys.add(key)
     }
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
