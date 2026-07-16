@@ -11,6 +11,7 @@ import { MobileStatusBar } from './components/MobileStatusBar'
 import { SlotAnnouncement } from './components/SlotAnnouncement'
 import { RefineModal, ShadowEquipModal, SpellbookModal, MerchantModal } from './components/EventFacilityModals'
 import { JunkModal, ToolShopModal, JailUnlockModal, SearchListModal, GraveyardModal, RescueNoticeModal, RescueDoneModal } from './components/RescueModals'
+import { ArcadeModal } from './components/ArcadeModal'
 import { ScrollLockButton } from './components/ScrollLockButton'
 import { BowAttackButton } from './components/BowAttackButton'
 import { GameToast } from './components/GameToast'
@@ -325,6 +326,7 @@ function App() {
         <GraveyardModal />
         <RescueNoticeModal />
         <RescueDoneModal />
+        <ArcadeModal />
         <NewsModal />
         <AnnouncementGateModal />
         <GameToast />

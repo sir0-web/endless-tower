@@ -264,6 +264,7 @@ export class GameScene extends Phaser.Scene {
   private isStatAllocOpen = false
   private isEquipModalOpen = false
   private isRescueNoticeOpen = false   // さがし人：発生告知/救出完了モーダル表示中は操作を止める
+  private isArcadeOpen = false   // げーせんのミニゲーム表示中は操作を止める
   private awaitingEquipModal = false
   private pendingItem: import('../types').Item | null = null
   private isGameOver   = false   // gameOver()の多重発火防止（同一ターン内で複数回HP<=0判定が走るため）
@@ -311,6 +312,7 @@ export class GameScene extends Phaser.Scene {
   private graveyardMark: Phaser.GameObjects.Text | null = null   // 墓標上に浮かせる未読「！」マーク
   private graveyardLatestId: number | null = null   // 直近フェッチした最新墓標id（既読化に使う）
   private graveyardUnread = false   // 全プレイヤー共有データのため、セーブ対象のstateではなくシーン内フラグで管理
+  private arcadePos: import('../types').Position | null = null   // 広場のげーせん筐体の位置。体当たり/タップでミニゲームを開く
   private skipNextStairsSound = false   // 落とし穴転落直後のpopulateFloorで汎用階段音を重ねないためのフラグ
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private loadedEnemyKeys = new Set<string>()  // 先読み済みの敵テクスチャキー（通信量削減の遅延ロード用）
@@ -383,6 +385,7 @@ export class GameScene extends Phaser.Scene {
     this.isStatAllocOpen    = false
     this.isEquipModalOpen   = false
     this.isRescueNoticeOpen = false
+    this.isArcadeOpen       = false
     this.awaitingEquipModal = false
     this.pendingItem        = null
     this.playerDir          = 'down'
@@ -606,6 +609,7 @@ export class GameScene extends Phaser.Scene {
     window.tryJailUnlock        = (method, sacId)     => this.tryJailUnlock(method, sacId)
     window.getRescueList        = ()                  => this.getRescueList()
     window.closeRescueNotice    = ()                  => { this.isRescueNoticeOpen = false }
+    window.closeArcade          = ()                  => { this.isArcadeOpen = false }
 
     // ADMINパネルからの即時チェック用（強制出現後に即反映）
     window.triggerSkulporinCheck = () => { void this.sendSkulporinHeartbeat() }
@@ -886,7 +890,7 @@ export class GameScene extends Phaser.Scene {
   // タッチ（モバイル）は仮想ジョイスティック維持のため無視する。
   private handlePointerMove(pointer: Phaser.Input.Pointer) {
     if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
-    if (this.isPaused || this.inventoryOpen || this.isRescueNoticeOpen) return
+    if (this.isPaused || this.inventoryOpen || this.isRescueNoticeOpen || this.isArcadeOpen) return
 
     const { player } = this.state
     const tx = Math.floor(pointer.worldX / this.rts)
@@ -931,7 +935,7 @@ export class GameScene extends Phaser.Scene {
   private handleInput(event: KeyboardEvent) {
     this.lastActionAt = Date.now()
     if (this.isStatAllocOpen || this.isEquipModalOpen || this.isAnimating) return
-    if (this.isRescueNoticeOpen) return
+    if (this.isRescueNoticeOpen || this.isArcadeOpen) return
     if (event.key === 'Escape') {
       if (this.inventoryOpen) {
         this.toggleInventory()
@@ -1035,6 +1039,13 @@ export class GameScene extends Phaser.Scene {
     if (this.isEventFloor && this.graveyardPos && this.graveyardPos.x === nx && this.graveyardPos.y === ny) {
       if (event.repeat) return
       this.openGraveyard()
+      return
+    }
+
+    // 町（あるかなひろば）のげーせん筐体：体当たりでミニゲームを開く
+    if (this.isEventFloor && this.arcadePos && this.arcadePos.x === nx && this.arcadePos.y === ny) {
+      if (event.repeat) return
+      this.openArcade()
       return
     }
 
@@ -2831,6 +2842,7 @@ export class GameScene extends Phaser.Scene {
     this.graveyardPos = null
     this.graveyardMark?.destroy()
     this.graveyardMark = null
+    this.arcadePos = null
     this.floorRescue = null
     this.jailCell = null
     this.pendingClearRescue = null
@@ -3093,6 +3105,54 @@ export class GameScene extends Phaser.Scene {
   /** 墓標上に浮かせる「！」マークの表示/非表示を更新する（未読時のみ表示） */
   private updateGraveyardMark() {
     this.graveyardMark?.setVisible(this.isEventFloor && !!this.graveyardPos && this.graveyardUnread)
+  }
+
+  /** げーせん筐体本体を描画する（画像アセット不要。Graphics＋絵文字）。
+   *  当たり判定はplace()を使わず、移動ハンドラ側でarcadePosを直接判定する（看板/墓標と同じ方式）。 */
+  private drawArcadeCabinet(pos: import('../types').Position) {
+    const { x, y } = this.tileToWorld(pos.x, pos.y)
+    const baseY = y + this.rts * 0.12
+
+    const w = this.rts * 0.66
+    const h = this.rts * 0.88
+    const g = this.add.graphics().setDepth(4)
+    // 影
+    g.fillStyle(0x000000, 0.25)
+    g.fillEllipse(x, baseY + h * 0.4, w * 0.95, h * 0.2)
+    // 筐体本体
+    g.fillStyle(0x33305a, 1)
+    g.fillRoundedRect(x - w / 2, baseY - h, w, h, 6)
+    g.lineStyle(Math.max(1, this.rts * 0.02), 0x1c1a33, 1)
+    g.strokeRoundedRect(x - w / 2, baseY - h, w, h, 6)
+    // 画面
+    const screenW = w * 0.72, screenH = h * 0.42
+    g.fillStyle(0x1a2a4a, 1)
+    g.fillRoundedRect(x - screenW / 2, baseY - h * 0.86, screenW, screenH, 3)
+    g.lineStyle(Math.max(1, this.rts * 0.015), 0x66ccff, 0.8)
+    g.strokeRoundedRect(x - screenW / 2, baseY - h * 0.86, screenW, screenH, 3)
+    this.plazaDecor.push(g)
+
+    const emoji = this.add.text(x, baseY - h * 0.66, '🕹️', {
+      fontSize: `${Math.round(this.rts * 0.34)}px`,
+    }).setOrigin(0.5).setDepth(5)
+    this.plazaDecor.push(emoji)
+
+    const label = this.add.text(x, baseY - h * 0.14, 'げーせん', {
+      fontSize: `${Math.round(this.rts * 0.22)}px`,
+      color: '#ffe08a',
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(5)
+    this.plazaDecor.push(label)
+
+    // 体当たり移動が使えないスマホ操作でも開けるよう、直接タップ/クリックでも開けるようにする
+    emoji.setInteractive({ useHandCursor: true })
+    emoji.on('pointerdown', () => this.openArcade())
+  }
+
+  /** げーせんのミニゲームモーダルを開く（体当たり／直接タップの両方から呼ばれる共通処理） */
+  private openArcade() {
+    this.isArcadeOpen = true
+    window.dispatchEvent(new Event('arcade-open'))
   }
 
   private coinCount(): number { return this.state.heals.filter(h => h.coin).length }
@@ -3384,6 +3444,9 @@ export class GameScene extends Phaser.Scene {
     }
     // 噴水は広場の象徴として常設（ティントで「濁って涸れた噴水」→「澄んだ水」へ変化させる）
     place('town-fountain',  15,      14,          2.4, 3, true)
+    // げーせん筐体：救済状況によらず常設（機能物なので看板/墓標と同じ扱い）
+    this.arcadePos = { x: 18, y: 15 }
+    this.drawArcadeCabinet(this.arcadePos)
     // ベンチ・花壇は3体以上救済で設置（人が戻り始め、手入れが行き届き始めた頃合い）
     if (stage >= 3) {
       place('town-bench',   13,      15,          1.1, 3, true)

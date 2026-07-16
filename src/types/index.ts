@@ -281,5 +281,7 @@ declare global {
     getRescueList?: () => { person: string; role: string; rescued: boolean }[]
     // さがし人：発生告知・救出完了の演出モーダルを閉じる（OK操作で操作ロック解除）
     closeRescueNotice?: () => void
+    // げーせん：ミニゲームモーダルを閉じる（操作ロック解除）
+    closeArcade?: () => void
   }
 }
