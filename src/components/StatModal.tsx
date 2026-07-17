@@ -61,8 +61,9 @@ export function StatModal() {
         <div className="stat-alloc-list">
           {STAT_DEFS.map(({ key, label }) => {
             const applyBulk = () => {
-              const n = parseInt(bulkInputs[key] ?? '', 10)
-              if (!Number.isFinite(n) || n <= 0) return
+              const raw = parseInt(bulkInputs[key] ?? '', 10)
+              if (!Number.isFinite(raw) || raw <= 0) return
+              const n = Math.min(raw, ls.statPoints)   // 残りポイントを超えた入力は残りポイント数に丸める
               window.allocateStatBulk?.(key, n)
               setBulkInputs(prev => ({ ...prev, [key]: '' }))
               setActiveKey(null)
