@@ -2192,7 +2192,7 @@ export class GameScene extends Phaser.Scene {
       case 'poison':
         player.poisoned = true
         player.poisonTurns = 5
-        this.cameras.main.flash(170, 40, 180, 60)    // 毒沼と同じ緑フラッシュ
+        this.cameras.main.flash(170, 160, 50, 220)   // 毒：パープルフラッシュ
         break
       case 'mud':
         player.mudTurns = 10
@@ -2986,8 +2986,8 @@ export class GameScene extends Phaser.Scene {
     const dmg = 2
     player.hp = Math.max(0, player.hp - dmg)
     player.poisonTurns--
-    // 毒：歩くたびに画面を緑にフラッシュしてダメージを演出
-    this.cameras.main.flash(170, 40, 180, 60)
+    // 毒：歩くたびに画面をパープルにフラッシュしてダメージを演出
+    this.cameras.main.flash(170, 160, 50, 220)
     this.addMessage(`毒のダメージ！${dmg}ダメージ（残り${player.poisonTurns}ターン）`)
     if (player.poisonTurns <= 0) {
       player.poisoned = false
