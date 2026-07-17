@@ -87,15 +87,22 @@ export default async function handler(req: any, res: any) {
       return res.json({ ok: true })
     }
 
-    // ── ユーザー管理：名前で active_sessions を検索し、現在のステータス・装備を返す ──
+    // ── ユーザー管理：名前(部分一致)またはplayer_id(完全一致)でactive_sessionsを検索し、
+    //    現在のステータス・装備を返す ──
     if (action === 'player_state') {
-      const { name } = req.body ?? {}
-      if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'name 必須' })
-      const { data, error } = await db.from('active_sessions')
+      const { name, playerId } = req.body ?? {}
+      let query = db.from('active_sessions')
         .select('player_id, player_name, floor, updated_at, state')
-        .ilike('player_name', `%${name.trim()}%`)
         .order('updated_at', { ascending: false })
         .limit(20)
+      if (typeof playerId === 'string' && playerId.trim()) {
+        query = query.eq('player_id', playerId.trim())
+      } else if (typeof name === 'string' && name.trim()) {
+        query = query.ilike('player_name', `%${name.trim()}%`)
+      } else {
+        return res.status(400).json({ error: 'name または playerId が必要' })
+      }
+      const { data, error } = await query
       if (error) return res.status(500).json({ error: error.message })
       return res.json({ sessions: data ?? [] })
     }

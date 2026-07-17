@@ -254,7 +254,9 @@ export function AdminPanel() {
 
   // ── User Management ──
   const [uSearch, setUSearch]     = useState('')
+  const [uSearchId, setUSearchId] = useState('')   // player_id 完全一致検索（「そのIDで生成されたキャラ一覧」用）
   const [uSearched, setUSearched] = useState('')
+  const [uSearchedById, setUSearchedById] = useState(false)   // 検索モード（名前 or ID）。結果表示の見出し切替に使う
   const [uRankings, setURankings] = useState<RankingEntry[]>([])
   const [uNotifs, setUNotifs]     = useState<WorldNotif[]>([])
   const [uLoading, setULoading]   = useState(false)
@@ -528,6 +530,7 @@ export function AdminPanel() {
     setULoading(true); setUMsg(''); setUEditingRanking(null)
     const name = uSearch.trim()
     setUSearched(name)
+    setUSearchedById(false)
     const [{ data: ranks }, { data: notifs }] = await Promise.all([
       db.from('ebt_rankings').select('*').ilike('player_name', `%${name}%`).order('floor', { ascending: false }).limit(50),
       db.from('world_notifications').select('*').ilike('player_name', `%${name}%`).order('created_at', { ascending: false }).limit(100),
@@ -541,6 +544,34 @@ export function AdminPanel() {
         const res = await fetch('/api/admin-event', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ adminKey: ADMIN_KEY, action: 'player_state', name }),
+        })
+        if (res.ok) { const j = await res.json(); setUSessions((j.sessions ?? []) as PlayerSession[]) }
+      } catch { /* API不在（ローカル等）→ 空のまま */ }
+    }
+    setULoading(false)
+  }
+
+  // player_id（端末ごとの識別子。localStorageの et_player_id）の完全一致で検索し、
+  // そのIDでプレイされた「キャラ一覧」（ランキング記録＝過去の各周回の記録）を表示する。
+  // 1つのIDでも死亡・リセットのたびに名前を変えて複数キャラを遊べるため、名前検索とは別に用意する。
+  const searchUserById = async () => {
+    const id = uSearchId.trim()
+    if (!id) return
+    setULoading(true); setUMsg(''); setUEditingRanking(null)
+    setUSearched(id)
+    setUSearchedById(true)
+    const [{ data: ranks }, { data: notifs }] = await Promise.all([
+      db.from('ebt_rankings').select('*').eq('player_id', id).order('created_at', { ascending: false }).limit(50),
+      db.from('world_notifications').select('*').eq('player_id', id).order('created_at', { ascending: false }).limit(100),
+    ])
+    setURankings((ranks ?? []) as RankingEntry[])
+    setUNotifs((notifs ?? []) as WorldNotif[])
+    setUSessions([])
+    if (ADMIN_KEY) {
+      try {
+        const res = await fetch('/api/admin-event', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminKey: ADMIN_KEY, action: 'player_state', playerId: id }),
         })
         if (res.ok) { const j = await res.json(); setUSessions((j.sessions ?? []) as PlayerSession[]) }
       } catch { /* API不在（ローカル等）→ 空のまま */ }
@@ -1765,11 +1796,18 @@ export function AdminPanel() {
         {/* ══ ユーザー管理 ══ */}
         {tab === 'users' && (
           <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <input value={uSearch} onChange={e => setUSearch(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && searchUser()}
                 placeholder="プレイヤー名で検索（部分一致）" style={{ ...S.input, flex: 1 }} />
               <button onClick={searchUser} disabled={uLoading} style={S.btnPrimary}>検索</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <input value={uSearchId} onChange={e => setUSearchId(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchUserById()}
+                placeholder="player_id で検索（完全一致・そのIDで生成された全キャラを表示）"
+                style={{ ...S.input, flex: 1, fontFamily: 'monospace', fontSize: 12 }} />
+              <button onClick={searchUserById} disabled={uLoading} style={S.btnPrimary}>ID検索</button>
             </div>
 
             {uMsg && <div style={{ color: uMsg.includes('エラー') ? '#f87171' : '#4ade80', marginBottom: 10 }}>{uMsg}</div>}
@@ -1777,6 +1815,11 @@ export function AdminPanel() {
 
             {uSearched && !uLoading && (
               <>
+                {uSearchedById && (
+                  <p style={{ ...S.muted, marginBottom: 10 }}>
+                    player_id「{uSearched}」で生成されたキャラ一覧（ランキング記録ベース。1IDでも死亡・リセットのたびに複数キャラが記録されます）
+                  </p>
+                )}
                 {/* 現在のステータス・装備（最終同期：active_sessions.state） */}
                 <div style={S.section}>
                   <div style={S.sectionTitle}>現在のステータス・装備 — "{uSearched}" ({uSessions.length} 件)</div>
