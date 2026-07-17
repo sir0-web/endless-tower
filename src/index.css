@@ -267,6 +267,12 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   background: rgba(79, 70, 229, 0.45);
   border-color: rgba(160, 160, 255, 0.7);
 }
+/* SoundMenuの.sound-menu-wrapはPC横並び用にmargin-left:6pxを持っているが、
+   ここ(縦積みスタック)では不要かつ横ずれの原因になるため打ち消す */
+.side-icon-stack .sound-menu-wrap,
+.side-icon-stack .screen-size-menu-wrap {
+  margin-left: 0;
+}
 /* ウィンドウ（各種モーダル）を開いている間は不具合BOXと同様に隠す */
 body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-overlay, .news-overlay, .report-overlay) .side-icon-stack {
   display: none !important;
