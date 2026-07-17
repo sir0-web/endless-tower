@@ -9,7 +9,8 @@ export default async function handler(req: any, res: any) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY 未設定' })
 
   const { adminKey, action } = req.body ?? {}
-  if (!process.env.VITE_ADMIN_KEY || adminKey !== process.env.VITE_ADMIN_KEY) {
+  const ADMIN_KEY = process.env.ADMIN_KEY || process.env.VITE_ADMIN_KEY // 移行期間中は旧変数もフォールバック
+  if (!ADMIN_KEY || adminKey !== ADMIN_KEY) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 

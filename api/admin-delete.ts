@@ -8,7 +8,7 @@ export default async function handler(req: any, res: any) {
 
   const { table, ids, adminKey } = req.body ?? {}
 
-  const expectedKey = process.env.VITE_ADMIN_KEY
+  const expectedKey = process.env.ADMIN_KEY || process.env.VITE_ADMIN_KEY // 移行期間中は旧変数もフォールバック
   if (!expectedKey || adminKey !== expectedKey)
     return res.status(401).json({ error: 'Unauthorized' })
 

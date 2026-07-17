@@ -43,7 +43,9 @@ const DB_SCHEMA: Record<OverrideCategory, { fields: { key: string; label: string
 
 const PROD_URL = import.meta.env.VITE_SUPABASE_URL as string
 const PROD_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY as string | undefined
+// 管理者キーはバンドルに埋め込まない。ログイン時に入力されたパスワードを
+// サーバー側（/api/admin-data）で検証し、成功した場合のみここに保持する。
+let ADMIN_KEY: string | undefined
 const LOCAL_URL = 'http://localhost:54321'
 const LOCAL_DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7kyqp8La5JAmZB9bFTJFa3o-PxnRmmHzM_s'
 
@@ -320,10 +322,22 @@ export function AdminPanel() {
     }
   }, [])
 
-  const login = () => {
-    if (!ADMIN_KEY) { alert('VITE_ADMIN_KEY 環境変数が未設定です'); return }
-    if (pw === ADMIN_KEY) setAuthed(true)
-    else alert('パスワードが違います')
+  const login = async () => {
+    if (!pw) { alert('パスワードを入力してください'); return }
+    try {
+      // サーバー側で検証（正しいキーでなければ 401 が返る）
+      const res = await fetch('/api/admin-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey: pw, action: 'list' }),
+      })
+      if (res.status === 401) { alert('パスワードが違います'); return }
+      if (!res.ok) { alert(`認証サーバーエラー (${res.status})`); return }
+      ADMIN_KEY = pw
+      setAuthed(true)
+    } catch {
+      alert('認証サーバーに接続できません（ローカル開発時は vercel dev で起動してください）')
+    }
   }
 
   // ── Maintenance ──
@@ -576,7 +590,7 @@ export function AdminPanel() {
 
   // 報告のステータス更新・削除は service key 経由のAPIで行う（reportsはanon更新/削除をRLSで弾くため）
   const reportApi = async (body: Record<string, unknown>): Promise<{ ok?: boolean; deleted?: number; error?: string }> => {
-    if (!ADMIN_KEY) return { error: 'VITE_ADMIN_KEY 未設定' }
+    if (!ADMIN_KEY) return { error: '未ログインです（再ログインしてください）' }
     try {
       const res = await fetch('/api/admin-report', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -884,7 +898,7 @@ export function AdminPanel() {
   }
 
   const dbApi = async (body: Record<string, unknown>): Promise<boolean> => {
-    if (!ADMIN_KEY) { setDbMsg('VITE_ADMIN_KEY 未設定'); return false }
+    if (!ADMIN_KEY) { setDbMsg('未ログインです（再ログインしてください）'); return false }
     setDbBusy(true)
     try {
       const res = await fetch('/api/admin-data', {
@@ -997,7 +1011,7 @@ export function AdminPanel() {
   }, [db])
 
   const newsApi = async (body: Record<string, unknown>): Promise<boolean> => {
-    if (!ADMIN_KEY) { setNewsMsg('VITE_ADMIN_KEY 未設定'); return false }
+    if (!ADMIN_KEY) { setNewsMsg('未ログインです（再ログインしてください）'); return false }
     try {
       const res = await fetch('/api/admin-news', {
         method: 'POST',
