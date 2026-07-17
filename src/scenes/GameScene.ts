@@ -323,7 +323,7 @@ export class GameScene extends Phaser.Scene {
   private graveyardMark: Phaser.GameObjects.Text | null = null   // 墓標上に浮かせる未読「！」マーク
   private graveyardLatestId: number | null = null   // 直近フェッチした最新墓標id（既読化に使う）
   private graveyardUnread = false   // 全プレイヤー共有データのため、セーブ対象のstateではなくシーン内フラグで管理
-  private arcadePos: import('../types').Position | null = null   // 広場のげーせん筐体の位置。体当たり/タップでミニゲームを開く
+  private arcadePos: import('../types').Position | null = null   // 広場のげーせん筐体の位置。体当たりでのみミニゲームを開く
   private skipNextStairsSound = false   // 落とし穴転落直後のpopulateFloorで汎用階段音を重ねないためのフラグ
   private failedTextures = new Set<string>()   // 読み込み失敗テクスチャ
   private loadedEnemyKeys = new Set<string>()  // 先読み済みの敵テクスチャキー（通信量削減の遅延ロード用）
@@ -3329,9 +3329,6 @@ export class GameScene extends Phaser.Scene {
       const k = (this.rts * 1.3) / natH
       img.setDisplaySize(natW * k, natH * k)
       this.plazaDecor.push(img)
-
-      img.setInteractive({ useHandCursor: true })
-      img.on('pointerdown', () => this.openArcade())
       return
     }
 
@@ -3358,10 +3355,6 @@ export class GameScene extends Phaser.Scene {
       fontSize: `${Math.round(this.rts * 0.34)}px`,
     }).setOrigin(0.5).setDepth(5)
     this.plazaDecor.push(emoji)
-
-    // 体当たり移動が使えないスマホ操作でも開けるよう、直接タップ/クリックでも開けるようにする
-    emoji.setInteractive({ useHandCursor: true })
-    emoji.on('pointerdown', () => this.openArcade())
   }
 
   /** げーせんのミニゲームモーダルを開く（体当たり／直接タップの両方から呼ばれる共通処理） */
@@ -3660,7 +3653,7 @@ export class GameScene extends Phaser.Scene {
     // 噴水は広場の象徴として常設（ティントで「濁って涸れた噴水」→「澄んだ水」へ変化させる）
     place('town-fountain',  15,      14,          2.4, 3, true)
     // げーせん筐体：救済状況によらず常設（機能物なので看板/墓標と同じ扱い）。
-    this.arcadePos = { x: 16, y: 16 }
+    this.arcadePos = { x: 16, y: 17 }
     this.drawArcadeCabinet(this.arcadePos)
     // ベンチ・花壇は3体以上救済で設置（人が戻り始め、手入れが行き届き始めた頃合い）
     if (stage >= 3) {
