@@ -4933,8 +4933,10 @@ export class GameScene extends Phaser.Scene {
     const g = this.playerGraphic
     if (!g || !(g instanceof Phaser.GameObjects.Sprite)) return
     const { player } = this.state
-    if (player.poisoned) g.setTint(0xb56ce8)         // 乗算ティント：紫（もう一段濃く）
-    else if (player.mudTurns > 0) g.setTint(0xb58d59) // 乗算ティント：茶（濃すぎたので少し戻す）
+    // tintModeは一度FILLにすると明示的に戻すまで維持され続けるため、被ダメフラッシュ(FILL)の後は
+    // 必ずMULTIPLYへ戻す（これを怠ると、被弾後ずっと状態異常の色が単色べた塗りの濃い表示になり続けるバグになる）
+    if (player.poisoned) g.setTint(0xb56ce8).setTintMode(Phaser.TintModes.MULTIPLY)         // 乗算ティント：紫（もう一段濃く）
+    else if (player.mudTurns > 0) g.setTint(0xb58d59).setTintMode(Phaser.TintModes.MULTIPLY) // 乗算ティント：茶（濃すぎたので少し戻す）
     else g.clearTint()
   }
 
