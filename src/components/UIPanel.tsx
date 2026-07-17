@@ -93,8 +93,8 @@ export function UIPanel() {
   const [openTab, setOpenTab] = useState<AccordionTab | null>(null)
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
   const [healDetail, setHealDetail] = useState<string | null>(null)
-  const [statsOpen, setStatsOpen] = useState(true)
-  const [logEquipOpen, setLogEquipOpen] = useState(true)
+  const [statsOpen, setStatsOpen] = useState(false)
+  const [logEquipOpen, setLogEquipOpen] = useState(false)
   // 常時ステータスパネル用の一括入力（[指定]ボタンで開くステータスのみ）。StatModalと同じ方式。
   const [spBulkInputs, setSpBulkInputs] = useState<Partial<Record<AllocStat, string>>>({})
   const [spActiveKey, setSpActiveKey] = useState<AllocStat | null>(null)
