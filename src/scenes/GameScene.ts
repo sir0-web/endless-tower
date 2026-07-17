@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { GameState, AllocStat, Enemy, Player } from '../types'
 import { weaponKindOf } from '../types'
-import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, dedupeItemPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '../game/dungeon'
+import { generateDungeon, getPlayerStartPosition, spawnEnemies, spawnMonsterHouseEnemies, spawnBosses, makeChaosBoss, makeNamedNormalEnemy, makeNamedBossEnemy, makeMinionEnemy, generateAreaBossFloors, getFloorTelopMessage, dedupeEnemyPositions, dedupeItemPositions, PERSONALITY_PREFIX_RE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, STATUS_ATTACK_MAP, STATUS_ATTACK_LABEL } from '../game/dungeon'
 import { spawnItems, SPELL_ITEMS, EQUIP_ITEMS, HEAL_ITEMS, WING_ITEMS, makeWingItem, MASTERWORK_PREFIX, type WingKey } from '../game/items'
 import { floorLabel, refineSuccessPercent } from '../game/utils'
 import { playAttack, playCrit, playDamage, playKill, playLevelUp, playStairs, playPotion, playEquip, playFall, playMate, playBGM, setHeartbeat } from '../game/sound'
@@ -227,6 +227,10 @@ export class GameScene extends Phaser.Scene {
   private playerGraphic: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite | null = null
   // 遠距離敵に1体でも狙われている間、主人公の足元に出す赤いリング（🎯マークの補完＝視線が自キャラに向くよう誘導）
   private playerAimRing: Phaser.GameObjects.Ellipse | null = null
+  // 暗闇：主人公の頭上にかかる黒いモヤ（darkTurns>0の間だけ表示）
+  private playerDarkMoya: Phaser.GameObjects.Ellipse | null = null
+  // 混乱：主人公の頭上でくるくる回るマーク（confuseTurns>0の間だけ表示）
+  private playerConfuseMark: Phaser.GameObjects.Text | null = null
   private playerDir: FacingDir = 'down'
   private isPlayerAttacking = false
   private hasPlayerAnims    = false
@@ -370,6 +374,8 @@ export class GameScene extends Phaser.Scene {
   init() {
     this.playerGraphic      = null
     if (this.playerAimRing) { this.playerAimRing.destroy(); this.playerAimRing = null }
+    if (this.playerDarkMoya) { this.playerDarkMoya.destroy(); this.playerDarkMoya = null }
+    if (this.playerConfuseMark) { this.playerConfuseMark.destroy(); this.playerConfuseMark = null }
     this.enemyGraphics      = new Map()
     this.enemyHpBars        = new Map()
     this.itemGraphics       = new Map()
@@ -773,6 +779,8 @@ export class GameScene extends Phaser.Scene {
         poisonTurns: 0,
         mudTurns: 0,
         mudSkipNext: false,
+        darkTurns: 0,
+        confuseTurns: 0,
         equipment: {},
         str: 3, agi: 1, dex: 1, int: 1, vit: 3, luk: 1,
         maxFloorReached: 1,
@@ -826,6 +834,9 @@ export class GameScene extends Phaser.Scene {
         // 本フィールド導入前のセーブは0扱い（過去のドッペル取得分は継承候補に残るが、
         // 出現時のクランプ（spawnDoppelganger）が上限を抑えるため実害は限定的）
         doppelPointsGained: saved.player.doppelPointsGained ?? 0,
+        // 本フィールド導入前のセーブは未罹患扱い
+        darkTurns: saved.player.darkTurns ?? 0,
+        confuseTurns: saved.player.confuseTurns ?? 0,
       },
       enemies: saved.enemies,
       items: saved.items,
@@ -1017,6 +1028,13 @@ export class GameScene extends Phaser.Scene {
     if (now - this.lastMoveAt < 95) return
     this.lastMoveAt = now
 
+    // 混乱：意図した方向を無視し、8方向のいずれかへランダムに動いてしまう（泥沼より先に確定させる）
+    if (player.confuseTurns > 0) {
+      const dirs8 = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+      ;[dx, dy] = dirs8[Math.floor(Math.random() * dirs8.length)]
+      this.addMessage('混乱していて思うように動けない…！')
+    }
+
     // 移動方向を記録
     this.playerDir = dirFromSign(dx, dy)
 
@@ -1048,11 +1066,27 @@ export class GameScene extends Phaser.Scene {
     const ny = player.position.y + dy
 
     // 斜め移動のコーナーカット防止（壁の角を斜めに越えない）
-    if (dx !== 0 && dy !== 0) {
-      if (this.state.map[player.position.y][nx] === 'wall') return
-      if (this.state.map[ny][player.position.x] === 'wall') return
+    const wallBlocked =
+      (dx !== 0 && dy !== 0 &&
+        (this.state.map[player.position.y][nx] === 'wall' || this.state.map[ny][player.position.x] === 'wall')) ||
+      this.state.map[ny][nx] === 'wall'
+    if (wallBlocked) {
+      // 混乱中は「ランダムな方向へ動こうとして壁にぶつかった」もハズレの一種としてターンを消費する
+      // （通常時の壁バンプは今まで通り無料＝ノーモーション・ノーターン）
+      if (player.confuseTurns > 0) {
+        this.addMessage('混乱して壁にぶつかってしまった！')
+        if (!this.awaitingEquipModal) {
+          this.state.turn++
+          this.enemyTurn()
+          this.hungerTick()
+          this.poisonTick()
+          this.effectTick()
+        }
+        this.renderMap()
+        this.updateWindowGameState()
+      }
+      return
     }
-    if (this.state.map[ny][nx] === 'wall') return
 
     // 町（あるかなひろば）の掲示板：体当たりで捜し人一覧（救出状況）を開く
     if (this.isEventFloor && this.signboardPos && this.signboardPos.x === nx && this.signboardPos.y === ny) {
@@ -1420,7 +1454,7 @@ export class GameScene extends Phaser.Scene {
     const { player } = this.state
     const effectiveAtk  = Math.floor(player.str * 1.5) + player.level
     const attackCount   = playerAttackCount(player.agi)
-    const hitRate       = Math.min(1.00, 0.90 + player.dex * 0.001)
+    const hitRate       = Math.min(1.00, 0.90 + player.dex * 0.001) * (player.darkTurns > 0 ? 0.5 : 1)
     const critRate      = player.luk * 0.0015
     const playerPierce  = PIERCE_RATE + dexPierceBonus(player.dex)
     // トドメ演出用：攻撃方向は連撃中不変なのでループ外で確定し、最後に命中したhitのクリット状態を控える
@@ -1526,6 +1560,24 @@ export class GameScene extends Phaser.Scene {
         return false
       }
 
+      // 混乱中：狙った方向を無視し、ランダムな方向へ矢を放つ（何もいなければ空撃ちで終わる）
+      if (player.confuseTurns > 0) {
+        const dirs8 = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+        const [rdx, rdy] = dirs8[Math.floor(Math.random() * dirs8.length)]
+        const found = inRange.find(o =>
+          Math.sign(o.e.position.x - player.position.x) === rdx &&
+          Math.sign(o.e.position.y - player.position.y) === rdy)
+        this.playerDir = dirFromSign(rdx, rdy)
+        player.stamina = Math.max(0, player.stamina - 5)
+        if (!found) {
+          this.addMessage('混乱して見当違いの方向に矢を放ってしまった！')
+          this.playAttackAnim()
+          return true
+        }
+        enemy = found.e
+        dist  = found.dist
+        if (enemy.isSkulporin) { this.attackSkulporin(enemy); return true }
+      } else {
       // プレイヤーが向いている方向にいる敵を優先ターゲットにする（狙った敵を選べない、という不満対策）。
       // 向き先に誰もいなければ、これまで通り最も近い敵へフォールバックし、ボタンが空振りしないようにする。
       const [fx, fy] = FACING_VEC[this.playerDir]
@@ -1544,6 +1596,7 @@ export class GameScene extends Phaser.Scene {
         Math.sign(enemy.position.y - player.position.y),
       )
       if (enemy.isSkulporin) { this.attackSkulporin(enemy); return true }
+      }
     }
 
     // 先制ボーナス：隣接(bump)ではなく、真に離れた位置(dist>1)から先制した一撃には威力+30%。
@@ -1566,7 +1619,7 @@ export class GameScene extends Phaser.Scene {
     const effectiveAtk = Math.floor(player.dex * 1.4) + player.level
     const attackCount  = bowAttackCount(player.agi)
     const baseHit      = 0.95 + player.dex * 0.0008
-    const hitRate      = Math.max(0.15, Math.min(1.00, baseHit - Math.max(0, dist - 1) * 0.10))
+    const hitRate      = Math.max(0.15, Math.min(1.00, baseHit - Math.max(0, dist - 1) * 0.10)) * (player.darkTurns > 0 ? 0.5 : 1)
     const critRate     = player.luk * 0.0022
     // 割合貫通：基礎4%＋DEXボーナス（近接のdexPierceBonusを流用）。DEXが主力の弓は貫通が伸びやすい。
     const playerPierce = BOW_PIERCE_RATE + dexPierceBonus(player.dex)
@@ -2132,6 +2185,32 @@ export class GameScene extends Phaser.Scene {
     player.totalStatPointsEarned = (player.totalStatPointsEarned ?? 0) + amount
   }
 
+  /** 敵の特殊攻撃が命中した際、対応する状態異常をプレイヤーに付与し、既存の沼と同じ演出フラッシュを出す */
+  private applyStatusToPlayer(kind: import('../game/dungeon').StatusAttackKind) {
+    const { player } = this.state
+    switch (kind) {
+      case 'poison':
+        player.poisoned = true
+        player.poisonTurns = 5
+        this.cameras.main.flash(170, 40, 180, 60)    // 毒沼と同じ緑フラッシュ
+        break
+      case 'mud':
+        player.mudTurns = 10
+        player.mudSkipNext = false
+        this.cameras.main.flash(170, 120, 75, 30)    // 泥沼と同じ茶フラッシュ
+        break
+      case 'dark':
+        player.darkTurns = 5
+        this.cameras.main.flash(170, 8, 8, 12)       // 暗闇：黒フラッシュ
+        break
+      case 'confuse':
+        player.confuseTurns = 5
+        this.cameras.main.flash(170, 170, 60, 210)   // 混乱：紫フラッシュ
+        break
+    }
+    this.refreshPlayerStatusTint()
+  }
+
   private enemyTurn() {
     const { player, enemies } = this.state
 
@@ -2440,6 +2519,20 @@ export class GameScene extends Phaser.Scene {
         this.addMessage(anyCrit
           ? `${enemy.name}からクリティカル！${hitLabel}${totalDmg}ダメージ！`
           : `${enemy.name}から${hitLabel}${totalDmg}ダメージ！`)
+
+        // ── 特殊攻撃（30%）：通常ダメージに加えて状態異常を狙ってくる。生死判定より先に判定する ──
+        const statusKind = STATUS_ATTACK_MAP[enemy.name]
+        if (statusKind && player.hp > 0 && Math.random() < 0.3) {
+          const label = STATUS_ATTACK_LABEL[statusKind]
+          this.addMessage(`${enemy.name}は${label}攻撃をした！`)
+          if (Math.random() < 0.5) {
+            this.applyStatusToPlayer(statusKind)
+            this.addMessage(`${getDisplayName()}は${label}にかかってしまった！`)
+          } else {
+            this.addMessage(`しかし${getDisplayName()}はかからなかった`)
+          }
+        }
+
         if (player.hp <= 0) { this.lastDeathCause = anyCrit ? `${enemy.name}のクリティカル` : `${enemy.name}`; this.gameOver(); return }
 
       } else if (manhDist < 10) {
@@ -2666,6 +2759,14 @@ export class GameScene extends Phaser.Scene {
     }
     for (const enemy of enemies) {
       if (enemy.slowedTurns > 0) enemy.slowedTurns--
+    }
+    if (player.darkTurns > 0) {
+      player.darkTurns--
+      if (player.darkTurns <= 0) this.addMessage('暗闇が晴れた！')
+    }
+    if (player.confuseTurns > 0) {
+      player.confuseTurns--
+      if (player.confuseTurns <= 0) this.addMessage('混乱が治った！')
     }
   }
 
@@ -4816,18 +4917,28 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** プレイヤースプライトを赤く点滅（被ダメ時） */
+  /** プレイヤースプライトを赤く点滅（被ダメ時）。毒/鈍足の常時ティントがある場合はそれへ復帰する */
   private flashPlayer() {
     const g = this.playerGraphic
     if (!g) return
     if (g instanceof Phaser.GameObjects.Sprite) {
       g.setTint(0xff3333).setTintMode(Phaser.TintModes.FILL)
-      this.time.delayedCall(110, () => { if (g.active) g.clearTint() })
+      this.time.delayedCall(110, () => { if (g.active) this.refreshPlayerStatusTint() })
     } else if (g instanceof Phaser.GameObjects.Rectangle) {
       const orig = g.fillColor
       g.setFillStyle(0xff3333)
       this.time.delayedCall(110, () => { if (g.active) g.setFillStyle(orig) })
     }
+  }
+
+  /** 毒（紫）／鈍足（茶）の常時ティントを現在の状態に合わせて再設定する（被ダメフラッシュ後の復帰にも使う） */
+  private refreshPlayerStatusTint() {
+    const g = this.playerGraphic
+    if (!g || !(g instanceof Phaser.GameObjects.Sprite)) return
+    const { player } = this.state
+    if (player.poisoned) g.setTint(0x9b4de0).setTintMode(Phaser.TintModes.FILL)
+    else if (player.mudTurns > 0) g.setTint(0xa87840).setTintMode(Phaser.TintModes.FILL)
+    else g.clearTint()
   }
 
   /** 床タイルのバリアント（floor1/2/3）をフロア生成時にランダム決定・固定 */
@@ -5954,6 +6065,40 @@ export class GameScene extends Phaser.Scene {
         this.playerAimRing.setVisible(true)
       } else if (this.playerAimRing) {
         this.playerAimRing.setVisible(false)
+      }
+    }
+
+    // ── 毒/鈍足の常時ティントを現在の状態へ同期（poisonTick等でオフになった場合もここで消える）──
+    this.refreshPlayerStatusTint()
+
+    // ── 暗闇：主人公にかかる黒いモヤ（見た目の圧迫感で「命中率が落ちている」ことを常時示す）──
+    if (this.playerGraphic) {
+      const pg = this.playerGraphic
+      const { player } = this.state
+      if (player.darkTurns > 0) {
+        if (!this.playerDarkMoya) {
+          const moya = this.add.ellipse(pg.x, pg.y, rts * 1.3, rts * 1.5, 0x000000, 0.5).setDepth(7)
+          this.tweens.add({ targets: moya, alpha: { from: 0.55, to: 0.35 }, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+          this.playerDarkMoya = moya
+        }
+        this.playerDarkMoya.setPosition(pg.x, pg.y)
+        this.playerDarkMoya.setVisible(true)
+      } else if (this.playerDarkMoya) {
+        this.playerDarkMoya.setVisible(false)
+      }
+
+      // ── 混乱：頭上でくるくる回るマーク ──
+      if (player.confuseTurns > 0) {
+        if (!this.playerConfuseMark) {
+          const mark = this.add.text(pg.x, pg.y, '🌀', { fontSize: `${Math.round(rts * 0.42)}px` })
+            .setOrigin(0.5).setDepth(9)
+          this.tweens.add({ targets: mark, angle: 360, duration: 900, repeat: -1, ease: 'Linear' })
+          this.playerConfuseMark = mark
+        }
+        this.playerConfuseMark.setPosition(pg.x, pg.y - rts * 0.62)
+        this.playerConfuseMark.setVisible(true)
+      } else if (this.playerConfuseMark) {
+        this.playerConfuseMark.setVisible(false)
       }
     }
 

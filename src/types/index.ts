@@ -104,6 +104,10 @@ export interface Player {
   poisonTurns: number
   mudTurns: number
   mudSkipNext: boolean
+  // 暗闇：残りターン数。0より大きい間、プレイヤーの攻撃命中率が半減する
+  darkTurns: number
+  // 混乱：残りターン数。0より大きい間、移動・攻撃の入力がランダムに乱される
+  confuseTurns: number
   equipment: Equipment
   // 新ステータス
   str: number

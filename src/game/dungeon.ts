@@ -207,6 +207,31 @@ export type EnemyTableRow = {
   str: number; vit: number; agi: number; luk: number
   ranged?: boolean
 }
+// 敵の特殊攻撃（30%の確率で通常攻撃の代わりに発動→さらに50%抽選でプレイヤーに状態異常が乗る）。
+// 「毒」「鈍足」は既存の毒沼・泥沼と全く同じ効果（poisonTurns=5 / mudTurns=10）を流用する。
+export type StatusAttackKind = 'poison' | 'mud' | 'dark' | 'confuse'
+export const STATUS_ATTACK_LABEL: Record<StatusAttackKind, string> = {
+  poison: '毒', mud: '鈍足', dark: '暗闇', confuse: '混乱',
+}
+export const STATUS_ATTACK_MAP: Record<string, StatusAttackKind> = {
+  'ビタタ': 'poison',
+  'ヒドラ': 'poison',
+  'ゾンビ': 'poison',
+  'フロッグ': 'poison',
+  'クランプ': 'poison',
+  '白蓮玉': 'mud',
+  'ボーカル': 'mud',
+  'フローラ': 'mud',
+  'チンピラ': 'mud',
+  'デビルチ': 'dark',
+  'マルデューク': 'dark',
+  '深淵の騎士': 'dark',
+  'ウィスパー': 'confuse',
+  'マミー': 'confuse',
+  'ジョーカー': 'confuse',
+  'ナイトメア': 'confuse',
+}
+
 export const ENEMY_TABLE: EnemyTableRow[] = [
   //                                                                              str  vit  agi  luk
   // ── 1〜30：序盤（最弱フィラーのぽり男は全域に薄く出続ける）──
