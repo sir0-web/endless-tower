@@ -3200,7 +3200,7 @@ export class GameScene extends Phaser.Scene {
 
   /** パターン3：8方を岩で囲み1方だけ柵(jail)のある牢屋を生成し、中に未救済NPCを配置。 */
   private carveJail(kind: import('../types').NpcKind) {
-    const { map } = this.state
+    const { map, player } = this.state
     // 中心候補：3x3が全て床で、かつ外周に脱出用の床が隣接する場所
     const spot = this.randomFloorTile((cx, cy) => {
       if (cx < 2 || cy < 2 || cx >= MAP_WIDTH - 2 || cy >= MAP_HEIGHT - 2) return false
@@ -3208,7 +3208,11 @@ export class GameScene extends Phaser.Scene {
         if (map[cy + dy][cx + dx] !== 'floor') return false
       }
       // 下側(cy+2)が床＝そこから柵に接近できる
-      return map[cy + 2]?.[cx] === 'floor'
+      if (map[cy + 2]?.[cx] !== 'floor') return false
+      // 3x3全体（外周が壁化される範囲）にプレイヤーの現在地が含まれる場合は候補から除外
+      // （中心タイルだけの除外だと、周囲8マスのどこかにプレイヤーがいた場合に壁の中へ閉じ込めてしまう）
+      if (Math.abs(player.position.x - cx) <= 1 && Math.abs(player.position.y - cy) <= 1) return false
+      return true
     })
     if (!spot) return
     const { x: cx, y: cy } = spot
