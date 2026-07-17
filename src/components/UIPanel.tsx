@@ -94,6 +94,7 @@ export function UIPanel() {
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
   const [healDetail, setHealDetail] = useState<string | null>(null)
   const [statsOpen, setStatsOpen] = useState(true)
+  const [logEquipOpen, setLogEquipOpen] = useState(true)
   // 常時ステータスパネル用の一括入力（[指定]ボタンで開くステータスのみ）。StatModalと同じ方式。
   const [spBulkInputs, setSpBulkInputs] = useState<Partial<Record<AllocStat, string>>>({})
   const [spActiveKey, setSpActiveKey] = useState<AllocStat | null>(null)
@@ -451,15 +452,15 @@ export function UIPanel() {
         </SlotMachine>
       </div>
 
-      {/* ── 中段・下段：PCもスマホと同じ配列に統一 ──
-          上段=ステータス＋装備（折りたたみ可）／下段=ログ＋インベントリ。 */}
+      {/* ── 中段・下段：PC/スマホ共通配列 ──
+          上段=ステータス＋インベントリ（折りたたみ可）／下段=ログ＋装備（折りたたみ可）。 */}
       <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
         <button
           type="button"
           className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
           onClick={() => setStatsOpen(o => !o)}
         >
-          <span className="se-title">ステータス / 装備</span>
+          <span className="se-title">ステータス / インベントリ</span>
           {!statsOpen && gs.statPoints > 0 && (
             <span className="se-pt-alert">⚡ 未付与ポイントあり</span>
           )}
@@ -470,12 +471,22 @@ export function UIPanel() {
         </button>
         <div className="stats-equip-inner">
           {statPanel}
-          {equipPanel}
+          {inventoryPanel}
         </div>
       </div>
-      <div className="log-items-row">
-        {logPanel}
-        {inventoryPanel}
+      <div className={`log-equip-row ${logEquipOpen ? '' : 'le-collapsed'}`}>
+        <button
+          type="button"
+          className={`stats-equip-toggle ${logEquipOpen ? 'se-open' : ''}`}
+          onClick={() => setLogEquipOpen(o => !o)}
+        >
+          <span className="se-title">ログ / 装備</span>
+          <span className="se-arrow">{logEquipOpen ? '▲' : '▼'}</span>
+        </button>
+        <div className="log-items-row">
+          {logPanel}
+          {equipPanel}
+        </div>
       </div>
 
     </div>

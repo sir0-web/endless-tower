@@ -1150,6 +1150,21 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 }
 
 /* ── log-items-row（下段：ログ左2/3＋アイテム右1/3） ── */
+/* 下段：ログ＋装備の折りたたみ可能な行。トグル(.stats-equip-toggleを流用)＋中身(.log-items-row)。
+   開いている間は残り縦スペースを埋め(flex:1)、閉じた時はトグルの高さだけに収まる。 */
+.log-equip-row {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.log-equip-row.le-collapsed {
+  flex: 0 0 auto;
+}
+.log-equip-row.le-collapsed .log-items-row {
+  display: none;
+}
+
 .log-items-row {
   flex: 1;
   min-height: 0;
