@@ -1148,7 +1148,8 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   flex: 1;
   min-height: 0;
   display: flex;
-  overflow: hidden;
+  overflow-y: auto;   /* 画面サイズが小さい時にステータス/インベントリが見えなくなる問題の対策：
+                         はみ出しを消す(hidden)のではなく、スクロールで見えるようにする */
 }
 
 .log-panel {

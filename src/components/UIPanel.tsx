@@ -101,16 +101,7 @@ export function UIPanel() {
   const [slotOpen, setSlotOpen] = useState(() => localStorage.getItem('ebt_slot_open') !== '0')
   const toggleSlot = () => setSlotOpen(o => { const n = !o; localStorage.setItem('ebt_slot_open', n ? '1' : '0'); return n })
   const [name, setName] = useState(getDisplayName)
-  // PC/スマホでパネル配置を出し分ける（スマホは従来配置を厳守して非影響を担保）
-  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
   const logRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)')
-    const on = () => setIsMobile(mq.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
 
   useEffect(() => {
     const update = () => { if (window.gameState) setGs({ ...window.gameState }) }
@@ -420,6 +411,9 @@ export function UIPanel() {
           <span className="badge level-badge">Lv {gs.level}</span>
           <span className="badge name-badge">{name}</span>
           {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
+          <MailButton className="pc-mute-btn" />
+          <SoundMenu btnClassName="pc-mute-btn" />
+          <ScreenSizeMenu btnClassName="pc-mute-btn" />
           <button className="pc-save-btn" onClick={() => window.saveGame?.()}>セーブ</button>
         </div>
         <div className="bar-il-row">
@@ -439,17 +433,6 @@ export function UIPanel() {
         </div>
       </div>
 
-      {/* PC専用：DM/サウンド/画面サイズ（元は最上段バーにあったものをここへ移動）。
-          スロット筐体自体は幅100%前提の内部レイアウトを持つため、直接の兄弟として横に並べると
-          サイズ計算が崩れる。安全のため、筐体トグルボタンの直上に独立した行として配置する。 */}
-      {!isMobile && (
-        <div className="slot-side-btns-row">
-          <MailButton className="side-icon-btn" />
-          <SoundMenu btnClassName="side-icon-btn" />
-          <ScreenSizeMenu btnClassName="side-icon-btn" />
-        </div>
-      )}
-
       {/* ── スロット筐体（背景画像 + リール + 液晶）──
           PCでは折りたたみトグルで縦スペースをログ/インベントリへ譲れる。
           SlotMachineは常時マウントのまま（撃破連動のスピン処理を止めないため）、
@@ -468,61 +451,32 @@ export function UIPanel() {
         </SlotMachine>
       </div>
 
-      {/* ── 中段・下段：PC と スマホで「配置だけ」出し分け ──
-          PC : 上段=装備＋ログ（参照・折りたたみ可）／下段=ステータス＋インベントリ（メイン作業域）。
-               ステータスとインベントリを隣接させ、装備品選択時の増減(+5等)を隣で見比べられる。
-          スマホ: 従来どおり 上段=ステータス＋装備／下段=ログ(非表示)＋インベントリ（非影響を厳守）。 */}
-      {isMobile ? (
-        <>
-          <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
-            <button
-              type="button"
-              className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
-              onClick={() => setStatsOpen(o => !o)}
-            >
-              <span className="se-title">ステータス / 装備</span>
-              {!statsOpen && gs.statPoints > 0 && (
-                <span className="se-pt-alert">⚡ 未付与ポイントあり</span>
-              )}
-              {!statsOpen && gs.bag.length > 0 && (
-                <span className="se-badge se-badge-bag">📦 {gs.bag.length}</span>
-              )}
-              <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
-            </button>
-            <div className="stats-equip-inner">
-              {statPanel}
-              {equipPanel}
-            </div>
-          </div>
-          <div className="log-items-row">
-            {logPanel}
-            {inventoryPanel}
-          </div>
-        </>
-      ) : (
-        <>
-          {/* 上段：装備＋ログ（参照）。折りたたむと下段のメイン作業域が広がる */}
-          <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
-            <button
-              type="button"
-              className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
-              onClick={() => setStatsOpen(o => !o)}
-            >
-              <span className="se-title">装備 / ログ</span>
-              <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
-            </button>
-            <div className="stats-equip-inner stats-equip-inner-ref">
-              {equipPanel}
-              {logPanel}
-            </div>
-          </div>
-          {/* 下段：ステータス＋インベントリ（メイン作業域・広い） */}
-          <div className="log-items-row">
-            {statPanel}
-            {inventoryPanel}
-          </div>
-        </>
-      )}
+      {/* ── 中段・下段：PCもスマホと同じ配列に統一 ──
+          上段=ステータス＋装備（折りたたみ可）／下段=ログ＋インベントリ。 */}
+      <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
+        <button
+          type="button"
+          className={`stats-equip-toggle ${statsOpen ? 'se-open' : ''}`}
+          onClick={() => setStatsOpen(o => !o)}
+        >
+          <span className="se-title">ステータス / 装備</span>
+          {!statsOpen && gs.statPoints > 0 && (
+            <span className="se-pt-alert">⚡ 未付与ポイントあり</span>
+          )}
+          {!statsOpen && gs.bag.length > 0 && (
+            <span className="se-badge se-badge-bag">📦 {gs.bag.length}</span>
+          )}
+          <span className="se-arrow">{statsOpen ? '▲' : '▼'}</span>
+        </button>
+        <div className="stats-equip-inner">
+          {statPanel}
+          {equipPanel}
+        </div>
+      </div>
+      <div className="log-items-row">
+        {logPanel}
+        {inventoryPanel}
+      </div>
 
     </div>
   )
