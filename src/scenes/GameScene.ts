@@ -225,6 +225,8 @@ export class GameScene extends Phaser.Scene {
   private fogGraphics!: Phaser.GameObjects.Graphics
   private bowRangeGraphics!: Phaser.GameObjects.Graphics
   private playerGraphic: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite | null = null
+  // 遠距離敵に1体でも狙われている間、主人公の足元に出す赤いリング（🎯マークの補完＝視線が自キャラに向くよう誘導）
+  private playerAimRing: Phaser.GameObjects.Ellipse | null = null
   private playerDir: FacingDir = 'down'
   private isPlayerAttacking = false
   private hasPlayerAnims    = false
@@ -367,6 +369,7 @@ export class GameScene extends Phaser.Scene {
   // シーン再起動時（scene.start 呼び出しごと）に必ず実行される
   init() {
     this.playerGraphic      = null
+    if (this.playerAimRing) { this.playerAimRing.destroy(); this.playerAimRing = null }
     this.enemyGraphics      = new Map()
     this.enemyHpBars        = new Map()
     this.itemGraphics       = new Map()
@@ -5588,6 +5591,8 @@ export class GameScene extends Phaser.Scene {
         this.enemyDir.delete(id)
       }
     }
+    // このフレームで1体でも主人公を狙っている遠距離敵がいるか（ループ内で確定させ、ループ後に主人公側のリングへ反映）
+    let anyAimingAtPlayer = false
     for (const enemy of enemies) {
       const { x: ex, y: ey } = this.tileToWorld(enemy.position.x, enemy.position.y)
       const vis = this.isVisible(enemy.position.x, enemy.position.y)
@@ -5819,6 +5824,7 @@ export class GameScene extends Phaser.Scene {
         this.hasLineOfSight(enemy.position.x, enemy.position.y, player.position.x, player.position.y)
       let aim = this.aimMarkers.get(enemy.id)
       if (isAiming) {
+        anyAimingAtPlayer = true
         if (!aim) {
           aim = this.add.text(ex, ey, '🎯', { fontSize: `${Math.round(rts * 0.4)}px` })
             .setOrigin(0.5).setDepth(8)
@@ -5931,6 +5937,25 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.snapNextRender = false
+
+    // ── 狙われグロー：遠距離敵の🎯だけだと視線が敵側に集中しがちなので、主人公の足元にも薄い赤リングを出す。
+    // 敵の🎯（どれが撃ってくるか）と役割分担：こちらは「気づき」専用、消滅条件は🎯と完全に同じにして整合を保つ ──
+    if (this.playerGraphic) {
+      const pg = this.playerGraphic
+      if (anyAimingAtPlayer) {
+        if (!this.playerAimRing) {
+          const ring = this.add.ellipse(pg.x, pg.y, rts * 0.9, rts * 0.5, 0xff3333, 0)
+            .setStrokeStyle(3, 0xff3333, 0.85)
+            .setDepth(5)
+          this.tweens.add({ targets: ring, alpha: { from: 1, to: 0.35 }, duration: 380, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+          this.playerAimRing = ring
+        }
+        this.playerAimRing.setPosition(pg.x, pg.y + rts * 0.32)
+        this.playerAimRing.setVisible(true)
+      } else if (this.playerAimRing) {
+        this.playerAimRing.setVisible(false)
+      }
+    }
 
     // ── 霧グラデーション（inner→outer にかけて円形スモッグ。瘴気フロアは狭く紫色）──
     this.fogGraphics.clear()
