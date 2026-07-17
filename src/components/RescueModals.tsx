@@ -194,7 +194,7 @@ export function RescueNoticeModal() {
   return (
     <div className="facility-overlay">
       <div className="facility-modal">
-        <p className="facility-title">？！</p>
+        <p className="facility-title">たす・・けて・・！</p>
         <p className="facility-desc" style={{ whiteSpace: 'pre-line' }}>{message}</p>
         <div className="facility-btns">
           <button className="facility-go-btn" onClick={close}>OK</button>
