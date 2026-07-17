@@ -439,6 +439,17 @@ export function UIPanel() {
         </div>
       </div>
 
+      {/* PC専用：DM/サウンド/画面サイズ（元は最上段バーにあったものをここへ移動）。
+          スロット筐体自体は幅100%前提の内部レイアウトを持つため、直接の兄弟として横に並べると
+          サイズ計算が崩れる。安全のため、筐体トグルボタンの直上に独立した行として配置する。 */}
+      {!isMobile && (
+        <div className="slot-side-btns-row">
+          <MailButton className="side-icon-btn" />
+          <SoundMenu btnClassName="side-icon-btn" />
+          <ScreenSizeMenu btnClassName="side-icon-btn" />
+        </div>
+      )}
+
       {/* ── スロット筐体（背景画像 + リール + 液晶）──
           PCでは折りたたみトグルで縦スペースをログ/インベントリへ譲れる。
           SlotMachineは常時マウントのまま（撃破連動のスピン処理を止めないため）、
@@ -451,19 +462,10 @@ export function UIPanel() {
         <span>{slotOpen ? '女神の加護（スロット）を隠す' : '女神の加護（スロット）を表示'}</span>
         <span className="slot-toggle-arrow">{slotOpen ? '▲' : '▼'}</span>
       </button>
-      <div className="slot-section-row">
-        {!isMobile && (
-          <div className="slot-side-btns">
-            <MailButton className="side-icon-btn" />
-            <SoundMenu btnClassName="side-icon-btn" />
-            <ScreenSizeMenu btnClassName="side-icon-btn" />
-          </div>
-        )}
-        <div className={`slot-wrap ${slotOpen ? '' : 'slot-collapsed'}`}>
-          <SlotMachine>
-            <BonusVideo />
-          </SlotMachine>
-        </div>
+      <div className={`slot-wrap ${slotOpen ? '' : 'slot-collapsed'}`}>
+        <SlotMachine>
+          <BonusVideo />
+        </SlotMachine>
       </div>
 
       {/* ── 中段・下段：PC と スマホで「配置だけ」出し分け ──

@@ -1426,21 +1426,17 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 .slot-wrap { flex-shrink: 0; display: flex; flex-direction: column; }
 .slot-collapsed { display: none; }   /* 畳んだ状態：筐体を隠して下段へ縦スペースを譲る */
 
-/* PC：スロット筐体の左にDM/サウンド/画面サイズを縦積み（元は最上段バーにあったものを移動） */
-.slot-section-row {
+/* PC：DM/サウンド/画面サイズ（元は最上段バーにあったもの）。スロット筐体トグルの直上に
+   独立した横並び行として配置（slot-wrap自体には一切触れず、内部レイアウトへの影響ゼロ）。 */
+.slot-side-btns-row {
+  flex-shrink: 0;
   display: flex;
   flex-direction: row;
   gap: 6px;
-  align-items: flex-start;
-}
-.slot-side-btns {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  margin-bottom: 4px;
 }
 @media (max-width: 767px) {
-  .slot-side-btns { display: none !important; }
+  .slot-side-btns-row { display: none !important; }
 }
 
 /* ── 画面サイズ（PC UI倍率）プリセット。サウンドメニュー内 ── */
