@@ -2764,7 +2764,7 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 
 .stat-alloc-row {
   display: grid;
-  grid-template-columns: 48px 40px 1fr 52px;
+  grid-template-columns: 48px 40px 1fr;
   align-items: center;
   gap: 8px;
   background: #141436;
@@ -2836,6 +2836,58 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 }
 
 .sa-bulk-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sa-bulk-cancel {
+  flex-shrink: 0;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid #4a4a6a;
+  background: #23233f;
+  color: #9a9ac0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sa-bulk-cancel:hover {
+  background: #33335a;
+  color: #ffffff;
+}
+
+/* [+1]を2/3幅で左寄せ、残り1/3に[指定]を並べる行（既存の1fr枠にそのまま収まる） */
+.sa-action-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sa-action-row .sa-btn-plus1 {
+  flex: 2;
+}
+
+.sa-btn-designate {
+  flex: 1;
+  padding: 5px 0;
+  border-radius: 6px;
+  border: 1px solid #4444aa;
+  background: #1e1e50;
+  color: #aaaaff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sa-btn-designate:hover:not(:disabled) {
+  background: #2e2e70;
+  color: #ffffff;
+}
+
+.sa-btn-designate:disabled {
   opacity: 0.35;
   cursor: default;
 }

@@ -24,6 +24,8 @@ export function StatModal() {
   const [ls, setLs] = useState<LocalStats>(INIT)
   // ステータスごとの一括入力欄（「1000ずつ長押し」がつらい問題への対処）。キー未入力time="" 扱い。
   const [bulkInputs, setBulkInputs] = useState<Partial<Record<AllocStat, string>>>({})
+  // [指定]を押したステータスのみ、+1/指定ボタンの代わりに入力欄を表示する（同時に1つだけ開く）
+  const [activeKey, setActiveKey] = useState<AllocStat | null>(null)
 
   useEffect(() => {
     const onOpen = () => {
@@ -63,40 +65,63 @@ export function StatModal() {
               if (!Number.isFinite(n) || n <= 0) return
               window.allocateStatBulk?.(key, n)
               setBulkInputs(prev => ({ ...prev, [key]: '' }))
+              setActiveKey(null)
             }
+            const isActive = activeKey === key
             return (
               <div key={key} className="stat-alloc-row">
                 <span className="sa-label">{label}</span>
                 <span className="sa-val">{ls[key]}</span>
-                <div className="sa-bulk">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={ls.statPoints}
-                    placeholder="個数"
-                    className="sa-bulk-input"
-                    value={bulkInputs[key] ?? ''}
-                    disabled={ls.statPoints <= 0}
-                    onChange={e => setBulkInputs(prev => ({ ...prev, [key]: e.target.value }))}
-                    onKeyDown={e => { if (e.key === 'Enter') applyBulk() }}
-                  />
-                  <button
-                    type="button"
-                    className="sa-bulk-btn"
-                    disabled={ls.statPoints <= 0 || !bulkInputs[key]}
-                    onClick={applyBulk}
-                  >
-                    追加
-                  </button>
-                </div>
-                <HoldRepeatButton
-                  className="sa-btn"
-                  onPress={() => window.allocateStat?.(key)}
-                  disabled={ls.statPoints <= 0}
-                >
-                  +1
-                </HoldRepeatButton>
+                {isActive ? (
+                  <div className="sa-bulk">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={ls.statPoints}
+                      placeholder="個数"
+                      className="sa-bulk-input"
+                      autoFocus
+                      value={bulkInputs[key] ?? ''}
+                      disabled={ls.statPoints <= 0}
+                      onChange={e => setBulkInputs(prev => ({ ...prev, [key]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === 'Enter') applyBulk(); if (e.key === 'Escape') setActiveKey(null) }}
+                    />
+                    <button
+                      type="button"
+                      className="sa-bulk-btn"
+                      disabled={ls.statPoints <= 0 || !bulkInputs[key]}
+                      onClick={applyBulk}
+                    >
+                      追加
+                    </button>
+                    <button
+                      type="button"
+                      className="sa-bulk-cancel"
+                      onClick={() => setActiveKey(null)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div className="sa-action-row">
+                    <HoldRepeatButton
+                      className="sa-btn sa-btn-plus1"
+                      onPress={() => window.allocateStat?.(key)}
+                      disabled={ls.statPoints <= 0}
+                    >
+                      +1
+                    </HoldRepeatButton>
+                    <button
+                      type="button"
+                      className="sa-btn-designate"
+                      disabled={ls.statPoints <= 0}
+                      onClick={() => setActiveKey(key)}
+                    >
+                      指定
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
