@@ -104,12 +104,14 @@ html, body {
 }
 
 /* 名前は内容に合わせて表示し、残り幅を超える長い名前のみ省略（…）。
-   🔊/セーブは margin-left:auto で常に右寄せされ、余白は名前との間に入る。 */
+   DM/サウンドを右サイドの縦列へ移動した分、ここに幅を使えるので flex:1 で広く取り、
+   フォントも少し小さくして長い名前をできるだけ省略なしで表示できるようにする。 */
 .name-badge.mob-badge {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 12px !important;
 }
 
 .mob-bar-row {
@@ -231,6 +233,46 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
     right: 6px;
     bottom: auto;
   }
+}
+
+/* スマホ：DM/サウンドを不具合BOX(📬)の下に縦積み。report-float-btnと同じ40x40の見た目で統一。 */
+.side-icon-stack {
+  position: absolute;
+  top: 98px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 310;
+}
+
+.side-icon-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  background: rgba(0, 0, 0, 0.52);
+  border: 1px solid rgba(160, 160, 255, 0.35);
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.side-icon-btn:hover {
+  background: rgba(79, 70, 229, 0.45);
+  border-color: rgba(160, 160, 255, 0.7);
+}
+/* ウィンドウ（各種モーダル）を開いている間は不具合BOXと同様に隠す */
+body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-overlay, .news-overlay, .report-overlay) .side-icon-stack {
+  display: none !important;
+}
+@media (min-width: 768px) {
+  .side-icon-stack { display: none !important; }
 }
 
 /* ── スクロールロックボタン（スマホ・マップ枠右上） ── */
@@ -652,7 +694,7 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
      同一詳細度では後方が勝つため、!important でスマホ側を確実に優先させる。 */
   .slot-toggle-btn { display: none !important; }
   .slot-collapsed  { display: flex !important; }
-  .ui-scale-row    { display: none !important; }
+  .screen-size-menu-wrap { display: none !important; }
 }
 
 /* ── UIパネル ── */
@@ -744,6 +786,26 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   min-width: 0;
   accent-color: #7dd3fc;
   cursor: pointer;
+}
+
+/* ── 画面サイズメニュー（📺ボタン＋ポップオーバー。SoundMenuと同じ見た目を流用。PC専用） ── */
+.screen-size-menu-wrap { position: relative; display: inline-flex; flex-shrink: 0; pointer-events: auto; }
+.screen-size-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  width: 200px;
+  pointer-events: auto;
+  touch-action: auto;
+  background: rgba(15, 15, 25, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .pc-save-btn {
@@ -1363,6 +1425,23 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 
 .slot-wrap { flex-shrink: 0; display: flex; flex-direction: column; }
 .slot-collapsed { display: none; }   /* 畳んだ状態：筐体を隠して下段へ縦スペースを譲る */
+
+/* PC：スロット筐体の左にDM/サウンド/画面サイズを縦積み（元は最上段バーにあったものを移動） */
+.slot-section-row {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: flex-start;
+}
+.slot-side-btns {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@media (max-width: 767px) {
+  .slot-side-btns { display: none !important; }
+}
 
 /* ── 画面サイズ（PC UI倍率）プリセット。サウンドメニュー内 ── */
 .ui-scale-btns { display: flex; gap: 4px; flex: 1; }
@@ -2376,15 +2455,17 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   border: 1px solid #54206e;
 }
 
-/* 表示名バッジ（ワールド通知の冒険者名） */
+/* 表示名バッジ（ワールド通知の冒険者名）。DM/サウンドをスロット筐体横へ移動した分、
+   ここに幅を使えるので max-width を広げ、フォントも少し小さくして長い名前を極力省略せず表示する。 */
 .name-badge {
   background: linear-gradient(to bottom, #4a3a12, #271e08);
   color: #ffe699;
   border: 1px solid #7a5e20;
-  max-width: 130px;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
 }
 
 .stat-label {

@@ -6,6 +6,7 @@ import { HoldRepeatButton } from './HoldRepeatButton'
 import { MailButton } from './MailButton'
 import { getDisplayName } from '../game/playerName'
 import { SoundMenu } from './SoundMenu'
+import { ScreenSizeMenu } from './ScreenSizeMenu'
 
 interface GameStateSnapshot {
   hp: number; maxHp: number
@@ -419,8 +420,6 @@ export function UIPanel() {
           <span className="badge level-badge">Lv {gs.level}</span>
           <span className="badge name-badge">{name}</span>
           {gs.poisoned && <span className="badge poison-badge">🟣 毒</span>}
-          <MailButton className="pc-mute-btn" />
-          <SoundMenu btnClassName="pc-mute-btn" />
           <button className="pc-save-btn" onClick={() => window.saveGame?.()}>セーブ</button>
         </div>
         <div className="bar-il-row">
@@ -452,10 +451,19 @@ export function UIPanel() {
         <span>{slotOpen ? '女神の加護（スロット）を隠す' : '女神の加護（スロット）を表示'}</span>
         <span className="slot-toggle-arrow">{slotOpen ? '▲' : '▼'}</span>
       </button>
-      <div className={`slot-wrap ${slotOpen ? '' : 'slot-collapsed'}`}>
-        <SlotMachine>
-          <BonusVideo />
-        </SlotMachine>
+      <div className="slot-section-row">
+        {!isMobile && (
+          <div className="slot-side-btns">
+            <MailButton className="side-icon-btn" />
+            <SoundMenu btnClassName="side-icon-btn" />
+            <ScreenSizeMenu btnClassName="side-icon-btn" />
+          </div>
+        )}
+        <div className={`slot-wrap ${slotOpen ? '' : 'slot-collapsed'}`}>
+          <SlotMachine>
+            <BonusVideo />
+          </SlotMachine>
+        </div>
       </div>
 
       {/* ── 中段・下段：PC と スマホで「配置だけ」出し分け ──

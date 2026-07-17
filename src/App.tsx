@@ -18,6 +18,8 @@ import { GameToast } from './components/GameToast'
 import { AutoSaveToast } from './components/AutoSaveToast'
 import { MailBox } from './components/MailBox'
 import { EventMsgBar } from './components/EventMsgBar'
+import { MailButton } from './components/MailButton'
+import { SoundMenu } from './components/SoundMenu'
 import { WorldTelop } from './components/WorldTelop'
 import { WorldLog } from './components/WorldLog'
 import { HowToPlay } from './components/HowToPlay'
@@ -302,6 +304,14 @@ function App() {
               >
                 📬
               </button>
+            )}
+            {/* スマホ：DM/サウンドは上部ステータスバーから移動し、不具合BOX(📬)の下に縦積みする
+                （名前表示の幅を確保するため）。PCではUIPanel側のスロット筐体横に別途配置する。 */}
+            {!fullCanvas && isMobile && (
+              <div className="side-icon-stack">
+                <MailButton className="side-icon-btn" />
+                <SoundMenu btnClassName="side-icon-btn" />
+              </div>
             )}
             {/* 弓の攻撃ボタン：非プレイ画面（タイトル・GAME OVER・ランキング）では
                 window.gameStateに弓装備が残っていても表示しない */}

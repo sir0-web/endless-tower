@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { getDisplayName } from '../game/playerName'
-import { MailButton } from './MailButton'
-import { SoundMenu } from './SoundMenu'
 
 interface StatusSnap {
   hp: number; maxHp: number
@@ -83,8 +81,6 @@ export function MobileStatusBar() {
         </span>
         <span className="badge level-badge mob-badge">Lv {s.level}</span>
         <span className="badge name-badge mob-badge">{name}</span>
-        <MailButton className="mob-mute-btn" />
-        <SoundMenu btnClassName="mob-mute-btn" />
         <button className="mob-save-btn" data-priority-tap onClick={handleSave}>セーブ</button>
       </div>
       <div className="mob-bar-row">
