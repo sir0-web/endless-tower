@@ -162,6 +162,8 @@ export interface Enemy {
   isSummoned?: boolean
   // 遠距離型：射程内(2〜4マス)かつ視線が通ればプレイヤーへ矢を放つ（アーチャースケルトン等）
   isRanged?: boolean
+  // 遠距離型：初回の「狙われた」警告を出したか（1体につき1回だけ⚠ログを出すためのフラグ）
+  aimNotified?: boolean
 }
 
 export type EnemyPersonality = 'bomber' | 'summoner' | 'coward'

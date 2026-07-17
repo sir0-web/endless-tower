@@ -249,6 +249,8 @@ export class GameScene extends Phaser.Scene {
   private mistSprites: Map<string, Phaser.GameObjects.Image> = new Map()
   // 弱虫オーラで強化中の敵に出す💢マーク
   private buffMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
+  // 遠距離型が射程＋射線内にプレイヤーを捉えている間、頭上に出す🎯マーク
+  private aimMarkers: Map<string, Phaser.GameObjects.Text> = new Map()
   // ヒットストップ/スローモーションのネスト深度（多重発動時に復帰を1回にする）
   private timeFreezeDepth = 0
   // 連続撃破コンボ（実時間ベース）
@@ -375,6 +377,7 @@ export class GameScene extends Phaser.Scene {
     this.countdownMarkers   = new Map()
     this.mistSprites        = new Map()
     this.buffMarkers        = new Map()
+    this.aimMarkers         = new Map()
     this.timeFreezeDepth    = 0
     this.killComboCount     = 0
     this.killComboAt        = 0
@@ -1931,7 +1934,7 @@ export class GameScene extends Phaser.Scene {
   private destroyEnemyDecor(id: string) {
     const maps: Map<string, Phaser.GameObjects.Text | Phaser.GameObjects.Image>[] = [
       this.attackMarkers, this.dangerMarkers, this.dangerGlows, this.chargeMarkers,
-      this.countdownMarkers, this.mistSprites, this.buffMarkers,
+      this.countdownMarkers, this.mistSprites, this.buffMarkers, this.aimMarkers,
     ]
     for (const m of maps) {
       const obj = m.get(id)
@@ -2300,6 +2303,11 @@ export class GameScene extends Phaser.Scene {
         manhDist >= 2 && manhDist <= ENEMY_BOW_RANGE &&
         this.hasLineOfSight(enemy.position.x, enemy.position.y, player.position.x, player.position.y)
       ) {
+        // 初めてこの敵の射線に捉えられたターンは⚠を先に出す（何に撃たれたかを明示する初見ガード）
+        if (!enemy.aimNotified) {
+          enemy.aimNotified = true
+          this.addMessage(`⚠ ${enemy.name}に狙われた！`)
+        }
         const baseAtk      = enemy.attack + Math.floor(enemy.str * 0.5)
         const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
         const effectiveDef = player.vit + Math.floor(player.level / 2)
@@ -2495,6 +2503,17 @@ export class GameScene extends Phaser.Scene {
 
           if (!tryAxisMove(primary[0], primary[1])) {
             tryAxisMove(secondary[0], secondary[1])
+          }
+        }
+
+        // 遠距離型：この移動で射程＋射線に入った場合は初回のみ予告する。
+        // （敵側から近づいたケースでは次の敵ターンまで撃ってこないため、プレイヤーに1ターンの反応猶予がある）
+        if (enemy.isRanged && !enemy.aimNotified) {
+          const nd = Math.abs(player.position.x - enemy.position.x) + Math.abs(player.position.y - enemy.position.y)
+          if (nd >= 2 && nd <= ENEMY_BOW_RANGE &&
+              this.hasLineOfSight(enemy.position.x, enemy.position.y, player.position.x, player.position.y)) {
+            enemy.aimNotified = true
+            this.addMessage(`⚠ ${enemy.name}がこちらを狙っている…！`)
           }
         }
       }
@@ -5790,6 +5809,26 @@ export class GameScene extends Phaser.Scene {
         buff.setVisible(true)
       } else if (buff) {
         buff.setVisible(false)
+      }
+
+      // 遠距離型の狙撃マーク：射程2〜ENEMY_BOW_RANGE＆射線が通っている＝「次の敵ターンに撃たれる」状態を🎯で可視化。
+      // 壁裏に隠れて🎯が消えれば射線が切れた証拠＝遮蔽プレイが画面から学べる。位置は左上（💢=右上・💀=中央上と住み分け）
+      const aimDist = Math.abs(player.position.x - enemy.position.x) + Math.abs(player.position.y - enemy.position.y)
+      const isAiming = vis && enemy.isRanged === true &&
+        aimDist >= 2 && aimDist <= ENEMY_BOW_RANGE &&
+        this.hasLineOfSight(enemy.position.x, enemy.position.y, player.position.x, player.position.y)
+      let aim = this.aimMarkers.get(enemy.id)
+      if (isAiming) {
+        if (!aim) {
+          aim = this.add.text(ex, ey, '🎯', { fontSize: `${Math.round(rts * 0.4)}px` })
+            .setOrigin(0.5).setDepth(8)
+          this.tweens.add({ targets: aim, alpha: { from: 1, to: 0.45 }, duration: 420, yoyo: true, repeat: -1, ease: 'Sine.InOut' })
+          this.aimMarkers.set(enemy.id, aim)
+        }
+        aim.setPosition(ex - rts * 0.42, ey - rts * 0.55)
+        aim.setVisible(true)
+      } else if (aim) {
+        aim.setVisible(false)
       }
 
       // 強敵警告マーク：3発以内でプレイヤーの最大HPを削り切る敵の頭上に💀。
