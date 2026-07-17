@@ -4930,7 +4930,7 @@ export class GameScene extends Phaser.Scene {
     if (!g || !(g instanceof Phaser.GameObjects.Sprite)) return
     const { player } = this.state
     if (player.poisoned) g.setTint(0xb56ce8)         // 乗算ティント：紫（もう一段濃く）
-    else if (player.mudTurns > 0) g.setTint(0xc09868) // 乗算ティント：茶（もう一段濃く）
+    else if (player.mudTurns > 0) g.setTint(0xa9824f) // 乗算ティント：茶（さらに一段濃く）
     else g.clearTint()
   }
 
