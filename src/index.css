@@ -976,6 +976,16 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 }
 
 /* ── stats-equip-row（中段：ステータス左＋装備右） ── */
+/* 2セクション(ステータス/インベントリ・ログ/装備)をまとめて1つのスクロール領域にする。
+   両方を同時に全開にしても、個別のflex:1で潰し合わず、ここで縦スクロールして両方見られる。 */
+.panels-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .stats-equip-row {
   display: flex;
   flex-direction: column;
@@ -1155,22 +1165,14 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
 .log-equip-row {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-.log-equip-row.le-collapsed {
-  flex: 0 0 auto;
+  flex-shrink: 0;
 }
 .log-equip-row.le-collapsed .log-items-row {
   display: none;
 }
 
 .log-items-row {
-  flex: 1;
-  min-height: 0;
   display: flex;
-  overflow-y: auto;   /* 画面サイズが小さい時にステータス/インベントリが見えなくなる問題の対策：
-                         はみ出しを消す(hidden)のではなく、スクロールで見えるようにする */
 }
 
 .log-panel {

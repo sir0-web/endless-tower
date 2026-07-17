@@ -453,7 +453,10 @@ export function UIPanel() {
       </div>
 
       {/* ── 中段・下段：PC/スマホ共通配列 ──
-          上段=ステータス＋インベントリ（折りたたみ可）／下段=ログ＋装備（折りたたみ可）。 */}
+          上段=ステータス＋インベントリ（折りたたみ可）／下段=ログ＋装備（折りたたみ可）。
+          両方を同時に全開にしても中身を潰し合わないよう、2セクションをまとめて1つの
+          スクロール領域(.panels-scroll-area)に入れる（個別のflex:1による奪い合いをやめる）。 */}
+      <div className="panels-scroll-area">
       <div className={`stats-equip-row ${statsOpen ? '' : 'se-collapsed'}`}>
         <button
           type="button"
@@ -487,6 +490,7 @@ export function UIPanel() {
           {logPanel}
           {equipPanel}
         </div>
+      </div>
       </div>
 
     </div>
