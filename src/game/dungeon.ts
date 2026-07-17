@@ -200,7 +200,14 @@ export function getPlayerStartPosition(map: TileType[][]): Position {
 // の4系統。agi・vit は現状の戦闘式では未使用＝表示用の飾り。
 // バランス目標：強運（高LUK）でやり込んだプレイヤーが「ぎりぎり100階を超える」あたりが壁になるよう、
 // 帯が深くなるほど base が滑らかに増える曲線で設計（深部ほど同一フロアでも敵プールが強くなる）。
-export const ENEMY_TABLE = [
+// ranged: true は遠距離型。接近される前に2〜3発撃てる分、同帯の近接より1発あたり約75〜85%に抑える。
+export type EnemyTableRow = {
+  name: string; minFloor: number; maxFloor: number
+  hpBase: number; atkBase: number; defBase: number
+  str: number; vit: number; agi: number; luk: number
+  ranged?: boolean
+}
+export const ENEMY_TABLE: EnemyTableRow[] = [
   //                                                                              str  vit  agi  luk
   // ── 1〜30：序盤（最弱フィラーのぽり男は全域に薄く出続ける）──
   { name: 'ぽり男',              minFloor: 1,   maxFloor: 500, hpBase: 12,  atkBase: 4,  defBase: 0,  str:  4, vit:  0, agi: 10, luk:  4 },
@@ -214,6 +221,7 @@ export const ENEMY_TABLE = [
   { name: '白蓮玉',              minFloor: 10,  maxFloor: 40,  hpBase: 20,  atkBase: 12, defBase: 2,  str:  8, vit:  4, agi: 24, luk:  8 },
   // ── 20〜50 ──
   { name: 'ソルジャースケルトン', minFloor: 20,  maxFloor: 50,  hpBase: 32,  atkBase: 12, defBase: 5,  str: 16, vit: 10, agi:  6, luk:  3 },
+  { name: 'アーチャースケルトン', minFloor: 20,  maxFloor: 50,  hpBase: 24,  atkBase: 11, defBase: 2,  str: 14, vit:  4, agi: 18, luk:  8, ranged: true },
   { name: 'ヨーヨー',            minFloor: 20,  maxFloor: 50,  hpBase: 26,  atkBase: 13, defBase: 3,  str: 12, vit:  6, agi: 20, luk:  7 },
   { name: 'ヒドラ',              minFloor: 20,  maxFloor: 50,  hpBase: 38,  atkBase: 11, defBase: 5,  str: 14, vit: 14, agi:  8, luk:  5 },
   { name: 'ゾンビ',              minFloor: 20,  maxFloor: 50,  hpBase: 36,  atkBase: 10, defBase: 6,  str: 12, vit: 12, agi:  4, luk:  3 },
@@ -229,6 +237,7 @@ export const ENEMY_TABLE = [
   { name: 'デビルチ',            minFloor: 40,  maxFloor: 70,  hpBase: 46,  atkBase: 23, defBase: 8,  str: 26, vit: 10, agi: 12, luk:  6 },
   // ── 50〜80 ──
   { name: 'ゴーレム',            minFloor: 50,  maxFloor: 80,  hpBase: 66,  atkBase: 25, defBase: 13, str: 30, vit: 20, agi: 10, luk:  6 },
+  { name: 'オークアーチャー',    minFloor: 50,  maxFloor: 80,  hpBase: 46,  atkBase: 26, defBase: 7,  str: 30, vit: 12, agi: 22, luk: 10, ranged: true },
   { name: 'パイレーツスケルトン', minFloor: 50,  maxFloor: 80,  hpBase: 56,  atkBase: 27, defBase: 10, str: 30, vit: 12, agi: 14, luk:  8 },
   { name: 'マンティス',          minFloor: 50,  maxFloor: 80,  hpBase: 50,  atkBase: 31, defBase: 8,  str: 34, vit: 10, agi: 24, luk: 10 },
   { name: 'ガイアス',            minFloor: 50,  maxFloor: 80,  hpBase: 64,  atkBase: 26, defBase: 14, str: 30, vit: 20, agi: 10, luk:  7 },
@@ -240,6 +249,7 @@ export const ENEMY_TABLE = [
   { name: 'マミー',              minFloor: 60,  maxFloor: 90,  hpBase: 62,  atkBase: 35, defBase: 10, str: 38, vit: 10, agi: 30, luk: 14 },
   // ── 70〜100 ──
   { name: 'マリンスフィア',      minFloor: 70,  maxFloor: 100, hpBase: 82,  atkBase: 37, defBase: 13, str: 42, vit: 18, agi: 18, luk: 10 },
+  { name: 'ガーゴイル',          minFloor: 70,  maxFloor: 100, hpBase: 70,  atkBase: 36, defBase: 16, str: 42, vit: 20, agi: 20, luk: 10, ranged: true },
   { name: 'ソフィー',            minFloor: 70,  maxFloor: 100, hpBase: 78,  atkBase: 39, defBase: 14, str: 44, vit: 18, agi: 20, luk: 11 },
   { name: 'イシス',              minFloor: 70,  maxFloor: 100, hpBase: 86,  atkBase: 38, defBase: 15, str: 44, vit: 20, agi: 20, luk: 10 },
   { name: 'マルデューク',        minFloor: 70,  maxFloor: 100, hpBase: 78,  atkBase: 43, defBase: 14, str: 50, vit: 18, agi: 20, luk: 11 },
@@ -449,6 +459,7 @@ export function makeNamedNormalEnemy(name: string, floor: number) {
     slowedTurns: 0,
     name: base.name,
     isBoss: false,
+    isRanged: ('ranged' in base) && base.ranged === true,
   }
 }
 
@@ -523,6 +534,7 @@ export function makeMinionEnemy(floor: number) {
     name: base.name,
     isBoss: false,
     isSummoned: true,
+    isRanged: base.ranged === true,
   }
 }
 
@@ -564,8 +576,10 @@ export function spawnEnemies(map: TileType[][], count: number, floor: number, ex
       slowedTurns: 0,
       name: base.name,
       isBoss: false,
+      isRanged: base.ranged === true,
     }
-    maybeApplyPersonality(enemy, floor)
+    // 遠距離型は性格と組み合わせない（弱虫=逃走で射撃AIと競合、突進兵=自爆で遠距離の意味が消える）
+    if (!enemy.isRanged) maybeApplyPersonality(enemy, floor)
     enemies.push(enemy)
   }
   return enemies
@@ -615,6 +629,7 @@ export function spawnMonsterHouseEnemies(map: TileType[][], floor: number, playe
       slowedTurns: 0,
       name: base.name,
       isBoss: false,
+      isRanged: base.ranged === true,
     }
   })
 }

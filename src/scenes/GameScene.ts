@@ -183,6 +183,8 @@ function dexPierceBonus(dex: number): number {
 // 弓：射程はマンハッタン距離4マス。「敵が詰め寄る1〜2ターンの間に先制できる」だけの距離を確保する
 // （2マスだと敵が1手で隣接でき、先制の恩恵がほぼ無かったためバランス調整で3→4に拡張）。
 const BOW_RANGE = 4
+// 遠距離型モンスターの射程（プレイヤーの弓と同じマンハッタン距離）。最小2＝隣接時は通常の近接攻撃になる
+const ENEMY_BOW_RANGE = 4
 // 弓の割合貫通：近接(PIERCE_RATE=6%)より低い基礎4%＋DEXボーナス（近接のdexPierceBonusを流用）。
 // DEXは弓の主力ステータスなので、近接よりむしろ貫通が伸びやすい＝高VIT/ボス戦でも芯を通せる。
 const BOW_PIERCE_RATE = 0.04
@@ -2288,6 +2290,52 @@ export class GameScene extends Phaser.Scene {
           }
         }
         continue   // 弱虫は自分からは近寄らない
+      }
+
+      // ── 遠距離型（ranged）：射程2〜ENEMY_BOW_RANGEマスかつ視線が通れば矢を放つ ──
+      // 隣接時(manhDist 1)はこの分岐を通らず、下の通常近接攻撃になる＝「懐に潜り込めば普通の敵」。
+      // 演出はプレイヤーの弓と同じ矢(fireArrowEffect)を敵→プレイヤー向きに流用し、着弾時にダメージ演出を出す。
+      if (
+        enemy.isRanged && !bomberFused &&
+        manhDist >= 2 && manhDist <= ENEMY_BOW_RANGE &&
+        this.hasLineOfSight(enemy.position.x, enemy.position.y, player.position.x, player.position.y)
+      ) {
+        const baseAtk      = enemy.attack + Math.floor(enemy.str * 0.5)
+        const effectiveAtk = enemy.slowedTurns > 0 ? Math.floor(baseAtk * 0.5) : baseAtk
+        const effectiveDef = player.vit + Math.floor(player.level / 2)
+        const pierce       = Math.min(0.20, PIERCE_RATE + Math.max(0, player.floor - 100) * 0.002)
+        const isCrit       = Math.random() < enemy.luk * 0.001
+        const raw          = Math.max(1, Math.round(effectiveAtk * pierce), effectiveAtk - effectiveDef)
+        const dmg          = isCrit ? Math.floor(raw * 1.5) : raw
+        player.hp = Math.max(0, player.hp - dmg)
+
+        // 矢の飛翔（プレイヤーの弓と同じ距離比例の飛翔時間）＋敵の小さな「引き絞り」モーション
+        const flightMs = 60 + manhDist * 35
+        this.fireArrowEffect(enemy.position.x, enemy.position.y, player.position.x, player.position.y, 0, flightMs)
+        const eg = this.enemyGraphics.get(enemy.id)
+        if (eg && eg.visible) {
+          this.tweens.add({
+            targets: eg,
+            x: eg.x - Math.sign(edx) * this.rts * 0.15,
+            y: eg.y - Math.sign(edy) * this.rts * 0.15,
+            duration: 70, yoyo: true, ease: 'Quad.Out',
+          })
+        }
+        // 着弾タイミングで被弾演出（数字・フラッシュ・シェイク・SE）
+        const dShown = dmg, cShown = isCrit
+        this.time.delayedCall(flightMs, () => {
+          playDamage()
+          this.popDamageNumber(player.position.x, player.position.y, dShown, { toPlayer: true, crit: cShown })
+          this.flashPlayer()
+          this.cameras.main.shake(cShown ? 200 : 110, cShown ? 0.012 : 0.007)
+          const hpRatio = player.hp / player.maxHp
+          if (player.hp > 0 && hpRatio <= 0.25) this.cameras.main.flash(180, 120, 0, 0)
+        })
+        this.addMessage(isCrit
+          ? `${enemy.name}の矢がクリティカル！${dmg}ダメージ！`
+          : `${enemy.name}の矢が命中！${dmg}ダメージ！`)
+        if (player.hp <= 0) { this.lastDeathCause = `${enemy.name}の矢`; this.gameOver(); return }
+        continue   // 射撃したターンは移動しない（射線が通る限りその場から撃ち続ける）
       }
 
       if (chebDist === 1 && !diagAttackBlocked && !bomberFused) {
