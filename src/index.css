@@ -2465,6 +2465,92 @@ body:has(.equip-overlay, .stat-overlay, .facility-overlay, .skulporin-reward-ove
   display: none;
 }
 
+/* 常時ステータスパネル：[＋](2/3)と[指定](1/3)を並べる行。狭いサイドバー幅に収めるため
+   stat-plus-btn単体だった時の width:100%/margin-top はここでは打ち消す。 */
+.sp-action-row {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  margin-top: 3px;
+}
+
+.sp-action-row .stat-plus-btn {
+  flex: 2;
+  width: auto;
+  margin-top: 0;
+}
+
+.sp-designate-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 0;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  color: #aaaaff;
+  background: #1e1e50;
+  border: 1px solid #4444aa;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sp-designate-btn:hover {
+  background: #2e2e70;
+  color: #ffffff;
+}
+
+/* 常時ステータスパネル：[指定]を押すと開く一括入力（狭いのでボタン表記は短縮） */
+.sp-bulk {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  margin-top: 3px;
+}
+
+.sp-bulk-input {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  font-size: 12px;
+  border-radius: 3px;
+  border: 1px solid #4444aa;
+  background: #0c0c28;
+  color: #e0e0f0;
+}
+
+.sp-bulk-input::-webkit-outer-spin-button,
+.sp-bulk-input::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.sp-bulk-btn, .sp-bulk-cancel {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.sp-bulk-btn {
+  border: 1px solid #4444aa;
+  background: #1e1e50;
+  color: #aaaaff;
+}
+.sp-bulk-btn:hover:not(:disabled) { background: #2e2e70; color: #ffffff; }
+.sp-bulk-btn:disabled { opacity: 0.35; cursor: default; }
+
+.sp-bulk-cancel {
+  border: 1px solid #4a4a6a;
+  background: #23233f;
+  color: #9a9ac0;
+}
+.sp-bulk-cancel:hover { background: #33335a; color: #ffffff; }
+
 /* ポイントあり時のstat-item強調 */
 .stat-item.stat-has-pts {
   border: 1px solid rgba(255, 160, 0, 0.35);

@@ -93,6 +93,9 @@ export function UIPanel() {
   const [spellDetail, setSpellDetail] = useState<string | null>(null)
   const [healDetail, setHealDetail] = useState<string | null>(null)
   const [statsOpen, setStatsOpen] = useState(true)
+  // 常時ステータスパネル用の一括入力（[指定]ボタンで開くステータスのみ）。StatModalと同じ方式。
+  const [spBulkInputs, setSpBulkInputs] = useState<Partial<Record<AllocStat, string>>>({})
+  const [spActiveKey, setSpActiveKey] = useState<AllocStat | null>(null)
   // スロット筐体の折りたたみ（PC。畳むとログ/インベントリが広がる。スマホはCSSで常時表示＝影響なし）
   const [slotOpen, setSlotOpen] = useState(() => localStorage.getItem('ebt_slot_open') !== '0')
   const toggleSlot = () => setSlotOpen(o => { const n = !o; localStorage.setItem('ebt_slot_open', n ? '1' : '0'); return n })
@@ -160,6 +163,15 @@ export function UIPanel() {
       <p className="stat-panel-label">ステータス</p>
       {ALLOC_STATS.map(({ key, label }) => {
         const d = statDiff(key)
+        const isActive = spActiveKey === key
+        const applySpBulk = () => {
+          const raw = parseInt(spBulkInputs[key] ?? '', 10)
+          if (!Number.isFinite(raw) || raw <= 0) return
+          const n = Math.min(raw, gs.statPoints)   // 残りポイントを超えた入力は残りポイント数に丸める
+          window.allocateStatBulk?.(key, n)
+          setSpBulkInputs(prev => ({ ...prev, [key]: '' }))
+          setSpActiveKey(null)
+        }
         return (
           <div key={key} className={`sp-row ${gs.statPoints > 0 ? 'sp-has-pts' : ''}`}>
             <span className="sp-label">{label}</span>
@@ -170,7 +182,29 @@ export function UIPanel() {
               </span>
             )}
             {gs.statPoints > 0 && (
-              <HoldRepeatButton className="stat-plus-btn" onPress={() => window.allocateStat?.(key)}>＋</HoldRepeatButton>
+              isActive ? (
+                <div className="sp-bulk">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={gs.statPoints}
+                    placeholder="個数"
+                    className="sp-bulk-input"
+                    autoFocus
+                    value={spBulkInputs[key] ?? ''}
+                    onChange={e => setSpBulkInputs(prev => ({ ...prev, [key]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') applySpBulk(); if (e.key === 'Escape') setSpActiveKey(null) }}
+                  />
+                  <button type="button" className="sp-bulk-btn" disabled={!spBulkInputs[key]} onClick={applySpBulk}>追加</button>
+                  <button type="button" className="sp-bulk-cancel" onClick={() => setSpActiveKey(null)}>✕</button>
+                </div>
+              ) : (
+                <div className="sp-action-row">
+                  <HoldRepeatButton className="stat-plus-btn" onPress={() => window.allocateStat?.(key)}>＋</HoldRepeatButton>
+                  <button type="button" className="sp-designate-btn" onClick={() => setSpActiveKey(key)}>指定</button>
+                </div>
+              )
             )}
           </div>
         )
