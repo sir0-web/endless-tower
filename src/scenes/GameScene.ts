@@ -691,7 +691,7 @@ export class GameScene extends Phaser.Scene {
         let subMessage = ''
         if (p === 1) { this.spawnWanderingRescue(kind); subMessage = 'どこかで迷子になっているようだ。' }
         else if (p === 2) { this.pendingClearRescue = kind; subMessage = 'モンスターに捕まっているようだ。' }
-        else { this.carveJail(kind); subMessage = 'どこかで囚われているようだ。' }
+        else { this.carveJail(kind); subMessage = 'あるかなひろばの住人かもしれない・・・！' }
         if (!(this.floorRescue || this.pendingClearRescue || this.jailCell)) {
           console.warn('[DEV] 配置に失敗しました（空きマスなし等）。もう一度試してください')
           return
@@ -3159,7 +3159,7 @@ export class GameScene extends Phaser.Scene {
       subMessage = 'モンスターに捕まっているようだ。'
     } else {
       this.carveJail(kind)                           // パターン3（牢屋）
-      subMessage = 'どこかで囚われているようだ。'
+      subMessage = 'あるかなひろばの住人かもしれない・・・！'
     }
     // 配置に失敗（空きマスなし等）した場合は何も起きていないので告知しない。
     // メッセージウィンドウだと気づかれにくいため、OKで消せるモーダルで明示的に知らせる。
